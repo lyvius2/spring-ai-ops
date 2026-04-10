@@ -35,11 +35,9 @@ dependencies {
 
     implementation("org.springframework.ai:spring-ai-starter-model-openai")
     implementation("org.springframework.ai:spring-ai-starter-model-anthropic")
-
+    implementation("com.github.codemonstur:embedded-redis:1.4.3")
     implementation(kotlin("reflect"))
     implementation(kotlin("stdlib"))
-
-    developmentOnly("com.github.codemonstur:embedded-redis:1.4.3")
 
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
