@@ -1,0 +1,223 @@
+/* ===================================================
+   Spring AI Ops — Eureka-inspired design
+   =================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+/* ── Navbar ── */
+.navbar {
+    background-color: #34302d;
+    border-bottom: 4px solid #6db33f;
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.navbar-brand .leaf { color: #6db33f; font-size: 1.3rem; }
+
+.navbar-subtitle {
+    font-size: 0.78rem;
+    color: #a8a29e;
+}
+
+/* ── Container ── */
+.container {
+    max-width: 960px;
+    margin: 28px auto;
+    padding: 0 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* ── Panel ── */
+.panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.panel-header {
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    padding: 10px 16px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #34302d;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.panel-body {
+    padding: 20px 24px;
+}
+
+/* ── Info table ── */
+.info-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.info-table td {
+    padding: 9px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle;
+}
+
+.info-table tr:last-child td { border-bottom: none; }
+
+.info-table td:first-child {
+    width: 200px;
+    font-weight: 600;
+    color: #555;
+    background-color: #fafafa;
+}
+
+/* ── Status badges ── */
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.badge-up   { background: #6db33f; color: #fff; }
+.badge-down { background: #aaa;    color: #fff; }
+
+/* ── Reconfigure button ── */
+.btn-secondary {
+    margin-top: 4px;
+    display: inline-block;
+    padding: 5px 14px;
+    background: #fff;
+    color: #555;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.btn-secondary:hover { background: #f0f0f0; }
+
+/* ── Radio buttons ── */
+.radio-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.radio-option { position: relative; }
+
+.radio-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+}
+
+.radio-option label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 18px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #555;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.radio-option label .provider-icon { color: #999; }
+
+.radio-option input[type="radio"]:checked + label {
+    border-color: #6db33f;
+    background: #f1f8e9;
+    color: #34302d;
+    font-weight: 600;
+}
+
+.radio-option label:hover { border-color: #6db33f; }
+
+/* ── Form ── */
+.form-group { margin-bottom: 14px; }
+
+.form-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.form-input {
+    width: 100%;
+    max-width: 460px;
+    padding: 7px 10px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    color: #333;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-input:focus {
+    border-color: #6db33f;
+    box-shadow: 0 0 0 3px rgba(109, 179, 63, 0.15);
+}
+
+/* ── Primary button ── */
+.btn-primary {
+    padding: 7px 20px;
+    background: #6db33f;
+    color: #fff;
+    border: 1px solid #5a9632;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-primary:hover    { background: #5a9632; }
+.btn-primary:disabled { background: #b5d98a; border-color: #b5d98a; cursor: not-allowed; }
+
+/* ── Alerts ── */
+.alert {
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 3px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: none;
+    max-width: 460px;
+}
+
+.alert-success { background: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
+.alert-warning { background: #fcf8e3; color: #8a6d3b; border: 1px solid #faebcc; }
+.alert-error   { background: #f2dede; color: #a94442; border: 1px solid #ebccd1; }

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spring AI Ops</title>
+    <link rel="stylesheet" href="/style/aiops.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="leaf">&#9752;</span>
+        Spring AI Ops
+    </div>
+    <span class="navbar-subtitle">Grafana Alert &amp; GitHub 코드리뷰 자동화</span>
+</nav>
+
+<div class="container">
+
+    <!-- System Status -->
+    <div class="panel">
+        <div class="panel-header">System Status</div>
+        <table class="info-table">
+            <tbody>
+                <tr>
+                    <td>Environment</td>
+                    <td>default</td>
+                </tr>
+                <tr>
+                    <td>LLM Provider</td>
+                    <td>
+                        {{#configured}}
+                            <span style="font-weight:600; text-transform:uppercase;">{{currentLlm}}</span>
+                        {{/configured}}
+                        {{^configured}}
+                            <span style="color:#aaa;">—</span>
+                        {{/configured}}
+                    </td>
+                </tr>
+                <tr>
+                    <td>Status</td>
+                    <td>
+                        {{#configured}}
+                            <span class="badge badge-up">UP</span>
+                        {{/configured}}
+                        {{^configured}}
+                            <span class="badge badge-down">NOT CONFIGURED</span>
+                        {{/configured}}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- LLM Configuration -->
+    <div class="panel">
+        <div class="panel-header">LLM Configuration</div>
+        <div class="panel-body">
+
+            {{#configured}}
+            <div id="configured-panel">
+                <table class="info-table" style="margin-bottom:14px;">
+                    <tbody>
+                        <tr>
+                            <td>Provider</td>
+                            <td><span class="badge badge-up">{{currentLlm}}</span></td>
+                        </tr>
+                        <tr>
+                            <td>Connection</td>
+                            <td><span style="color:#3c763d; font-weight:600;">&#10003; Connected</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button class="btn-secondary" onclick="showSetupPanel()">재설정</button>
+            </div>
+            <div id="setup-panel" style="display:none;">
+            {{/configured}}
+
+            {{^configured}}
+            <div id="setup-panel">
+            {{/configured}}
+
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" name="llm" id="openai" value="openai" checked>
+                        <label for="openai">
+                            <span class="provider-icon">&#9711;</span>
+                            OpenAI
+                        </label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" name="llm" id="anthropic" value="anthropic">
+                        <label for="anthropic">
+                            <span class="provider-icon">&#9651;</span>
+                            Anthropic
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="apiKey">API Key</label>
+                    <input
+                        type="password"
+                        id="apiKey"
+                        class="form-input"
+                        placeholder="sk-..."
+                        autocomplete="off"
+                    />
+                </div>
+
+                <button class="btn-primary" id="submitBtn" onclick="saveConfig()">저장 &amp; 연결</button>
+
+                <div class="alert alert-success" id="successAlert">연결 성공! LLM이 준비되었습니다.</div>
+                <div class="alert alert-warning" id="warningAlert"></div>
+                <div class="alert alert-error"   id="errorAlert"></div>
+
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function showSetupPanel() {
+        document.getElementById('configured-panel').style.display = 'none';
+        document.getElementById('setup-panel').style.display = 'block';
+    }
+
+    async function saveConfig() {
+        const llm    = document.querySelector('input[name="llm"]:checked').value;
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const btn    = document.getElementById('submitBtn');
+
+        if (!apiKey) {
+            showAlert('error', 'API Key를 입력해주세요.');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '연결 중...';
+        hideAlerts();
+
+        try {
+            const res = await fetch('/api/llm/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ llm, apiKey }),
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.status === 'SUCCESS') {
+                showAlert('success', '연결 성공! LLM이 준비되었습니다.');
+                setTimeout(() => location.reload(), 1200);
+            } else if (res.ok && data.status === 'READY') {
+                showAlert('warning', data.message);
+            } else {
+                showAlert('error', data.message || '저장 중 오류가 발생했습니다.');
+            }
+        } catch (e) {
+            showAlert('error', '네트워크 오류가 발생했습니다.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '저장 & 연결';
+        }
+    }
+
+    function showAlert(type, msg) {
+        hideAlerts();
+        const idMap = { success: 'successAlert', warning: 'warningAlert', error: 'errorAlert' };
+        const el = document.getElementById(idMap[type]);
+        if (type !== 'success') el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    function hideAlerts() {
+        ['successAlert', 'warningAlert', 'errorAlert'].forEach(id => {
+            document.getElementById(id).style.display = 'none';
+        });
+    }
+</script>
+</body>
+</html>

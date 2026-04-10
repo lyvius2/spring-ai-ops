@@ -4,7 +4,7 @@ plugins {
     java
     kotlin("jvm") version "2.2.0"
     kotlin("plugin.spring") version "2.2.0"
-    id("org.springframework.boot") version "4.0.0"
+    id("org.springframework.boot") version "3.4.4"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -26,7 +26,7 @@ extra["springAiVersion"] = "1.1.0"
 dependencies {
     implementation(platform("org.springframework.ai:spring-ai-bom:${property("springAiVersion")}"))
 
-    implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-mustache")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
