@@ -54,3 +54,7 @@ tasks.withType<KotlinCompile> {
         freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
+val compileKotlin: KotlinCompile by tasks
+compileKotlin.compilerOptions {
+    freeCompilerArgs.set(listOf("-Xannotation-default-target=param-property"))
+}
