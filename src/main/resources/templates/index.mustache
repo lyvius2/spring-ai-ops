@@ -382,7 +382,9 @@ function openAddAppModal() {
 }
 
 function closeAddAppModal() {
-    document.getElementById('add-app-modal').style.display = 'none';
+    const modal = document.getElementById('add-app-modal');
+    modal.classList.remove('fading-out');
+    modal.style.display = 'none';
 }
 
 document.addEventListener('keydown', function (e) {
@@ -419,8 +421,15 @@ async function saveApp() {
 
         if (data.success) {
             sucEl.style.display = 'block';
-            addAppToList(name);
-            setTimeout(closeAddAppModal, 1500);
+            setTimeout(() => {
+                const modal = document.getElementById('add-app-modal');
+                modal.classList.add('fading-out');
+                modal.addEventListener('transitionend', () => {
+                    modal.style.display = 'none';
+                    modal.classList.remove('fading-out');
+                    addAppToList(name);
+                }, { once: true });
+            }, 800);
         } else {
             errEl.textContent = data.message || 'Failed to register application.';
             errEl.style.display = 'block';
