@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spring AI Ops</title>
     <link rel="stylesheet" href="/style/aiops.css">
+    <script src="/webjars/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="/webjars/stomp-websocket/2.3.4/stomp.min.js"></script>
 </head>
 <body>
 
@@ -320,6 +322,7 @@ function showMainSection() {
     const section = document.getElementById('main-section');
     section.classList.add('visible');
     loadApps();
+    connectWebSocket();
 }
 
 // ── Application List ─────────────────────────────────────────────────────────
@@ -508,6 +511,41 @@ async function confirmDeleteApp() {
     }
 }
 
+// ── WebSocket ────────────────────────────────────────────────────────────────
+
+const appAnalyses = {};
+let stompClient = null;
+
+function connectWebSocket() {
+    const socket = new SockJS('/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+    stompClient.connect({}, function () {
+        stompClient.subscribe('/topic/firing', function (message) {
+            handleFiringRecord(JSON.parse(message.body));
+        });
+    }, function () {
+        setTimeout(connectWebSocket, 5000);
+    });
+}
+
+function handleFiringRecord(record) {
+    const appName = record.application;
+    appAnalyses[appName] = record;
+
+    const container = document.getElementById('app-list-container');
+    const existing = Array.from(container.querySelectorAll('.app-item'))
+        .find(el => el.dataset.app === appName);
+    if (!existing) {
+        addAppToList(appName);
+    }
+
+    if (selectedApp === appName) {
+        const pane = document.getElementById('tab-pane-exception');
+        if (pane) pane.innerHTML = renderExceptionAnalysisContent(appName);
+    }
+}
+
 // ── App Detail / Tabs ────────────────────────────────────────────────────────
 
 function renderAppDetail(appName) {
@@ -518,10 +556,7 @@ function renderAppDetail(appName) {
             <button class="tab-btn"        data-tab="codereview">Code Review</button>
         </div>
         <div class="tab-content" id="tab-pane-exception">
-            <div class="info-message">
-                Please register <code>/webhook/grafana/${escHtml(appName)}</code>
-                as the Webhook URL in your Grafana Alerting Contact Point.
-            </div>
+            ${renderExceptionAnalysisContent(appName)}
         </div>
         <div class="tab-content" id="tab-pane-codereview" style="display:none;">
             <div class="info-message">
@@ -530,6 +565,30 @@ function renderAppDetail(appName) {
             </div>
         </div>
     `;
+}
+
+function renderExceptionAnalysisContent(appName) {
+    const record = appAnalyses[appName];
+    if (!record) {
+        return `
+            <div class="info-message">
+                Please register <code>/webhook/grafana/${escHtml(appName)}</code>
+                as the Webhook URL in your Grafana Alerting Contact Point.
+            </div>`;
+    }
+    return `
+        <div class="analysis-layer">
+            <div class="layer-header">Metric Firing</div>
+            <pre class="json-block">${escHtml(JSON.stringify(record.alertingMessage, null, 2))}</pre>
+        </div>
+        <div class="analysis-layer">
+            <div class="layer-header">Log</div>
+            <pre class="json-block">${escHtml(JSON.stringify(record.log, null, 2))}</pre>
+        </div>
+        <div class="analysis-layer">
+            <div class="layer-header">AI Analysis</div>
+            <div class="analysis-text">${escHtml(record.analyzeResults)}</div>
+        </div>`;
 }
 
 document.addEventListener('click', function (e) {

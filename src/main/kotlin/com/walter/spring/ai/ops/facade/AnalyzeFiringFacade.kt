@@ -11,6 +11,7 @@ import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.util.toISO8601
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.messaging.simp.SimpMessagingTemplate
 import java.time.LocalDateTime
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
@@ -21,6 +22,7 @@ class AnalyzeFiringFacade(
     private val grafanaService: GrafanaService,
     private val lokiService: LokiService,
     private val aiModelService: AiModelService,
+    private val messagingTemplate: SimpMessagingTemplate,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
     fun process(request: GrafanaAlertingRequest, targetApplication: String): AlertingStatus {
@@ -46,8 +48,13 @@ class AnalyzeFiringFacade(
                     LocalDateTime.now()
                 )
                 grafanaService.saveAnalyzeFiringRecord(targetApplication, record)
+                pushToClient(record)
             },
             executor
         )
+    }
+
+    private fun pushToClient(record: AnalyzeFiringRecord) {
+        messagingTemplate.convertAndSend("/topic/firing", record)
     }
 }
