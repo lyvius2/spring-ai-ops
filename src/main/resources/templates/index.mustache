@@ -386,7 +386,7 @@ async function init() {
     try {
         const res  = await fetch('/api/loki/status');
         const data = await res.json();
-        if (!data.configured) {
+        if (!data.isConfigured) {
             document.getElementById('loki-modal').style.display = 'flex';
             return;
         }
