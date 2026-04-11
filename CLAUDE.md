@@ -106,10 +106,23 @@ loki:
 - Controller는 RequestBody 수신 및 Response 반환만 담당한다. 비즈니스 로직은 사소한 것이라도 반드시 Service 또는 Facade에서 수행한다.
 - Controller의 반환 타입은 항상 DTO로 한다. `ResponseEntity`는 사용하지 않는다.
 
-## data class 작성 규칙
+## Service 작성 규칙
+
+- Service는 Controller에서 호출되며, 비즈니스 로직과 외부 API 연동을 담당한다. 단일 책임 원칙을 준수하여 하나의 Service가 너무 많은 역할을 하지 않도록 한다.
+- Service를 새로 생성하거나, 기존 Service에 method를 추가할 때는 반드시 Test 클래스도 함께 작성한다. Service의 public method는 모두 테스트 대상이 되어야 한다.
+
+## Data Class 작성 규칙
 
 - 동일한 kotlin file 내에 1개를 넘는 data class를 작성하지 않는다. (예: `AiConfigRequest`와 `AiConfigResponse`는 각각 별도의 file로 분리)
 - Controller에서 사용하는 DTO는 `controller.dto` 패키지에, FeignClient에서 사용하는 DTO는 `connector.dto` 패키지에 작성한다. (예: `GrafanaAlertingRequest`는 `controller.dto`, `LokiQueryResult`는 `connector.dto`)
+
+## Test 작성 규칙
+
+- Test 클래스는 `src/test/kotlin` 경로에 Controller, Service, Repository 별로 패키지를 나누어 작성한다. (예: `com.walter.spring.ai.ops.service.AiClientServiceTest`)
+- Test method 이름은 `given[Condition]_when[Action]_then[ExpectedResult]` 패턴을 따른다. (예: `givenValidLlmConfig_whenGetChatModel_thenReturnsChatModel`)
+- Test는 가능한 한 독립적으로 작성하여, 하나의 Test가 실패해도 다른 Test에 영향을 주지 않도록 한다. 필요한 경우 Mocking을 활용한다.
+- Test method는 // given, // when, // then 주석으로 Arrange, Act, Assert 구분을 명확히 한다.
+- Test method의 이름은 영어로 하고, 한국어 설명은 `@DisplayName` 어노테이션으로 작성한다.
 
 ## 외부 서비스 연동 조건
 
