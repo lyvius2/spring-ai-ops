@@ -106,6 +106,11 @@ loki:
 - Controller는 RequestBody 수신 및 Response 반환만 담당한다. 비즈니스 로직은 사소한 것이라도 반드시 Service 또는 Facade에서 수행한다.
 - Controller의 반환 타입은 항상 DTO로 한다. `ResponseEntity`는 사용하지 않는다.
 
+## data class 작성 규칙
+
+- 동일한 kotlin file 내에 1개를 넘는 data class를 작성하지 않는다. (예: `AiConfigRequest`와 `AiConfigResponse`는 각각 별도의 file로 분리)
+- Controller에서 사용하는 DTO는 `controller.dto` 패키지에, FeignClient에서 사용하는 DTO는 `connector.dto` 패키지에 작성한다. (예: `GrafanaAlertingRequest`는 `controller.dto`, `LokiQueryResult`는 `connector.dto`)
+
 ## 외부 서비스 연동 조건
 
 **Grafana**: Contact Point → Webhook, URL `http://<host>:8080/webhook/grafana`
