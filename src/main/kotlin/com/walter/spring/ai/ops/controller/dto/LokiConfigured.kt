@@ -4,5 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty
 
 data class LokiConfigured(
     @JsonProperty("isConfigured")
-    val isConfigured: Boolean
+    val isConfigured: Boolean,
+    val lokiUrl: String = "",
 )

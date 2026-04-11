@@ -102,23 +102,16 @@ const CURRENT_LLM    = '{{currentLlm}}';
                     <td>LLM Provider</td>
                     <td>
                         {{#configured}}
-                            <span style="font-weight:600; text-transform:uppercase;">{{currentLlm}}</span>
+                            <span style="font-weight:600; text-transform:uppercase;">{{currentLlm}}</span> <span class="badge badge-up">UP</span>
                         {{/configured}}
                         {{^configured}}
-                            <span style="color:#aaa;">—</span>
+                            <span style="color:#aaa;">—</span> <span class="badge badge-down">NOT CONFIGURED</span>
                         {{/configured}}
                     </td>
                 </tr>
                 <tr>
-                    <td>Status</td>
-                    <td>
-                        {{#configured}}
-                            <span class="badge badge-up">UP</span>
-                        {{/configured}}
-                        {{^configured}}
-                            <span class="badge badge-down">NOT CONFIGURED</span>
-                        {{/configured}}
-                    </td>
+                    <td>Loki URL</td>
+                    <td id="status-loki-url"><span style="color:#aaa;">—</span></td>
                 </tr>
             </tbody>
         </table>
@@ -270,6 +263,7 @@ async function saveLokiUrl() {
         });
         if (res.ok) {
             document.getElementById('loki-modal').style.display = 'none';
+            renderLokiStatus(url);
             showMainSection();
         } else {
             errEl.textContent = 'Failed to save Loki URL. Please try again.';
@@ -375,6 +369,13 @@ function escHtml(str) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
+function renderLokiStatus(lokiUrl) {
+    const cell = document.getElementById('status-loki-url');
+    if (lokiUrl) {
+        cell.innerHTML = `<span style="font-weight:600;">${escHtml(lokiUrl)}</span>&nbsp;<span class="badge badge-up">Connected</span>`;
+    }
+}
+
 async function init() {
     // Step 1: LLM not configured → show LLM modal
     if (!LLM_CONFIGURED) {
@@ -390,6 +391,7 @@ async function init() {
             document.getElementById('loki-modal').style.display = 'flex';
             return;
         }
+        renderLokiStatus(data.lokiUrl);
     } catch (_) {
         // If check fails, proceed anyway
     }

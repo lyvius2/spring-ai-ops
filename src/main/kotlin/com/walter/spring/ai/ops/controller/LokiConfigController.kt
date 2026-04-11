@@ -17,7 +17,7 @@ class LokiConfigController(
 ) {
     @GetMapping("/status")
     fun status(): LokiConfigured {
-        return LokiConfigured(lokiService.isConfigured())
+        return LokiConfigured(lokiService.isConfigured(), lokiService.getLokiUrl())
     }
 
     @PostMapping("/config")
