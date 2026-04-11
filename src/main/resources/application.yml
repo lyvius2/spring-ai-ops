@@ -6,6 +6,10 @@ spring:
   data:
     redis:
       port: 6379
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
   autoconfigure:
     exclude:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
@@ -23,6 +27,14 @@ spring:
       - org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration
       - org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
 
+ai:
+  model:
+    open-ai: # Set OpenAI Model : Default is gpt-4o-mini
+    anthropic: # Set Anthropic Model : Default is claude-3-5-sonnet-20241022
+
 loki:
   url: ${LOKI_URL:}
   query-path: ${LOKI_QUERY_PATH:/loki/api/v1/query}
+
+analysis:
+  data-retention-hours: # Set the number of hours to retain analysis data : Default is 120 (5 days)

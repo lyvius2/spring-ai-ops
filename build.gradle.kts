@@ -22,9 +22,13 @@ repositories {
 }
 
 extra["springAiVersion"] = "1.1.0"
+extra["springCloudVersion"] = "2024.0.1"
 
 dependencies {
     implementation(platform("org.springframework.ai:spring-ai-bom:${property("springAiVersion")}"))
+    implementation(platform("org.springframework.cloud:spring-cloud-dependencies:${property("springCloudVersion")}"))
+    implementation("org.springframework.cloud:spring-cloud-starter-openfeign")
+    implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j")
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-mustache")
