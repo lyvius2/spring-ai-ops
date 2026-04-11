@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.sun.net.httpserver.HttpServer
+import com.walter.spring.ai.ops.connector.LokiConnector
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -25,6 +26,9 @@ class LokiServiceTest {
     @Mock
     private lateinit var valueOperations: ValueOperations<String, String>
 
+    @Mock
+    private lateinit var lokiConnector: LokiConnector
+
     private var httpServer: HttpServer? = null
 
     @AfterEach
@@ -38,7 +42,7 @@ class LokiServiceTest {
     @DisplayName("config에 URL이 설정된 경우 true 반환")
     fun isConfigured_returnsTrue_whenConfigUrlIsSet() {
         // given
-        val lokiService = LokiService(redisTemplate, "http://loki:3100")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "http://loki:3100")
 
         // when
         val result = lokiService.isConfigured()
@@ -53,7 +57,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("lokiUrl")).thenReturn("http://loki:3100")
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
         val result = lokiService.isConfigured()
@@ -68,7 +72,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("lokiUrl")).thenReturn(null)
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
         val result = lokiService.isConfigured()
@@ -83,7 +87,7 @@ class LokiServiceTest {
     @DisplayName("config에 URL이 있으면 config 값 반환")
     fun getLokiUrl_returnsConfigUrl_whenConfigIsSet() {
         // given
-        val lokiService = LokiService(redisTemplate, "http://loki:3100")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "http://loki:3100")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -98,7 +102,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("lokiUrl")).thenReturn("http://redis-loki:3100")
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -113,7 +117,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("lokiUrl")).thenReturn(null)
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -137,7 +141,7 @@ class LokiServiceTest {
         }
         val port = httpServer!!.address.port
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
         lokiService.setLokiUrl("http://localhost:$port")
@@ -151,7 +155,7 @@ class LokiServiceTest {
     fun setLokiUrl_throwsRuntimeException_whenConnectionFails() {
         // given
         val closedPort = ServerSocket(0).use { it.localPort }
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when & then
         assertThatThrownBy { lokiService.setLokiUrl("http://localhost:$closedPort") }
@@ -164,7 +168,7 @@ class LokiServiceTest {
     fun setLokiUrl_doesNotSaveToRedis_whenConnectionFails() {
         // given
         val closedPort = ServerSocket(0).use { it.localPort }
-        val lokiService = LokiService(redisTemplate, "")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
         runCatching { lokiService.setLokiUrl("http://localhost:$closedPort") }

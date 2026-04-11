@@ -14,7 +14,7 @@ import org.springframework.data.redis.core.ListOperations
 import org.springframework.data.redis.core.StringRedisTemplate
 
 @ExtendWith(MockitoExtension::class)
-class AppServiceTest {
+class ApplicationServiceTest {
 
     @Mock
     private lateinit var redisTemplate: StringRedisTemplate
@@ -30,10 +30,10 @@ class AppServiceTest {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1", "app2"))
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when
-        val result = appService.getApps()
+        val result = applicationService.getApps()
 
         // then
         assertThat(result).containsExactly("app1", "app2")
@@ -45,10 +45,10 @@ class AppServiceTest {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(null)
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when
-        val result = appService.getApps()
+        val result = applicationService.getApps()
 
         // then
         assertThat(result).isEmpty()
@@ -62,10 +62,10 @@ class AppServiceTest {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(emptyList())
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when
-        appService.addApp("app1")
+        applicationService.addApp("app1")
 
         // then
         verify(listOperations).rightPush("apps", "app1")
@@ -77,10 +77,10 @@ class AppServiceTest {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when
-        appService.addApp("app2")
+        applicationService.addApp("app2")
 
         // then
         verify(listOperations).rightPush("apps", "app2")
@@ -92,10 +92,10 @@ class AppServiceTest {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when & then
-        assertThatThrownBy { appService.addApp("app1") }
+        assertThatThrownBy { applicationService.addApp("app1") }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("Application 'app1' is already registered.")
     }
@@ -106,10 +106,10 @@ class AppServiceTest {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when
-        runCatching { appService.addApp("app1") }
+        runCatching { applicationService.addApp("app1") }
 
         // then
         verifyNoMoreInteractions(listOperations)
@@ -122,10 +122,10 @@ class AppServiceTest {
     fun removeApp_removesFromRedis() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        val appService = AppService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate)
 
         // when
-        appService.removeApp("app1")
+        applicationService.removeApp("app1")
 
         // then
         verify(listOperations).remove("apps", 0, "app1")

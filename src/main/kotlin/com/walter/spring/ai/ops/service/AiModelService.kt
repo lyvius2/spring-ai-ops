@@ -12,12 +12,15 @@ import org.springframework.ai.openai.OpenAiChatModel
 import org.springframework.ai.openai.OpenAiChatOptions
 import org.springframework.ai.openai.api.OpenAiApi
 import org.springframework.ai.retry.RetryUtils
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
 @Service
 class AiClientService(
     private val redisTemplate: StringRedisTemplate,
+    @Value("\${ai.model.open-ai:gpt-4o-mini}") private val openAiModel: String,
+    @Value("\${ai.model.anthropic:claude-3-5-sonnet-20241022}") private val anthropicModel: String,
 ) {
     private val log = LoggerFactory.getLogger(AiClientService::class.java)
 
@@ -52,12 +55,12 @@ class AiClientService(
         return when (llm) {
             "openai" -> {
                 val api = OpenAiApi.builder().apiKey(apiKey).build()
-                val options = OpenAiChatOptions.builder().model("gpt-4o-mini").build()
+                val options = OpenAiChatOptions.builder().model(openAiModel).build()
                 OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
             "anthropic" -> {
                 val api = AnthropicApi.builder().apiKey(apiKey).build()
-                val options = AnthropicChatOptions.builder().model("claude-3-5-sonnet-20241022").build()
+                val options = AnthropicChatOptions.builder().model(anthropicModel).build()
                 AnthropicChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
             else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
