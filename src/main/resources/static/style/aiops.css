@@ -338,6 +338,9 @@ body {
     color: #333;
     transition: background 0.12s;
     word-break: break-all;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .app-item:hover  { background: #f5f5f5; }
@@ -349,6 +352,56 @@ body {
     font-weight: 600;
     border-left: 3px solid #6db33f;
     padding-left: 13px;
+}
+
+.app-item-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-item-delete {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 2px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.app-item-delete:hover { color: #a94442; }
+
+/* ── Add Application button ── */
+.btn-add {
+    padding: 2px 10px;
+    background: #6db33f;
+    color: #fff;
+    border: 1px solid #5a9632;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.btn-add:hover { background: #5a9632; }
+
+/* ── App blink animation (newly added) ── */
+@keyframes appBlink {
+    0%, 100% { background-color: transparent; }
+    50%       { background-color: rgba(169, 68, 66, 0.18); }
+}
+
+.app-item.blink {
+    animation: appBlink 0.5s ease 3;
 }
 
 .list-placeholder {
