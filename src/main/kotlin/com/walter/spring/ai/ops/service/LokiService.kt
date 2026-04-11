@@ -1,14 +1,18 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.connector.LokiConnector
+import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
+import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
+import com.walter.spring.ai.ops.util.verifyHttpConnection
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
-import java.net.HttpURLConnection
 import java.net.URI
 
 @Service
 class LokiService(
     private val redisTemplate: StringRedisTemplate,
+    private val lokiConnector: LokiConnector,
     @Value("\${loki.url:}") private val lokiUrlFromConfig: String,
 ) {
     fun isConfigured(): Boolean {
@@ -22,20 +26,12 @@ class LokiService(
     }
 
     fun setLokiUrl(lokiUrl: String) {
-        verifyConnection(lokiUrl)
+        URI(lokiUrl).verifyHttpConnection()
         redisTemplate.opsForValue().set("lokiUrl", lokiUrl)
     }
 
-    private fun verifyConnection(lokiUrl: String) {
-        try {
-            val connection = URI(lokiUrl).toURL().openConnection() as HttpURLConnection
-            connection.connectTimeout = 3000
-            connection.readTimeout = 3000
-            connection.requestMethod = "GET"
-            connection.connect()
-            connection.disconnect()
-        } catch (e: Exception) {
-            throw RuntimeException("Cannot connect to Loki at '$lokiUrl': ${e.message}")
-        }
+    fun executeLogQuery(request: LokiQueryInquiry): LokiQueryResult {
+        return lokiConnector.queryRange(request)
     }
+
 }

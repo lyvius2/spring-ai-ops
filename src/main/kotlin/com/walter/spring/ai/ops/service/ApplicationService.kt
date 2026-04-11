@@ -4,7 +4,7 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
 @Service
-class AppService(
+class ApplicationService(
     private val redisTemplate: StringRedisTemplate
 ) {
     companion object {

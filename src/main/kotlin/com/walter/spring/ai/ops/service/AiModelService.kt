@@ -6,7 +6,10 @@ import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
 import org.springframework.ai.anthropic.AnthropicChatOptions
 import org.springframework.ai.anthropic.api.AnthropicApi
+import org.springframework.ai.chat.messages.SystemMessage
+import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.ai.chat.model.ChatModel
+import org.springframework.ai.chat.prompt.Prompt
 import org.springframework.ai.model.tool.ToolCallingManager
 import org.springframework.ai.openai.OpenAiChatModel
 import org.springframework.ai.openai.OpenAiChatOptions
@@ -17,12 +20,12 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
 @Service
-class AiClientService(
+class AiModelService(
     private val redisTemplate: StringRedisTemplate,
     @Value("\${ai.model.open-ai:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.model.anthropic:claude-3-5-sonnet-20241022}") private val anthropicModel: String,
 ) {
-    private val log = LoggerFactory.getLogger(AiClientService::class.java)
+    private val log = LoggerFactory.getLogger(AiModelService::class.java)
 
     @Volatile
     private var chatModel: ChatModel? = null
@@ -65,5 +68,30 @@ class AiClientService(
             }
             else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
         }
+    }
+
+    fun executeAnalyzeFiring(alertSection: String, logSection: String): String {
+        if (chatModel == null) {
+            return ""
+        }
+        val systemMessage = SystemMessage(
+            "You are an expert in analyzing application errors and logs. " +
+                    "Analyze the provided Grafana alert context and application logs, " +
+                    "identify the root cause, and give clear, actionable recommendations."
+        )
+        val userMessage = UserMessage(
+            buildString {
+                append(alertSection)
+                appendLine()
+                append(logSection)
+                appendLine()
+                appendLine("Based on the above alert and logs, please provide:")
+                appendLine("1. Root cause analysis")
+                appendLine("2. Affected components")
+                appendLine("3. Recommended actions to resolve the issue")
+            }
+        )
+        val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
+        return response.result.output.text ?: ""
     }
 }

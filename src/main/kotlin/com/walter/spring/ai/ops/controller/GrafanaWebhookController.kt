@@ -3,7 +3,7 @@ package com.walter.spring.ai.ops.controller
 import com.walter.spring.ai.ops.code.AlertingStatus
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingResponse
-import com.walter.spring.ai.ops.service.GrafanaService
+import com.walter.spring.ai.ops.facade.AnalyzeFiringFacade
 import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/webhook")
-class WebhookController(
-    private val grafanaService: GrafanaService,
+class GrafanaWebhookController(
+    private val analyzeFiringFacade: AnalyzeFiringFacade,
 ) {
-    private val log = LoggerFactory.getLogger(WebhookController::class.java)
+    private val log = LoggerFactory.getLogger(GrafanaWebhookController::class.java)
 
     @PostMapping(value = ["/grafana", "/grafana/{application}"])
     fun grafanaAlert(@RequestBody request: GrafanaAlertingRequest, @PathVariable application: String?): GrafanaAlertingResponse {
@@ -44,6 +44,6 @@ class WebhookController(
         }
 
         // TODO: Loki 로그 조회 + LLM 분석 연동
-        return GrafanaAlertingResponse.of(AlertingStatus.FIRING)
+        return GrafanaAlertingResponse.of(analyzeFiringFacade.process(request, targetApplication))
     }
 }

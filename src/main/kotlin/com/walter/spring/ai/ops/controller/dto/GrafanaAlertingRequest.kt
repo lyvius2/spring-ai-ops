@@ -21,4 +21,25 @@ data class GrafanaAlertingRequest(
 ) {
     fun isFiring(): Boolean = status == "firing"
     fun isResolved(): Boolean = status == "resolved"
+    fun createAlertSectionPrompt(): String {
+        val alert = this.alerts.firstOrNull { it.isFiring() } ?: this.alerts.firstOrNull()
+        val request = this
+        val alertSection = buildString {
+            appendLine("## Alert Information")
+            appendLine("- Title: ${request.title}")
+            appendLine("- Status: ${request.status}")
+            appendLine("- Message: ${request.message}")
+            if (alert != null) {
+                appendLine("- Alert Name: ${alert.alertName()}")
+                appendLine("- Started At: ${alert.startsAt}")
+                if (alert.annotations.isNotEmpty()) {
+                    appendLine("- Annotations: ${alert.annotations.entries.joinToString { "${it.key}=${it.value}" }}")
+                }
+                if (alert.labels.isNotEmpty()) {
+                    appendLine("- Labels: ${alert.labels.entries.joinToString { "${it.key}=${it.value}" }}")
+                }
+            }
+        }
+        return alertSection
+    }
 }
