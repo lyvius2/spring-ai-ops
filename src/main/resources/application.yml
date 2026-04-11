@@ -1,6 +1,8 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  mustache:
+    cache: false
   data:
     redis:
       port: 6379
@@ -20,3 +22,7 @@ spring:
       - org.springframework.ai.model.image.observation.autoconfigure.ImageObservationAutoConfiguration
       - org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration
       - org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
+
+loki:
+  url: ${LOKI_URL:}
+  query-path: ${LOKI_QUERY_PATH:/loki/api/v1/query}

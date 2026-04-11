@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,17 +8,88 @@
 </head>
 <body>
 
+<!-- Server-rendered state exposed to JS -->
+<script>
+const LLM_CONFIGURED = {{#configured}}true{{/configured}}{{^configured}}false{{/configured}};
+const CURRENT_LLM    = '{{currentLlm}}';
+</script>
+
+<!-- ── Navbar ── -->
 <nav class="navbar">
     <div class="navbar-brand">
         <span class="leaf">&#9752;</span>
         Spring AI Ops
     </div>
-    <span class="navbar-subtitle">Grafana Alert &amp; GitHub 코드리뷰 자동화</span>
+    <span class="navbar-subtitle">Grafana Alert &amp; GitHub Code Review Automation</span>
 </nav>
 
-<div class="container">
+<!-- ══ Modal 1: LLM Setup ══ -->
+<div id="llm-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            LLM Configuration
+            <button id="llm-modal-close" class="modal-close-btn" onclick="closeLlmModal()" style="display:none;">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc" id="llm-modal-desc">
+                Select your LLM provider and enter an API key to get started.
+            </p>
+            <div class="radio-group">
+                <div class="radio-option">
+                    <input type="radio" name="llm-provider" id="llm-openai" value="openai" checked>
+                    <label for="llm-openai">
+                        <span class="provider-icon">&#9711;</span>
+                        OpenAI
+                    </label>
+                </div>
+                <div class="radio-option">
+                    <input type="radio" name="llm-provider" id="llm-anthropic" value="anthropic">
+                    <label for="llm-anthropic">
+                        <span class="provider-icon">&#9651;</span>
+                        Anthropic
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="llm-api-key">API Key</label>
+                <input type="password" id="llm-api-key" class="form-input"
+                       placeholder="sk-..." autocomplete="off" />
+            </div>
+            <button class="btn-primary" id="llm-save-btn" onclick="saveLlmConfig()">
+                Save &amp; Connect
+            </button>
+            <div class="alert alert-success" id="llm-alert-success">
+                Connection successful! LLM is ready.
+            </div>
+            <div class="alert alert-warning" id="llm-alert-warning"></div>
+            <div class="alert alert-error"   id="llm-alert-error"></div>
+        </div>
+    </div>
+</div>
 
-    <!-- System Status -->
+<!-- ══ Modal 2: Loki Setup ══ -->
+<div id="loki-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">Loki Configuration Required</div>
+        <div class="modal-body">
+            <p class="modal-desc">
+                Loki URL is not configured. Please enter the Loki base URL to enable log analysis.
+            </p>
+            <div class="form-group">
+                <label class="form-label" for="loki-url-input">Loki Base URL</label>
+                <input type="text" id="loki-url-input" class="form-input"
+                       placeholder="http://loki:3100" autocomplete="off" />
+            </div>
+            <button class="btn-primary" id="loki-save-btn" onclick="saveLokiUrl()">Save</button>
+            <div class="alert alert-error" id="loki-alert-error"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Page Content ── -->
+<div class="page-content">
+
+    <!-- 1. System Status (always visible) -->
     <div class="panel">
         <div class="panel-header">System Status</div>
         <table class="info-table">
@@ -53,133 +124,281 @@
         </table>
     </div>
 
-    <!-- LLM Configuration -->
-    <div class="panel">
-        <div class="panel-header">LLM Configuration</div>
-        <div class="panel-body">
+    <!-- 2 & 3. Main section — appears with fade-in after both modals are complete -->
+    <div id="main-section" class="main-section">
 
-            {{#configured}}
-            <div id="configured-panel">
+        <!-- 2. Applications (2:8 split) -->
+        <div class="app-layout">
+            <div class="app-sidebar">
+                <div class="panel-header">Applications</div>
+                <div id="app-list-container">
+                    <div class="list-placeholder">Loading...</div>
+                </div>
+            </div>
+            <div class="app-detail" id="app-detail-panel">
+                <div class="empty-state">
+                    <span>Select an application from the left panel to view details.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. LLM Configuration -->
+        <div class="panel">
+            <div class="panel-header">LLM Configuration</div>
+            <div class="panel-body">
                 <table class="info-table" style="margin-bottom:14px;">
                     <tbody>
                         <tr>
                             <td>Provider</td>
-                            <td><span class="badge badge-up">{{currentLlm}}</span></td>
+                            <td id="llm-config-provider-cell">
+                                {{#configured}}
+                                    <span class="badge badge-up">{{currentLlm}}</span>
+                                {{/configured}}
+                            </td>
                         </tr>
                         <tr>
                             <td>Connection</td>
-                            <td><span style="color:#3c763d; font-weight:600;">&#10003; Connected</span></td>
+                            <td>
+                                <span style="color:#3c763d; font-weight:600;">&#10003; Connected</span>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
-                <button class="btn-secondary" onclick="showSetupPanel()">재설정</button>
+                <button class="btn-secondary" onclick="openLlmModal(true)">Reconfigure</button>
             </div>
-            <div id="setup-panel" style="display:none;">
-            {{/configured}}
-
-            {{^configured}}
-            <div id="setup-panel">
-            {{/configured}}
-
-                <div class="radio-group">
-                    <div class="radio-option">
-                        <input type="radio" name="llm" id="openai" value="openai" checked>
-                        <label for="openai">
-                            <span class="provider-icon">&#9711;</span>
-                            OpenAI
-                        </label>
-                    </div>
-                    <div class="radio-option">
-                        <input type="radio" name="llm" id="anthropic" value="anthropic">
-                        <label for="anthropic">
-                            <span class="provider-icon">&#9651;</span>
-                            Anthropic
-                        </label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="apiKey">API Key</label>
-                    <input
-                        type="password"
-                        id="apiKey"
-                        class="form-input"
-                        placeholder="sk-..."
-                        autocomplete="off"
-                    />
-                </div>
-
-                <button class="btn-primary" id="submitBtn" onclick="saveConfig()">저장 &amp; 연결</button>
-
-                <div class="alert alert-success" id="successAlert">연결 성공! LLM이 준비되었습니다.</div>
-                <div class="alert alert-warning" id="warningAlert"></div>
-                <div class="alert alert-error"   id="errorAlert"></div>
-
-            </div>
-
         </div>
-    </div>
 
+    </div>
 </div>
 
 <script>
-    function showSetupPanel() {
-        document.getElementById('configured-panel').style.display = 'none';
-        document.getElementById('setup-panel').style.display = 'block';
+// ── LLM Modal ────────────────────────────────────────────────────────────────
+
+function openLlmModal(isReconfigure) {
+    const closeBtn = document.getElementById('llm-modal-close');
+    if (isReconfigure && CURRENT_LLM) {
+        const radio = document.querySelector(`input[name="llm-provider"][value="${CURRENT_LLM}"]`);
+        if (radio) radio.checked = true;
+        document.getElementById('llm-modal-desc').textContent =
+            'Update your LLM provider or API key.';
+        document.getElementById('llm-save-btn').textContent = 'Update & Reconnect';
+        closeBtn.style.display = 'block';
+    } else {
+        closeBtn.style.display = 'none';
+    }
+    hideLlmAlerts();
+    document.getElementById('llm-api-key').value = '';
+    document.getElementById('llm-modal').style.display = 'flex';
+}
+
+function closeLlmModal() {
+    document.getElementById('llm-modal').style.display = 'none';
+}
+
+async function saveLlmConfig() {
+    const llm    = document.querySelector('input[name="llm-provider"]:checked').value;
+    const apiKey = document.getElementById('llm-api-key').value.trim();
+    const btn    = document.getElementById('llm-save-btn');
+
+    if (!apiKey) {
+        showLlmAlert('error', 'Please enter an API key.');
+        return;
     }
 
-    async function saveConfig() {
-        const llm    = document.querySelector('input[name="llm"]:checked').value;
-        const apiKey = document.getElementById('apiKey').value.trim();
-        const btn    = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+    hideLlmAlerts();
 
-        if (!apiKey) {
-            showAlert('error', 'API Key를 입력해주세요.');
+    try {
+        const res  = await fetch('/api/llm/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ llm, apiKey }),
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'SUCCESS') {
+            showLlmAlert('success', '');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            showLlmAlert('error', data.message || 'An error occurred. Please try again.');
+            btn.disabled = false;
+            btn.textContent = 'Save & Connect';
+        }
+    } catch (e) {
+        showLlmAlert('error', 'A network error occurred.');
+        btn.disabled = false;
+        btn.textContent = 'Save & Connect';
+    }
+}
+
+function showLlmAlert(type, msg) {
+    hideLlmAlerts();
+    const ids = { success: 'llm-alert-success', warning: 'llm-alert-warning', error: 'llm-alert-error' };
+    const el  = document.getElementById(ids[type]);
+    if (type !== 'success') el.textContent = msg;
+    el.style.display = 'block';
+}
+
+function hideLlmAlerts() {
+    ['llm-alert-success', 'llm-alert-warning', 'llm-alert-error'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+    });
+}
+
+// ── Loki Modal ───────────────────────────────────────────────────────────────
+
+async function saveLokiUrl() {
+    const url   = document.getElementById('loki-url-input').value.trim();
+    const btn   = document.getElementById('loki-save-btn');
+    const errEl = document.getElementById('loki-alert-error');
+
+    if (!url) {
+        errEl.textContent = 'Please enter a Loki URL.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    errEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/loki/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        if (res.ok) {
+            document.getElementById('loki-modal').style.display = 'none';
+            showMainSection();
+        } else {
+            errEl.textContent = 'Failed to save Loki URL. Please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+    }
+}
+
+// ── Main Section ─────────────────────────────────────────────────────────────
+
+function showMainSection() {
+    const section = document.getElementById('main-section');
+    section.classList.add('visible');
+    loadApps();
+}
+
+// ── Application List ─────────────────────────────────────────────────────────
+
+let selectedApp = null;
+
+async function loadApps() {
+    const container = document.getElementById('app-list-container');
+    try {
+        const res  = await fetch('/api/apps');
+        const apps = await res.json();
+        renderAppList(apps);
+    } catch (e) {
+        container.innerHTML =
+            '<div class="list-placeholder list-error">Failed to load applications.</div>';
+    }
+}
+
+function renderAppList(apps) {
+    const container = document.getElementById('app-list-container');
+    if (!apps || apps.length === 0) {
+        container.innerHTML =
+            '<div class="list-placeholder">No applications have been analyzed yet.</div>';
+        return;
+    }
+    container.innerHTML = apps
+        .map(app => `<div class="app-item" data-app="${escHtml(app)}">${escHtml(app)}</div>`)
+        .join('');
+}
+
+document.addEventListener('click', function (e) {
+    const item = e.target.closest('.app-item');
+    if (!item) return;
+    const appName = item.dataset.app;
+    document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+    item.classList.add('active');
+    selectedApp = appName;
+    renderAppDetail(appName);
+});
+
+// ── App Detail / Tabs ────────────────────────────────────────────────────────
+
+function renderAppDetail(appName) {
+    document.getElementById('app-detail-panel').innerHTML = `
+        <div class="app-detail-header">${escHtml(appName)}</div>
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="exception">Exception Analysis</button>
+            <button class="tab-btn"        data-tab="codereview">Code Review</button>
+        </div>
+        <div class="tab-content" id="tab-pane-exception">
+            <div class="info-message">
+                Please register <code>/webhook/grafana/${escHtml(appName)}</code>
+                as the Webhook URL in your Grafana Alerting Contact Point.
+            </div>
+        </div>
+        <div class="tab-content" id="tab-pane-codereview" style="display:none;">
+            <div class="info-message">
+                Please register <code>/webhook/github/${escHtml(appName)}</code>
+                as the Webhook URL triggered on push events in your GitHub Repository.
+            </div>
+        </div>
+    `;
+}
+
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn) return;
+    const tabName = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ['exception', 'codereview'].forEach(t => {
+        const pane = document.getElementById('tab-pane-' + t);
+        if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
+    });
+});
+
+// ── Utility ──────────────────────────────────────────────────────────────────
+
+function escHtml(str) {
+    const d = document.createElement('div');
+    d.appendChild(document.createTextNode(String(str)));
+    return d.innerHTML;
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+async function init() {
+    // Step 1: LLM not configured → show LLM modal
+    if (!LLM_CONFIGURED) {
+        openLlmModal(false);
+        return;
+    }
+
+    // Step 2: LLM configured → check Loki
+    try {
+        const res  = await fetch('/api/loki/status');
+        const data = await res.json();
+        if (!data.configured) {
+            document.getElementById('loki-modal').style.display = 'flex';
             return;
         }
-
-        btn.disabled = true;
-        btn.textContent = '연결 중...';
-        hideAlerts();
-
-        try {
-            const res = await fetch('/api/llm/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ llm, apiKey }),
-            });
-
-            const data = await res.json();
-
-            if (res.ok && data.status === 'SUCCESS') {
-                showAlert('success', '연결 성공! LLM이 준비되었습니다.');
-                setTimeout(() => location.reload(), 1200);
-            } else if (res.ok && data.status === 'READY') {
-                showAlert('warning', data.message);
-            } else {
-                showAlert('error', data.message || '저장 중 오류가 발생했습니다.');
-            }
-        } catch (e) {
-            showAlert('error', '네트워크 오류가 발생했습니다.');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = '저장 & 연결';
-        }
+    } catch (_) {
+        // If check fails, proceed anyway
     }
 
-    function showAlert(type, msg) {
-        hideAlerts();
-        const idMap = { success: 'successAlert', warning: 'warningAlert', error: 'errorAlert' };
-        const el = document.getElementById(idMap[type]);
-        if (type !== 'success') el.textContent = msg;
-        el.style.display = 'block';
-    }
+    // Both configured → fade in main section
+    showMainSection();
+}
 
-    function hideAlerts() {
-        ['successAlert', 'warningAlert', 'errorAlert'].forEach(id => {
-            document.getElementById(id).style.display = 'none';
-        });
-    }
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>

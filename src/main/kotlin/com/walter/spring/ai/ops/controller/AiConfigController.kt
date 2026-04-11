@@ -17,10 +17,6 @@ class AiConfigController(
 ) {
     @PostMapping("/config")
     fun configure(@RequestBody request: AiConfigRequest): ResponseEntity<AiConfigResponse> {
-        if (aiClientService.isConfigured()) {
-            val currentLlm = aiClientService.getCurrentLlm() ?: "unknown"
-            return ResponseEntity.ok(AiConfigResponse.of(ConnectionStatus.READY, currentLlm))
-        }
         return try {
             aiClientService.configure(request.llm, request.apiKey)
             ResponseEntity.ok(AiConfigResponse.of(ConnectionStatus.SUCCESS, request.llm))

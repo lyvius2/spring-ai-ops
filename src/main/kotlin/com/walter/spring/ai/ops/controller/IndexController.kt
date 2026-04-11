@@ -12,7 +12,7 @@ class IndexController(
     @GetMapping("/")
     fun index(model: Model): String {
         model.addAttribute("configured", aiClientService.isConfigured())
-        model.addAttribute("currentLlm", aiClientService.getCurrentLlm())
+        model.addAttribute("currentLlm", aiClientService.getCurrentLlm() ?: "")
         return "index"
     }
 }
