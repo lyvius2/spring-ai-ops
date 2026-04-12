@@ -10,4 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable
 interface GithubConnector {
     @GetMapping("/repos/{owner}/{repo}/compare/{basehead}")
     fun compare(@PathVariable owner: String, @PathVariable repo: String, @PathVariable basehead: String): GithubCompareResult
+
+    @GetMapping("/repos/{owner}/{repo}/commits/{sha}")
+    fun getCommit(@PathVariable owner: String, @PathVariable repo: String, @PathVariable sha: String): GithubCompareResult
 }
