@@ -532,8 +532,10 @@ async function confirmDeleteApp() {
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
-const appFiringLists    = {};   // { appName: AnalyzeFiringRecord[] }  newest-first
-const appSelectedFiringIdx = {}; // { appName: number }
+const appFiringLists       = {};   // { appName: AnalyzeFiringRecord[] }  newest-first
+const appSelectedFiringIdx = {};   // { appName: number }
+const appCommitLists       = {};   // { appName: CodeReviewRecord[] }    newest-first
+const appSelectedCommitIdx = {};   // { appName: number }
 let stompClient = null;
 
 function connectWebSocket() {
@@ -609,6 +611,16 @@ async function loadFiringList(appName) {
     }
 }
 
+async function loadCommitList(appName) {
+    try {
+        const res  = await fetch(`/api/commit/${encodeURIComponent(appName)}/list`);
+        const data = await res.json();
+        appCommitLists[appName] = data.commits || [];
+    } catch (_) {
+        appCommitLists[appName] = appCommitLists[appName] || [];
+    }
+}
+
 function formatOccupiedAt(dateStr) {
     if (!dateStr) return '—';
     const s = String(dateStr);
@@ -673,6 +685,146 @@ function selectFiringRecord(appName, idx) {
     if (tbody) tbody.innerHTML = renderFiringListRows(appName);
 }
 
+// ── Code Review ─────────────────────────────────────────────────────────────
+
+function fileStatusLabel(status) {
+    if (!status) return 'modify';
+    const s = status.toLowerCase();
+    if (s === 'added' || s === 'copied') return 'new';
+    if (s === 'deleted' || s === 'removed') return 'removed';
+    return 'modify';
+}
+
+function fileStatusClass(status) {
+    if (!status) return 'modify';
+    const s = status.toLowerCase();
+    if (s === 'added' || s === 'copied') return 'new';
+    if (s === 'deleted' || s === 'removed') return 'removed';
+    return 'modify';
+}
+
+function renderDiffPatch(patch) {
+    if (!patch) return '<span class="diff-meta">No diff available</span>';
+    return patch.split('\n').map(line => {
+        const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        if (line.startsWith('+'))  return `<span class="diff-add">${esc}</span>`;
+        if (line.startsWith('-'))  return `<span class="diff-remove">${esc}</span>`;
+        if (line.startsWith('@@')) return `<span class="diff-hunk">${esc}</span>`;
+        if (line.startsWith('\\')) return `<span class="diff-meta">${esc}</span>`;
+        return `<span class="diff-context">${esc}</span>`;
+    }).join('\n');
+}
+
+function toggleFileDiff(headerEl) {
+    const row   = headerEl.closest('.file-row');
+    const diff  = row.querySelector('.file-diff');
+    const arrow = headerEl.querySelector('.file-row-expand');
+    const open  = diff.classList.toggle('expanded');
+    arrow.textContent = open ? '▼' : '▶';
+}
+
+function renderCommitUrlSection(record) {
+    if (!record) return '';
+    const msg = escHtml(record.commitMessage || record.githubUrl || '—');
+    const url = escHtml(record.githubUrl || '');
+    return `
+        <div class="commit-url-section">
+            <div class="layer-header">Commit</div>
+            <a class="commit-link" href="${url}" target="_blank" rel="noopener noreferrer">
+                <span class="commit-message-text">${msg}</span>
+                <span class="commit-url-text">${url}</span>
+            </a>
+        </div>`;
+}
+
+function renderChangedFilesSection(record) {
+    if (!record || !record.changedFiles || record.changedFiles.length === 0) return '';
+    const rows = record.changedFiles.map((file, idx) => {
+        const label = fileStatusLabel(file.status);
+        const cls   = fileStatusClass(file.status);
+        const stats = `<span class="diff-stat-add">+${file.additions}</span>&nbsp;<span class="diff-stat-remove">-${file.deletions}</span>`;
+        const diff  = renderDiffPatch(file.patch);
+        return `
+            <div class="file-row" data-file-idx="${idx}">
+                <div class="file-row-header" onclick="toggleFileDiff(this)">
+                    <span class="file-row-expand">▶</span>
+                    <span class="file-row-name">${escHtml(file.filename || '')}</span>
+                    <span class="file-row-stats">${stats}</span>
+                    <span class="file-badge file-badge-${cls}">${label}</span>
+                </div>
+                <div class="file-diff">
+                    <pre class="diff-block">${diff}</pre>
+                </div>
+            </div>`;
+    }).join('');
+    return `
+        <div class="changed-files-section">
+            <div class="layer-header">Changed Files (${record.changedFiles.length})</div>
+            <div class="file-list">${rows}</div>
+        </div>`;
+}
+
+function renderCodeReviewSection(record) {
+    if (!record) return '';
+    return `
+        <div class="analysis-layer">
+            <div class="layer-header">AI Code Review</div>
+            <div class="analysis-text markdown-body">${renderMarkdown(record.reviewResult || '')}</div>
+        </div>`;
+}
+
+function renderCommitListRows(appName) {
+    const list        = appCommitLists[appName] || [];
+    const selectedIdx = appSelectedCommitIdx[appName] ?? 0;
+    if (list.length === 0) {
+        return `<tr><td colspan="3" style="padding:14px;color:#999;text-align:center;">No commit records yet.</td></tr>`;
+    }
+    return list.map((rec, idx) => {
+        const msg = escHtml((rec.commitMessage || '—').substring(0, 60));
+        return `<tr class="${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}">
+            <td>${idx + 1}</td>
+            <td class="commit-msg-cell">${msg}</td>
+            <td>${formatOccupiedAt(rec.pushedAt)}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderCommitListSection(appName) {
+    return `
+        <div class="firing-list-section">
+            <div class="layer-header">Commit History</div>
+            <table class="commit-table">
+                <thead><tr><th>#</th><th>Message</th><th>Pushed At</th></tr></thead>
+                <tbody id="commit-list-body">${renderCommitListRows(appName)}</tbody>
+            </table>
+        </div>`;
+}
+
+function buildCodeReviewHtml(appName) {
+    const list   = appCommitLists[appName] || [];
+    const idx    = appSelectedCommitIdx[appName] ?? 0;
+    const record = list[idx] || null;
+    const layers = record
+        ? renderCommitUrlSection(record) + renderChangedFilesSection(record) + renderCodeReviewSection(record)
+        : `<div class="info-message">Please register <code>/webhook/github/${escHtml(appName)}</code> as the Webhook URL triggered on push events in your GitHub Repository.</div>`;
+    return layers + renderCommitListSection(appName);
+}
+
+function selectCommitRecord(appName, idx) {
+    appSelectedCommitIdx[appName] = idx;
+    const content = document.getElementById('codereview-content');
+    if (content) content.innerHTML = buildCodeReviewHtml(appName);
+}
+
+async function loadAndRenderCodeReview(appName) {
+    if (!appName) return;
+    const content = document.getElementById('codereview-content');
+    if (!content) return;
+    await loadCommitList(appName);
+    appSelectedCommitIdx[appName] = appSelectedCommitIdx[appName] ?? 0;
+    content.innerHTML = buildCodeReviewHtml(appName);
+}
+
 function showNotification(appName) {
     let container = document.getElementById('notification-container');
     if (!container) {
@@ -702,9 +854,8 @@ function buildAppDetailHtml(appName) {
             ${renderFiringListSection(appName)}
         </div>
         <div class="tab-content" id="tab-pane-codereview" style="display:none;">
-            <div class="info-message">
-                Please register <code>/webhook/github/${escHtml(appName)}</code>
-                as the Webhook URL triggered on push events in your GitHub Repository.
+            <div id="codereview-content">
+                <div class="list-placeholder">Loading commit records...</div>
             </div>
         </div>
     `;
@@ -730,15 +881,25 @@ document.addEventListener('click', async function (e) {
         if (tabName === 'codereview') {
             const allowed = await checkGithubToken();
             if (!allowed) return;
+            switchToTab(tabName);
+            await loadAndRenderCodeReview(selectedApp);
+            return;
         }
         switchToTab(tabName);
         return;
     }
 
     // Firing list row selection
-    const row = e.target.closest('.firing-table tbody tr[data-idx]');
-    if (row && selectedApp) {
-        selectFiringRecord(selectedApp, parseInt(row.dataset.idx, 10));
+    const firingRow = e.target.closest('.firing-table tbody tr[data-idx]');
+    if (firingRow && selectedApp) {
+        selectFiringRecord(selectedApp, parseInt(firingRow.dataset.idx, 10));
+        return;
+    }
+
+    // Commit history row selection
+    const commitRow = e.target.closest('.commit-table tbody tr[data-idx]');
+    if (commitRow && selectedApp) {
+        selectCommitRecord(selectedApp, parseInt(commitRow.dataset.idx, 10));
     }
 });
 
