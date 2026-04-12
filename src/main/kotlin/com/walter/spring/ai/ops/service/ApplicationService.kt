@@ -17,7 +17,7 @@ class ApplicationService(
     fun addApp(name: String) {
         val existing = redisTemplate.opsForList().range(KEY, 0, -1) ?: emptyList()
         if (name in existing) {
-            throw IllegalArgumentException("Application '$name' is already registered.")
+            return
         }
         redisTemplate.opsForList().rightPush(KEY, name)
     }

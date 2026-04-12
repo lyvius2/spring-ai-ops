@@ -1,7 +1,6 @@
 package com.walter.spring.ai.ops.service
 
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -87,17 +86,15 @@ class ApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("이미 등록된 앱 이름인 경우 IllegalArgumentException 발생")
-    fun addApp_throwsIllegalArgumentException_whenAppAlreadyExists() {
+    @DisplayName("이미 등록된 앱 이름인 경우 예외 없이 무시됨")
+    fun addApp_completesWithoutException_whenAppAlreadyExists() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
         `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
         val applicationService = ApplicationService(redisTemplate)
 
-        // when & then
-        assertThatThrownBy { applicationService.addApp("app1") }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("Application 'app1' is already registered.")
+        // when & then (예외 발생 시 테스트 실패)
+        applicationService.addApp("app1")
     }
 
     @Test
@@ -109,9 +106,10 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate)
 
         // when
-        runCatching { applicationService.addApp("app1") }
+        applicationService.addApp("app1")
 
         // then
+        verify(listOperations).range("apps", 0, -1)
         verifyNoMoreInteractions(listOperations)
     }
 

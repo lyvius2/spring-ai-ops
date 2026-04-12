@@ -25,7 +25,7 @@ class ApplicationController(
         return try {
             applicationService.addApp(request.name)
             AppAddResponse.success()
-        } catch (e: IllegalArgumentException) {
+        } catch (e: Exception) {
             AppAddResponse.failure(e)
         }
     }
