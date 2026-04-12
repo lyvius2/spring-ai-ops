@@ -34,6 +34,8 @@ Spring AI Ops bridges your monitoring and version-control toolchain with large l
 
 No relational database is used. Redis serves as the sole persistence layer — storing LLM configuration, application registry, alert analysis records, and code review records.
 
+> **Live Demo**: [https://aiops.furaiki-lifelog.com](https://aiops.furaiki-lifelog.com)
+
 ---
 
 ## Key Features
@@ -427,6 +429,8 @@ SOFTWARE.
 **Spring AI Ops**는 Grafana Alerting webhook과 GitHub push webhook을 수신하여, OpenAI 또는 Anthropic LLM으로 오류를 분석하고 코드 리뷰를 자동 수행하는 AI 기반 운영 자동화 도구입니다. 분석 결과는 WebSocket을 통해 실시간으로 대시보드에 전달됩니다.
 
 관계형 데이터베이스는 사용하지 않으며, Redis를 유일한 저장소로 사용합니다. 로컬 개발 환경에서는 Embedded Redis가 자동으로 기동되므로 별도 설치가 필요 없습니다.
+
+> **데모 사이트**: [https://aiops.furaiki-lifelog.com](https://aiops.furaiki-lifelog.com)
 
 ---
 
