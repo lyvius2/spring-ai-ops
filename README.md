@@ -159,7 +159,7 @@ POST /webhook/github[/{application}]
 ## Screenshots
 
 ### LLM API Key Configuration
-*Enter your LLM provider and API key through the UI. The model is activated immediately without restarting the application.*
+*Enter your LLM provider and API key through the UI. The model is activated immediately without restarting the application.*  
 *LLM 제공자와 API 키를 UI에서 입력합니다. 애플리케이션 재시작 없이 즉시 모델이 활성화됩니다.*
 
 ![LLM API Key Configuration](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AIConfig.png?raw=true)
@@ -167,7 +167,7 @@ POST /webhook/github[/{application}]
 ---
 
 ### Grafana Alerting Webhook
-*When a Grafana alert fires, the webhook payload is delivered to Spring AI Ops in real time. The alert status and labels are visible in the dashboard.*
+*When a Grafana alert fires, the webhook payload is delivered to Spring AI Ops in real time. The alert status and labels are visible in the dashboard.*  
 *Grafana 알림이 발생하면 webhook 페이로드가 실시간으로 Spring AI Ops에 전달됩니다. 대시보드에서 알림 상태와 레이블을 확인할 수 있습니다.*
 
 ![Grafana Alerting Webhook](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/GrafanaAlerting.png?raw=true)
@@ -175,7 +175,7 @@ POST /webhook/github[/{application}]
 ---
 
 ### AI-Powered Error Analysis
-*The LLM analyzes the Grafana alert context along with the corresponding Loki logs and streams a root-cause analysis — including affected components and recommended actions — directly to the dashboard.*
+*The LLM analyzes the Grafana alert context along with the corresponding Loki logs and streams a root-cause analysis — including affected components and recommended actions — directly to the dashboard.*  
 *LLM이 Grafana 알림 컨텍스트와 Loki 로그를 함께 분석하여 근본 원인, 영향 범위, 조치 방법을 대시보드에 실시간으로 스트리밍합니다.*
 
 ![Firing Analysis 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_01.png?raw=true)
@@ -185,7 +185,7 @@ POST /webhook/github[/{application}]
 ---
 
 ### AI-Powered Code Review
-*When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*
+*When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*  
 *GitHub push 이벤트가 수신되면 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재적 버그, 보안 고려사항, 개선 제안을 구조화된 보고서로 제공합니다.*
 
 ![Code Review 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_01.png?raw=true)
@@ -499,44 +499,6 @@ POST /webhook/github[/{application}]
         │
         └─ WebSocket /topic/commit 으로 결과 Push
 ```
-
----
-
-### 스크린샷
-
-#### LLM API 키 설정 화면
-*UI에서 LLM 제공자와 API 키를 입력합니다. 재시작 없이 즉시 모델이 활성화됩니다.*  
-*Enter your LLM provider and API key through the UI. The model is activated immediately without restarting.*
-
-![LLM API Key Configuration](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AIConfig.png?raw=true)
-
----
-
-#### Grafana Alerting Webhook 수신 화면
-*Grafana 알림이 발생하면 webhook 페이로드가 Spring AI Ops로 실시간 전달됩니다.*  
-*When a Grafana alert fires, the webhook payload is delivered to Spring AI Ops in real time.*
-
-![Grafana Alerting Webhook](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/GrafanaAlerting.png?raw=true)
-
----
-
-#### AI 오류 분석 결과 화면
-*LLM이 Grafana 알림 컨텍스트와 Loki 로그를 분석하여 근본 원인, 영향 범위, 조치 방법을 실시간 스트리밍합니다.*  
-*The LLM analyzes alert context and Loki logs, streaming root-cause analysis with affected components and recommended actions.*
-
-![Firing Analysis 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_01.png?raw=true)
-![Firing Analysis 2](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_02.png?raw=true)
-![Firing Analysis 3](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_03.png?raw=true)
-
----
-
-#### AI 코드 리뷰 결과 화면
-*GitHub push 이벤트 수신 시 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재 버그, 보안 고려사항, 개선 제안을 제공합니다.*  
-*On GitHub push events, the LLM reviews each changed file's diff and delivers a structured code quality, bug, security, and improvement report.*
-
-![Code Review 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_01.png?raw=true)
-![Code Review 2](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_02.png?raw=true)
-![Code Review 3](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_03.png?raw=true)
 
 ---
 
