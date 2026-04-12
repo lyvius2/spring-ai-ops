@@ -38,6 +38,8 @@ ai:
 loki:
   url: ${LOKI_URL:}
   query-path: ${LOKI_QUERY_PATH:/loki/api/v1/query}
+github:
+  access-token: ${GITHUB_ACCESS_TOKEN:}   # Set your GitHub access token for authentication
 
 analysis:
   data-retention-hours: 120 # Set the number of hours to retain analysis data : Default is 120 (5 days)
