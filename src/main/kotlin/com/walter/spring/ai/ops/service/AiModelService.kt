@@ -94,4 +94,28 @@ class AiModelService(
         val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
         return response.result.output.text ?: ""
     }
+
+    fun executeAnalyzeCodeDiffer(codeReviewSection: String): String {
+        if (chatModel == null) {
+            return ""
+        }
+        val systemMessage = SystemMessage(
+            "You are an expert code reviewer. " +
+                    "Analyze the provided code diff and give a thorough code review. " +
+                    "Focus on correctness, potential bugs, performance, security, and code quality."
+        )
+        val userMessage = UserMessage(
+            buildString {
+                append(codeReviewSection)
+                appendLine()
+                appendLine("Based on the above diff, please provide:")
+                appendLine("1. Summary of changes")
+                appendLine("2. Potential issues or bugs")
+                appendLine("3. Security considerations")
+                appendLine("4. Suggestions for improvement")
+            }
+        )
+        val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
+        return response.result.output.text ?: ""
+    }
 }

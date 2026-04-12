@@ -1,5 +1,7 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
+import com.walter.spring.ai.ops.connector.dto.GithubFile
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -183,6 +185,45 @@ class AiModelServiceTest {
         given(mockChatModel.call(any(Prompt::class.java))).willReturn(response)
 
         aiModelService.executeAnalyzeFiring("## Alert\nTitle: test-alert", "## Logs\nERROR: timeout")
+
+        verify(mockChatModel).call(any(Prompt::class.java))
+    }
+
+    // ── executeAnalyzeCodeDiffer ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("ChatModel이 null이면 executeAnalyzeCodeDiffer는 빈 문자열 반환")
+    fun executeAnalyzeCodeDiffer_returnsEmpty_whenChatModelIsNull() {
+        val result = aiModelService.executeAnalyzeCodeDiffer(GithubCompareResult().createCodeReviewPrompt())
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    @DisplayName("ChatModel이 구성된 경우 코드 리뷰 결과 문자열 반환")
+    fun executeAnalyzeCodeDiffer_returnsReviewResult_whenChatModelIsConfigured() {
+        injectChatModel(mockChatModel)
+        val response = mockChatResponse("## Code Review\nLooks good overall.")
+        given(mockChatModel.call(any(Prompt::class.java))).willReturn(response)
+
+        val result = aiModelService.executeAnalyzeCodeDiffer(GithubCompareResult().createCodeReviewPrompt())
+
+        assertThat(result).isEqualTo("## Code Review\nLooks good overall.")
+    }
+
+    @Test
+    @DisplayName("compareResult의 파일 정보가 프롬프트에 포함되어 LLM에 전달됨")
+    fun executeAnalyzeCodeDiffer_includesFileInfoInPrompt() {
+        injectChatModel(mockChatModel)
+        val response = mockChatResponse("review")
+        given(mockChatModel.call(any(Prompt::class.java))).willReturn(response)
+        val compareResult = GithubCompareResult(
+            files = listOf(
+                GithubFile(filename = "src/Main.kt", status = "modified", additions = 3, deletions = 1, patch = "@@ -1 +1 @@\n-old\n+new")
+            )
+        )
+
+        aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
 
         verify(mockChatModel).call(any(Prompt::class.java))
     }
