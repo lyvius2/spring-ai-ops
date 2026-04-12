@@ -200,7 +200,7 @@ POST /webhook/github[/{application}]
 |---|---|
 | Language | Kotlin 2.2 / Java 21 |
 | Framework | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-3-5-sonnet-20241022`) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
 | Persistence | Redis (primary store, no RDBMS) |
 | Dev Redis | Embedded Redis (auto-start, no install needed) |
 | HTTP Client | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
@@ -235,7 +235,7 @@ ai:
     model: gpt-4o-mini                   # OpenAI model name
     api-key: ${AI_OPENAI_API_KEY:}       # Or set env var AI_OPENAI_API_KEY
   anthropic:
-    model: claude-3-5-sonnet-20241022    # Anthropic model name
+    model: claude-sonnet-4-6             # Anthropic model name
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Or set env var AI_ANTHROPIC_API_KEY
 
 loki:
@@ -546,7 +546,7 @@ POST /webhook/github[/{application}]
 |---|---|
 | 언어 | Kotlin 2.2 / Java 21 |
 | 프레임워크 | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-3-5-sonnet-20241022`) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
 | 저장소 | Redis (유일한 데이터 저장소, RDB 미사용) |
 | 개발용 Redis | Embedded Redis (자동 기동, 별도 설치 불필요) |
 | HTTP 클라이언트 | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
