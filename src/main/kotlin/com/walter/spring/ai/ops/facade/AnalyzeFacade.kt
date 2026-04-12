@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 
 @Facade
-class AnalyzeFiringFacade(
+class AnalyzeFacade(
     private val applicationService: ApplicationService,
     private val grafanaService: GrafanaService,
     private val lokiService: LokiService,
@@ -25,7 +25,7 @@ class AnalyzeFiringFacade(
     private val messagingTemplate: SimpMessagingTemplate,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
-    fun process(request: GrafanaAlertingRequest, targetApplication: String): AlertingStatus {
+    fun analyzeFiring(request: GrafanaAlertingRequest, targetApplication: String): AlertingStatus {
         if (request.isResolved()) {
             return AlertingStatus.RESOLVED
         }
