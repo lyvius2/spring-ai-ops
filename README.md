@@ -20,6 +20,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
   - [Setting Up Grafana](#setting-up-grafana)
   - [Setting Up GitHub Webhooks](#setting-up-github-webhooks)
 - [API Reference](#api-reference)
+- [API Documentation (Swagger)](#api-documentation-swagger)
 - [Package Structure](#package-structure)
 - [License](#license)
 - [한국어 문서](#한국어-문서)
@@ -166,6 +167,7 @@ POST /webhook/github[/{application}]
 | HTTP Client | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
 | Real-Time | Spring WebSocket (STOMP over SockJS) |
 | Templating | Mustache |
+| API Docs | springdoc-openapi 2.8.3 (Swagger UI) |
 | Async | Java 21 Virtual Threads (`CompletableFuture` + `VirtualThreadTaskExecutor`) |
 | Build | Gradle Kotlin DSL |
 
@@ -198,7 +200,7 @@ ai:
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Or set env var AI_ANTHROPIC_API_KEY
 
 loki:
-  url: ${LOKI_URL:}                      # e.g. http://localhost:3100
+  url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
 
 github:
   url: ${GITHUB_URL:https://api.github.com}
@@ -246,6 +248,8 @@ Open `http://localhost:8080` in your browser. On first launch you will be prompt
 
 > Ensure Prometheus labels (`job`, `instance`, etc.) and Loki stream labels are identical so log queries work automatically.
 
+> **Note**: Loki authentication (Basic Auth, Bearer Token, etc.) is not currently supported. Only unauthenticated Loki endpoints are supported at this time.
+
 ### Setting Up GitHub Webhooks
 
 1. Go to **Repository → Settings → Webhooks → Add webhook**.
@@ -281,6 +285,20 @@ Ensure your GitHub access token (configured in yml or via the UI) has `repo` rea
 |---|---|---|
 | `/topic/firing` | `AnalyzeFiringRecord` | LLM error analysis completes |
 | `/topic/commit` | `CodeReviewRecord` | LLM code review completes |
+
+---
+
+## API Documentation (Swagger)
+
+Spring AI Ops integrates [springdoc-openapi](https://springdoc.org/) to provide interactive API documentation.
+
+| URL | Description |
+|---|---|
+| `http://localhost:8080/swagger-ui.html` | Swagger UI — browse and try all REST endpoints |
+| `http://localhost:8080/v3/api-docs` | OpenAPI 3.0 spec (JSON) |
+| `http://localhost:8080/v3/api-docs.yaml` | OpenAPI 3.0 spec (YAML) |
+
+The Swagger UI is useful for testing webhook payloads and configuration endpoints without an external tool.
 
 ---
 
@@ -457,6 +475,7 @@ POST /webhook/github[/{application}]
 | HTTP 클라이언트 | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
 | 실시간 통신 | Spring WebSocket (STOMP over SockJS) |
 | 템플릿 | Mustache |
+| API 문서 | springdoc-openapi 2.8.3 (Swagger UI) |
 | 비동기 | Java 21 Virtual Thread (`CompletableFuture` + `VirtualThreadTaskExecutor`) |
 | 빌드 | Gradle Kotlin DSL |
 
@@ -483,7 +502,7 @@ ai:
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Anthropic API 키
 
 loki:
-  url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100)
+  url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100) — 인증 미지원
 
 github:
   access-token: ${GITHUB_ACCESS_TOKEN:}  # GitHub 액세스 토큰
@@ -516,12 +535,26 @@ analysis:
 3. URL: `http://<your-host>:8080/webhook/grafana/{application}`
 4. 알림 정책에 연결
 
+> **주의**: 현재 Loki 인증(Basic Auth, Bearer Token 등)은 지원하지 않습니다. 인증 없이 접근 가능한 Loki 엔드포인트만 사용할 수 있습니다.
+
 #### GitHub Webhook 설정
 
 1. **Repository → Settings → Webhooks → Add webhook**
 2. Payload URL: `http://<your-host>:8080/webhook/github/{application}`
 3. Content type: `application/json`
 4. 이벤트: **Just the push event**
+
+### API 문서 (Swagger)
+
+[springdoc-openapi](https://springdoc.org/)를 통해 Swagger UI를 제공합니다. 애플리케이션 실행 후 아래 URL에서 확인할 수 있습니다.
+
+| URL | 설명 |
+|---|---|
+| `http://localhost:8080/swagger-ui.html` | Swagger UI — 모든 REST 엔드포인트를 브라우저에서 직접 테스트 가능 |
+| `http://localhost:8080/v3/api-docs` | OpenAPI 3.0 명세 (JSON) |
+| `http://localhost:8080/v3/api-docs.yaml` | OpenAPI 3.0 명세 (YAML) |
+
+webhook 페이로드나 설정 엔드포인트를 별도 도구 없이 Swagger UI에서 바로 테스트할 수 있습니다.
 
 ---
 
