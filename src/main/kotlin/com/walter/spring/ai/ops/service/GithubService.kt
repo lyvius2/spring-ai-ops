@@ -1,5 +1,8 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.connector.GithubConnector
+import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
+import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
@@ -7,6 +10,7 @@ import org.springframework.stereotype.Service
 @Service
 class GithubService(
     private val redisTemplate: StringRedisTemplate,
+    private val githubConnector: GithubConnector,
     @Value("\${github.access-token:}") private val configuredToken: String,
 ) {
     companion object {
@@ -29,4 +33,8 @@ class GithubService(
     }
 
     fun isTokenConfigured(): Boolean = !getGithubToken().isNullOrBlank()
+
+    fun executeInquiryDiffer(inquiry: GithubDifferInquiry): GithubCompareResult {
+        return githubConnector.compare(inquiry.owner, inquiry.repo, "${inquiry.base}...${inquiry.head}")
+    }
 }
