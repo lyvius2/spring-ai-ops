@@ -12,8 +12,9 @@
 
 <!-- Server-rendered state exposed to JS -->
 <script>
-const LLM_CONFIGURED = {{#configured}}true{{/configured}}{{^configured}}false{{/configured}};
-const CURRENT_LLM    = '{{currentLlm}}';
+const LLM_CONFIGURED      = {{#configured}}true{{/configured}}{{^configured}}false{{/configured}};
+const CURRENT_LLM         = '{{currentLlm}}';
+const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectProvider}}false{{/selectProvider}};
 </script>
 
 <!-- ── Navbar ── -->
@@ -65,6 +66,37 @@ const CURRENT_LLM    = '{{currentLlm}}';
             </div>
             <div class="alert alert-warning" id="llm-alert-warning"></div>
             <div class="alert alert-error"   id="llm-alert-error"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Select LLM Provider ══ -->
+<div id="select-provider-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">Select LLM Provider</div>
+        <div class="modal-body">
+            <p class="modal-desc">
+                API keys are pre-configured in application settings.<br>
+                Please select the LLM provider you want to use.
+            </p>
+            <div class="radio-group">
+                <div class="radio-option">
+                    <input type="radio" name="select-provider" id="select-openai" value="openai" checked>
+                    <label for="select-openai">
+                        <span class="provider-icon">&#9711;</span>
+                        OpenAI
+                    </label>
+                </div>
+                <div class="radio-option">
+                    <input type="radio" name="select-provider" id="select-anthropic" value="anthropic">
+                    <label for="select-anthropic">
+                        <span class="provider-icon">&#9651;</span>
+                        Anthropic
+                    </label>
+                </div>
+            </div>
+            <button class="btn-primary" id="select-provider-btn" onclick="submitSelectProvider()">Select</button>
+            <div class="alert alert-error" id="select-provider-alert-error"></div>
         </div>
     </div>
 </div>
@@ -227,6 +259,47 @@ const CURRENT_LLM    = '{{currentLlm}}';
 </div>
 
 <script>
+// ── Select Provider Modal ─────────────────────────────────────────────────────
+
+function openLlmSelectProviderModal() {
+    document.getElementById('select-provider-alert-error').style.display = 'none';
+    document.getElementById('select-provider-btn').disabled = false;
+    document.getElementById('select-provider-btn').textContent = 'Select';
+    document.getElementById('select-provider-modal').style.display = 'flex';
+}
+
+async function submitSelectProvider() {
+    const llm   = document.querySelector('input[name="select-provider"]:checked').value;
+    const btn   = document.getElementById('select-provider-btn');
+    const errEl = document.getElementById('select-provider-alert-error');
+
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+    errEl.style.display = 'none';
+
+    try {
+        const res  = await fetch('/api/llm/select-provider', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ llm }),
+        });
+        const data = await res.json();
+        if (data.status === 'SUCCESS') {
+            setTimeout(() => location.reload(), 500);
+        } else {
+            errEl.textContent = data.message || 'An error occurred. Please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Select';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Select';
+    }
+}
+
 // ── LLM Modal ────────────────────────────────────────────────────────────────
 
 function openLlmModal(isReconfigure) {
@@ -1129,9 +1202,13 @@ function renderLokiStatus(lokiUrl) {
 }
 
 async function init() {
-    // Step 1: LLM not configured → show LLM modal
+    // Step 1: LLM not configured → 상태에 따라 분기
     if (!LLM_CONFIGURED) {
-        openLlmModal(false);
+        if (LLM_SELECT_PROVIDER) {
+            openLlmSelectProviderModal();
+        } else {
+            openLlmModal(false);
+        }
         return;
     }
 
