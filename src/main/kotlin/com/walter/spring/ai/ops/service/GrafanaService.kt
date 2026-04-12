@@ -45,8 +45,8 @@ class GrafanaService(
         )
     }
 
-    fun saveAnalyzeFiringRecord(targetApplication: String, record: AnalyzeFiringRecord) {
-        val key = "${APP_KEY_PREFIX}${targetApplication}"
+    fun saveAnalyzeFiringRecord(record: AnalyzeFiringRecord) {
+        val key = "${APP_KEY_PREFIX}${record.application}"
         redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 }

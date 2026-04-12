@@ -33,28 +33,27 @@ class AnalyzeFiringFacade(
         val logQuery = grafanaService.convertLogInquiry(request)
         val logResults = lokiService.executeLogQuery(logQuery)
         val analyzeResults = aiModelService.executeAnalyzeFiring(request.createAlertSectionPrompt(), logResults.createLogSectionPrompt())
-        putAnalyzeFiring(request, targetApplication, logResults, analyzeResults)
+        val record = createAnalyzeFiringRecord(request, targetApplication, logResults, analyzeResults)
+        saveAnalyzeFiring(record)
+        pushAnalyzeFiring(record)
         return AlertingStatus.FIRING
     }
 
-    private fun putAnalyzeFiring(request: GrafanaAlertingRequest, targetApplication: String, logResults: LokiQueryResult, analyzeResults: String) {
-        CompletableFuture.runAsync(
-            {
-                val record = AnalyzeFiringRecord(request.alerts.first().startsAt.toISO8601(),
-                    targetApplication,
-                    request,
-                    logResults,
-                    analyzeResults,
-                    LocalDateTime.now()
-                )
-                grafanaService.saveAnalyzeFiringRecord(targetApplication, record)
-                pushToClient(record)
-            },
-            executor
+    private fun createAnalyzeFiringRecord(request: GrafanaAlertingRequest, targetApplication: String, logResults: LokiQueryResult, analyzeResults: String): AnalyzeFiringRecord {
+        return AnalyzeFiringRecord(request.alerts.first().startsAt.toISO8601(),
+            targetApplication,
+            request,
+            logResults,
+            analyzeResults,
+            LocalDateTime.now()
         )
     }
 
-    private fun pushToClient(record: AnalyzeFiringRecord) {
-        messagingTemplate.convertAndSend("/topic/firing", record)
+    private fun saveAnalyzeFiring(record: AnalyzeFiringRecord) {
+        CompletableFuture.runAsync({ grafanaService.saveAnalyzeFiringRecord(record) }, executor)
+    }
+
+    private fun pushAnalyzeFiring(record: AnalyzeFiringRecord) {
+        CompletableFuture.runAsync({ messagingTemplate.convertAndSend("/topic/firing", record) }, executor)
     }
 }
