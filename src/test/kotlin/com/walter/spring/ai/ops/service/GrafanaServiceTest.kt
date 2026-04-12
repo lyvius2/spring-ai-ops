@@ -239,7 +239,7 @@ class GrafanaServiceTest {
         val json = """{"application":"my-app"}"""
         val record = createRecord("my-app")
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:my-app", 0, 4)).thenReturn(listOf(json))
+        `when`(listOperations.range("firing:my-app", 0, -1)).thenReturn(listOf(json))
         `when`(objectMapper.readValue(json, AnalyzeFiringRecord::class.java)).thenReturn(record)
 
         // when
@@ -255,7 +255,7 @@ class GrafanaServiceTest {
     fun getAnalyzeFiringRecords_returnsEmptyList_whenRedisReturnsNull() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:my-app", 0, 4)).thenReturn(null)
+        `when`(listOperations.range("firing:my-app", 0, -1)).thenReturn(null)
 
         // when
         val result = grafanaService.getAnalyzeFiringRecords("my-app")
@@ -272,7 +272,7 @@ class GrafanaServiceTest {
         val invalidJson = """{"invalid":true}"""
         val record = createRecord()
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:my-app", 0, 4)).thenReturn(listOf(validJson, invalidJson))
+        `when`(listOperations.range("firing:my-app", 0, -1)).thenReturn(listOf(validJson, invalidJson))
         `when`(objectMapper.readValue(validJson, AnalyzeFiringRecord::class.java)).thenReturn(record)
         `when`(objectMapper.readValue(invalidJson, AnalyzeFiringRecord::class.java)).thenThrow(RuntimeException("Parse error"))
 
@@ -288,12 +288,12 @@ class GrafanaServiceTest {
     fun getAnalyzeFiringRecords_queriesRedisWithCorrectKeyAndRange() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:payment-service", 0, 4)).thenReturn(emptyList())
+        `when`(listOperations.range("firing:payment-service", 0, -1)).thenReturn(emptyList())
 
         // when
         grafanaService.getAnalyzeFiringRecords("payment-service")
 
         // then
-        verify(listOperations).range("firing:payment-service", 0, 4)
+        verify(listOperations).range("firing:payment-service", 0, -1)
     }
 }

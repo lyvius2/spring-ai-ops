@@ -53,8 +53,9 @@ class GrafanaService(
 
     fun getAnalyzeFiringRecords(application: String): List<AnalyzeFiringRecord> {
         val key = "${APP_KEY_PREFIX}${application}"
-        return redisTemplate.opsForList().range(key, 0, maximumViewCount - 1)
-            ?.mapNotNull { runCatching { objectMapper.readValue(it, AnalyzeFiringRecord::class.java) }.getOrNull() }
-            ?: emptyList()
+        return (redisTemplate.opsForList().range(key, 0, -1) ?: emptyList())
+            .mapNotNull { runCatching { objectMapper.readValue(it.substringBeforeLast("::"), AnalyzeFiringRecord::class.java) }.getOrNull() }
+            .sortedByDescending { it.occupiedAt }
+            .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 }

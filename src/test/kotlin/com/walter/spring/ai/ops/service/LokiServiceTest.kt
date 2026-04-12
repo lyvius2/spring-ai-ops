@@ -160,7 +160,7 @@ class LokiServiceTest {
         // when & then
         assertThatThrownBy { lokiService.setLokiUrl("http://localhost:$closedPort") }
             .isInstanceOf(RuntimeException::class.java)
-            .hasMessageContaining("Cannot connect to Loki at 'http://localhost:$closedPort'")
+            .hasMessageContaining("Cannot connect to 'http://localhost:$closedPort'")
     }
 
     @Test
