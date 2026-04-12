@@ -14,6 +14,7 @@ class GrafanaService(
     private val redisTemplate: StringRedisTemplate,
     private val objectMapper: ObjectMapper,
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
+    @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
 ) {
     companion object {
         const val APP_KEY_PREFIX = "firing:"
@@ -48,5 +49,12 @@ class GrafanaService(
     fun saveAnalyzeFiringRecord(record: AnalyzeFiringRecord) {
         val key = "${APP_KEY_PREFIX}${record.application}"
         redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
+    }
+
+    fun getAnalyzeFiringRecords(application: String): List<AnalyzeFiringRecord> {
+        val key = "${APP_KEY_PREFIX}${application}"
+        return redisTemplate.opsForList().range(key, 0, maximumViewCount - 1)
+            ?.mapNotNull { runCatching { objectMapper.readValue(it, AnalyzeFiringRecord::class.java) }.getOrNull() }
+            ?: emptyList()
     }
 }

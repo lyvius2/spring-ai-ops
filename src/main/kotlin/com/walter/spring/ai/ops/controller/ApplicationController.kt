@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController
 class ApplicationController(
     private val applicationService: ApplicationService
 ) {
-
     @GetMapping
     fun getApps(): List<String> = applicationService.getApps()
 

@@ -1,8 +1,10 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlert
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
+import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -10,9 +12,13 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.data.redis.core.ListOperations
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.time.Instant
+import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
 class GrafanaServiceTest {
@@ -23,11 +29,14 @@ class GrafanaServiceTest {
     @Mock
     private lateinit var objectMapper: ObjectMapper
 
+    @Mock
+    private lateinit var listOperations: ListOperations<String, String>
+
     private lateinit var grafanaService: GrafanaService
 
     @BeforeEach
     fun setUp() {
-        grafanaService = GrafanaService(redisTemplate, objectMapper, 120L)
+        grafanaService = GrafanaService(redisTemplate, objectMapper, retentionHours = 120L, maximumViewCount = 5L)
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -71,6 +80,15 @@ class GrafanaServiceTest {
         title = "",
         state = "",
         message = "",
+    )
+
+    private fun createRecord(application: String = "test-app") = AnalyzeFiringRecord(
+        LocalDateTime.of(2026, 4, 12, 10, 0, 0),
+        application,
+        createRequest(alerts = listOf(createAlert())),
+        LokiQueryResult(),
+        "analysis result",
+        LocalDateTime.of(2026, 4, 12, 10, 1, 0),
     )
 
     // ── convertLogInquiry ─────────────────────────────────────────────────────
@@ -211,5 +229,71 @@ class GrafanaServiceTest {
         val afterCall = Instant.now().toEpochMilli().times(1_000_000L)
         assertThat(result.end.toLong()).isBetween(beforeCall, afterCall)
     }
-}
 
+    // ── getAnalyzeFiringRecords ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Redis에 레코드가 있으면 역직렬화된 목록 반환")
+    fun getAnalyzeFiringRecords_returnsList_whenRedisHasRecords() {
+        // given
+        val json = """{"application":"my-app"}"""
+        val record = createRecord("my-app")
+        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
+        `when`(listOperations.range("firing:my-app", 0, 4)).thenReturn(listOf(json))
+        `when`(objectMapper.readValue(json, AnalyzeFiringRecord::class.java)).thenReturn(record)
+
+        // when
+        val result = grafanaService.getAnalyzeFiringRecords("my-app")
+
+        // then
+        assertThat(result).hasSize(1)
+        assertThat(result[0].application).isEqualTo("my-app")
+    }
+
+    @Test
+    @DisplayName("Redis가 null을 반환하면 빈 목록 반환")
+    fun getAnalyzeFiringRecords_returnsEmptyList_whenRedisReturnsNull() {
+        // given
+        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
+        `when`(listOperations.range("firing:my-app", 0, 4)).thenReturn(null)
+
+        // when
+        val result = grafanaService.getAnalyzeFiringRecords("my-app")
+
+        // then
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    @DisplayName("역직렬화에 실패한 항목은 결과에서 제외됨")
+    fun getAnalyzeFiringRecords_filtersOutInvalidItems_whenDeserializationFails() {
+        // given
+        val validJson = """{"valid":true}"""
+        val invalidJson = """{"invalid":true}"""
+        val record = createRecord()
+        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
+        `when`(listOperations.range("firing:my-app", 0, 4)).thenReturn(listOf(validJson, invalidJson))
+        `when`(objectMapper.readValue(validJson, AnalyzeFiringRecord::class.java)).thenReturn(record)
+        `when`(objectMapper.readValue(invalidJson, AnalyzeFiringRecord::class.java)).thenThrow(RuntimeException("Parse error"))
+
+        // when
+        val result = grafanaService.getAnalyzeFiringRecords("my-app")
+
+        // then
+        assertThat(result).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("'firing:{application}' key로 maximumViewCount 범위만큼 Redis 조회")
+    fun getAnalyzeFiringRecords_queriesRedisWithCorrectKeyAndRange() {
+        // given
+        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
+        `when`(listOperations.range("firing:payment-service", 0, 4)).thenReturn(emptyList())
+
+        // when
+        grafanaService.getAnalyzeFiringRecords("payment-service")
+
+        // then
+        verify(listOperations).range("firing:payment-service", 0, 4)
+    }
+}
