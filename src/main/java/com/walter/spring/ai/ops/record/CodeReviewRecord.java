@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 public record CodeReviewRecord(
     LocalDateTime pushedAt,
     String application,
-    String pushedData,
+    String githubUrl,
     String commitMessage,
     String reviewResult,
     LocalDateTime completedAt
