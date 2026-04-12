@@ -1,8 +1,10 @@
 package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.config.annotation.Facade
+import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
+import com.walter.spring.ai.ops.record.ChangedFile
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
@@ -74,7 +76,7 @@ class AnalyzeFacade(
             val inquiry = GithubDifferInquiry.of(request)
             val compareResult = githubService.executeInquiryDiffer(inquiry)
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
-            val record = createCodeReviewRecord(request, targetApplication, reviewResult)
+            val record = createCodeReviewRecord(request, targetApplication, compareResult, reviewResult)
             githubService.saveCodeReviewRecord(record)
             // TODO: websocket push
         }.onFailure { log.error("Failed to analyze code review record : {}", it.message, it) }
@@ -84,14 +86,18 @@ class AnalyzeFacade(
         log.info("GitHub push webhook received — repo: {}, before: {}, after: {}, commits: {}", request.repository.name, request.before, request.after, request.commits.size,)
     }
 
-    private fun createCodeReviewRecord(request: GithubPushRequest, targetApplication: String, analyzeResults: String): CodeReviewRecord {
+    private fun createCodeReviewRecord(request: GithubPushRequest, targetApplication: String, compareResult: GithubCompareResult, analyzeResults: String): CodeReviewRecord {
         val githubUrl = "${request.repository.htmlUrl}/commit/${request.after}"
         val headCommit = request.commits.firstOrNull()
+        val changedFiles = compareResult.files.map { file ->
+            ChangedFile(file.filename, file.status, file.additions, file.deletions, file.patch)
+        }
         return CodeReviewRecord(
             headCommit?.timestamp?.toISO8601() ?: LocalDateTime.now(),
             targetApplication,
             githubUrl,
             headCommit?.message ?: "",
+            changedFiles,
             analyzeResults,
             LocalDateTime.now()
         )
