@@ -37,8 +37,11 @@ class AiModelServiceTest {
     @BeforeEach
     fun setUp() {
         given(redisTemplate.opsForValue()).willReturn(valueOps)
-        aiModelService = AiModelService(redisTemplate, "gpt-4o-mini", "claude-3-5-sonnet-20241022", "en")
+        aiModelService = buildService()
     }
+
+    private fun buildService(openAiApiKey: String = "", anthropicApiKey: String = "") =
+        AiModelService(redisTemplate, "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, "en")
 
     // ── initialize ────────────────────────────────────────────────────────────
 
@@ -226,6 +229,115 @@ class AiModelServiceTest {
         aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
 
         verify(mockChatModel).call(any(Prompt::class.java))
+    }
+
+    // ── initialize (yml auto-configure) ──────────────────────────────────────
+
+    @Test
+    @DisplayName("OpenAI yml 키만 있으면 initialize 시 OpenAI로 자동 설정됨")
+    fun initialize_autoConfiguresOpenAi_whenOnlyOpenAiYmlKeyPresent() {
+        given(valueOps.get("llm")).willReturn(null)
+        given(valueOps.get("llmKey")).willReturn(null)
+        val service = buildService(openAiApiKey = "sk-yml-key")
+
+        service.initialize()
+
+        assertThat(service.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("Anthropic yml 키만 있으면 initialize 시 Anthropic으로 자동 설정됨")
+    fun initialize_autoConfiguresAnthropic_whenOnlyAnthropicYmlKeyPresent() {
+        given(valueOps.get("llm")).willReturn(null)
+        given(valueOps.get("llmKey")).willReturn(null)
+        val service = buildService(anthropicApiKey = "sk-ant-yml-key")
+
+        service.initialize()
+
+        assertThat(service.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("두 yml 키가 모두 있으면 initialize 시 자동 설정되지 않음 (Provider 선택 필요)")
+    fun initialize_doesNotAutoConfigure_whenBothYmlKeysPresent() {
+        given(valueOps.get("llm")).willReturn(null)
+        given(valueOps.get("llmKey")).willReturn(null)
+        val service = buildService(openAiApiKey = "sk-openai", anthropicApiKey = "sk-ant")
+
+        service.initialize()
+
+        assertThat(service.isConfigured()).isFalse()
+    }
+
+    // ── isSelectProviderRequired ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("두 yml 키 모두 있고 ChatModel 미설정이면 isSelectProviderRequired는 true")
+    fun isSelectProviderRequired_returnsTrue_whenBothYmlKeysAndNotConfigured() {
+        given(valueOps.get("llm")).willReturn(null)
+        given(valueOps.get("llmKey")).willReturn(null)
+        val service = buildService(openAiApiKey = "sk-openai", anthropicApiKey = "sk-ant")
+
+        assertThat(service.isSelectProviderRequired()).isTrue()
+    }
+
+    @Test
+    @DisplayName("yml 키가 하나만 있으면 isSelectProviderRequired는 false")
+    fun isSelectProviderRequired_returnsFalse_whenOnlyOneYmlKey() {
+        val service = buildService(openAiApiKey = "sk-openai")
+
+        assertThat(service.isSelectProviderRequired()).isFalse()
+    }
+
+    @Test
+    @DisplayName("두 yml 키 모두 있어도 ChatModel이 이미 설정되면 isSelectProviderRequired는 false")
+    fun isSelectProviderRequired_returnsFalse_whenAlreadyConfigured() {
+        val service = buildService(openAiApiKey = "sk-openai", anthropicApiKey = "sk-ant")
+        service.configure("openai", "sk-openai")
+
+        assertThat(service.isSelectProviderRequired()).isFalse()
+    }
+
+    // ── configureFromYml ──────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("configureFromYml(openai) 호출 시 yml의 OpenAI 키로 ChatModel이 설정됨")
+    fun configureFromYml_configuresOpenAi_whenOpenAiProviderSelected() {
+        val service = buildService(openAiApiKey = "sk-yml-openai", anthropicApiKey = "sk-yml-ant")
+
+        service.configureFromYml("openai")
+
+        assertThat(service.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("configureFromYml(anthropic) 호출 시 yml의 Anthropic 키로 ChatModel이 설정됨")
+    fun configureFromYml_configuresAnthropic_whenAnthropicProviderSelected() {
+        val service = buildService(openAiApiKey = "sk-yml-openai", anthropicApiKey = "sk-yml-ant")
+
+        service.configureFromYml("anthropic")
+
+        assertThat(service.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("configureFromYml 시 yml 키가 비어있으면 IllegalStateException 발생")
+    fun configureFromYml_throwsIllegalStateException_whenYmlKeyIsBlank() {
+        val service = buildService(openAiApiKey = "")
+
+        assertThatThrownBy { service.configureFromYml("openai") }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("not configured in application.yml")
+    }
+
+    @Test
+    @DisplayName("configureFromYml 시 알 수 없는 provider이면 IllegalArgumentException 발생")
+    fun configureFromYml_throwsIllegalArgumentException_whenUnknownProvider() {
+        val service = buildService(openAiApiKey = "sk-key")
+
+        assertThatThrownBy { service.configureFromYml("unknown") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("Unknown LLM provider")
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

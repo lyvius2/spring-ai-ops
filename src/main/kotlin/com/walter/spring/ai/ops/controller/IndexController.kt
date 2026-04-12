@@ -13,6 +13,7 @@ class IndexController(
     fun index(model: Model): String {
         model.addAttribute("configured", aiModelService.isConfigured())
         model.addAttribute("currentLlm", aiModelService.getCurrentLlm() ?: "")
+        model.addAttribute("selectProvider", aiModelService.isSelectProviderRequired())
         return "index"
     }
 }

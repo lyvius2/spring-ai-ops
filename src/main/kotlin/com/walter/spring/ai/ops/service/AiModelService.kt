@@ -22,8 +22,10 @@ import org.springframework.stereotype.Service
 @Service
 class AiModelService(
     private val redisTemplate: StringRedisTemplate,
-    @Value("\${ai.model.open-ai:gpt-4o-mini}") private val openAiModel: String,
-    @Value("\${ai.model.anthropic:claude-3-5-sonnet-20241022}") private val anthropicModel: String,
+    @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
+    @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
+    @Value("\${ai.anthropic.model:claude-3-5-sonnet-20241022}") private val anthropicModel: String,
+    @Value("\${ai.anthropic.api-key:}") private val anthropicApiKey: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
@@ -34,10 +36,36 @@ class AiModelService(
 
     @PostConstruct
     fun initialize() {
-        val llm = redisTemplate.opsForValue().get("llm") ?: return
-        val apiKey = redisTemplate.opsForValue().get("llmKey") ?: return
-        runCatching { chatModel = buildChatModel(llm, apiKey) }
-            .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
+        val llm = redisTemplate.opsForValue().get("llm")
+        val apiKey = redisTemplate.opsForValue().get("llmKey")
+        if (!llm.isNullOrBlank() && !apiKey.isNullOrBlank()) {
+            runCatching { chatModel = buildChatModel(llm, apiKey) }
+                .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
+            return
+        }
+
+        val hasOpenAi = openAiApiKey.isNotBlank()
+        val hasAnthropic = anthropicApiKey.isNotBlank()
+        if (hasOpenAi && !hasAnthropic) {
+            runCatching { configure("openai", openAiApiKey) }
+                .onFailure { log.warn("Failed to auto-configure OpenAI from yml: {}", it.message) }
+        } else if (hasAnthropic && !hasOpenAi) {
+            runCatching { configure("anthropic", anthropicApiKey) }
+                .onFailure { log.warn("Failed to auto-configure Anthropic from yml: {}", it.message) }
+        }
+    }
+
+    fun isSelectProviderRequired(): Boolean =
+        openAiApiKey.isNotBlank() && anthropicApiKey.isNotBlank() && chatModel == null
+
+    fun configureFromYml(llm: String) {
+        val apiKey = when (llm) {
+            "openai" -> openAiApiKey
+            "anthropic" -> anthropicApiKey
+            else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
+        }
+        if (apiKey.isBlank()) throw IllegalStateException("API key for '$llm' is not configured in application.yml")
+        configure(llm, apiKey)
     }
 
     fun configure(llm: String, apiKey: String) {
