@@ -103,6 +103,29 @@ const CURRENT_LLM    = '{{currentLlm}}';
     </div>
 </div>
 
+<!-- ══ Modal: GitHub Access Token ══ -->
+<div id="github-token-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            GitHub Access Token
+            <button class="modal-close-btn" onclick="closeGithubTokenModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc">
+                Enter your GitHub Personal Access Token to enable AI Code Review.
+                The token requires <code>repo</code> scope to access repository contents.
+            </p>
+            <div class="form-group">
+                <label class="form-label" for="github-token-input">Access Token</label>
+                <input type="password" id="github-token-input" class="form-input"
+                       placeholder="ghp_..." autocomplete="off" />
+            </div>
+            <button class="btn-primary" id="github-token-save-btn" onclick="saveGithubToken()">Save</button>
+            <div class="alert alert-error" id="github-token-alert-error"></div>
+        </div>
+    </div>
+</div>
+
 <!-- ══ Modal 2: Loki Setup ══ -->
 <div id="loki-modal" class="modal-overlay" style="display:none;">
     <div class="modal-box">
@@ -699,17 +722,16 @@ function renderAppDetailFromLocal(appName) {
     document.getElementById('app-detail-panel').innerHTML = buildAppDetailHtml(appName);
 }
 
-document.addEventListener('click', function (e) {
+document.addEventListener('click', async function (e) {
     // Tab switching
     const btn = e.target.closest('.tab-btn');
     if (btn) {
         const tabName = btn.dataset.tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        ['exception', 'codereview'].forEach(t => {
-            const pane = document.getElementById('tab-pane-' + t);
-            if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
-        });
+        if (tabName === 'codereview') {
+            const allowed = await checkGithubToken();
+            if (!allowed) return;
+        }
+        switchToTab(tabName);
         return;
     }
 
@@ -719,6 +741,83 @@ document.addEventListener('click', function (e) {
         selectFiringRecord(selectedApp, parseInt(row.dataset.idx, 10));
     }
 });
+
+function switchToTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tabName);
+    });
+    ['exception', 'codereview'].forEach(t => {
+        const pane = document.getElementById('tab-pane-' + t);
+        if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
+    });
+}
+
+// ── GitHub Token Modal ────────────────────────────────────────────────────────
+
+async function checkGithubToken() {
+    try {
+        const res  = await fetch('/api/github/token/status');
+        const data = await res.json();
+        if (data.isConfigured) return true;
+    } catch (_) {}
+    openGithubTokenModal();
+    return false;
+}
+
+function openGithubTokenModal() {
+    document.getElementById('github-token-input').value = '';
+    document.getElementById('github-token-alert-error').style.display = 'none';
+    document.getElementById('github-token-save-btn').disabled = false;
+    document.getElementById('github-token-save-btn').textContent = 'Save';
+    document.getElementById('github-token-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('github-token-input').focus(), 50);
+}
+
+function closeGithubTokenModal() {
+    document.getElementById('github-token-modal').style.display = 'none';
+    // 저장 없이 닫으면 Exception Analysis 탭으로 복귀
+    switchToTab('exception');
+}
+
+async function saveGithubToken() {
+    const token = document.getElementById('github-token-input').value.trim();
+    const btn   = document.getElementById('github-token-save-btn');
+    const errEl = document.getElementById('github-token-alert-error');
+
+    if (!token) {
+        errEl.textContent = 'Please enter a GitHub Access Token.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    errEl.style.display = 'none';
+
+    try {
+        const res  = await fetch('/api/github/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            document.getElementById('github-token-modal').style.display = 'none';
+            switchToTab('codereview');
+        } else {
+            errEl.textContent = data.message || 'Failed to save token.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Save';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Save';
+    }
+}
 
 // ── Utility ──────────────────────────────────────────────────────────────────
 
