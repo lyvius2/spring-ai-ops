@@ -537,6 +537,12 @@ body {
     white-space: pre;
 }
 
+.json-key     { color: #9cdcfe; }
+.json-string  { color: #ce9178; }
+.json-number  { color: #b5cea8; }
+.json-boolean { color: #569cd6; }
+.json-null    { color: #569cd6; }
+
 .analysis-text {
     padding: 14px 16px;
 }

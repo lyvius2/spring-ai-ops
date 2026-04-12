@@ -604,11 +604,11 @@ function renderAnalysisLayers(appName, record) {
     return `
         <div class="analysis-layer">
             <div class="layer-header">Metric Firing</div>
-            <pre class="json-block">${escHtml(JSON.stringify(record.alertingMessage, null, 2))}</pre>
+            <pre class="json-block">${syntaxHighlightJson(JSON.stringify(record.alertingMessage, null, 2))}</pre>
         </div>
         <div class="analysis-layer">
             <div class="layer-header">Log</div>
-            <pre class="json-block">${escHtml(JSON.stringify(record.log, null, 2))}</pre>
+            <pre class="json-block">${syntaxHighlightJson(JSON.stringify(record.log, null, 2))}</pre>
         </div>
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis</div>
@@ -721,6 +721,22 @@ document.addEventListener('click', function (e) {
 });
 
 // ── Utility ──────────────────────────────────────────────────────────────────
+
+function syntaxHighlightJson(json) {
+    const s = json
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return s.replace(
+        /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        function (match) {
+            if (/^"/.test(match)) {
+                return `<span class="${/:$/.test(match) ? 'json-key' : 'json-string'}">${match}</span>`;
+            }
+            if (/true|false/.test(match)) return `<span class="json-boolean">${match}</span>`;
+            if (/null/.test(match))       return `<span class="json-null">${match}</span>`;
+            return `<span class="json-number">${match}</span>`;
+        }
+    );
+}
 
 function escHtml(str) {
     const d = document.createElement('div');
