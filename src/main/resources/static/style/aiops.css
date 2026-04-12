@@ -539,8 +539,35 @@ body {
 
 .analysis-text {
     padding: 14px 16px;
+}
+
+/* ── Markdown Body ── */
+.markdown-body { font-size: 0.88rem; line-height: 1.7; color: #333; }
+.markdown-body h2 {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #34302d;
+    margin: 14px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #eee;
+}
+.markdown-body h2:first-child { margin-top: 0; }
+.markdown-body h3 {
     font-size: 0.88rem;
-    line-height: 1.75;
-    color: #333;
-    white-space: pre-wrap;
+    font-weight: 700;
+    color: #34302d;
+    margin: 10px 0 4px;
+}
+.markdown-body p  { margin: 0 0 8px; }
+.markdown-body ul,
+.markdown-body ol { margin: 4px 0 8px 20px; }
+.markdown-body li { margin-bottom: 3px; }
+.markdown-body strong { font-weight: 700; color: #34302d; }
+.markdown-body code {
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.85em;
+    color: #c7254e;
 }

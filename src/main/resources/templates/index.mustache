@@ -341,36 +341,36 @@ async function loadApps() {
     }
 }
 
+function createAppItem(name) {
+    const item = document.createElement('div');
+    item.className = 'app-item';
+    item.dataset.app = name;
+    item.innerHTML = `
+        <span class="app-item-name">${escHtml(name)}</span>
+        <button class="app-item-delete" title="Delete">&#10005;</button>
+    `;
+    item.addEventListener('click', function (e) {
+        if (e.target.closest('.app-item-delete')) {
+            openConfirmDeleteModal(name);
+            return;
+        }
+        document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        selectedApp = name;
+        renderAppDetail(name);
+    });
+    return item;
+}
+
 function renderAppList(apps) {
     const container = document.getElementById('app-list-container');
     if (!apps || apps.length === 0) {
         container.innerHTML = '<div class="list-placeholder">No applications registered.</div>';
         return;
     }
-    container.innerHTML = apps.map(app => `
-        <div class="app-item" data-app="${escHtml(app)}">
-            <span class="app-item-name">${escHtml(app)}</span>
-            <button class="app-item-delete" data-delete-app="${escHtml(app)}" title="Delete">&#10005;</button>
-        </div>
-    `).join('');
+    container.innerHTML = '';
+    apps.forEach(app => container.appendChild(createAppItem(app)));
 }
-
-document.addEventListener('click', function (e) {
-    if (e.target.closest('.app-item-delete')) return;
-    const item = e.target.closest('.app-item');
-    if (!item) return;
-    const appName = item.dataset.app;
-    document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
-    item.classList.add('active');
-    selectedApp = appName;
-    renderAppDetail(appName);
-});
-
-document.addEventListener('click', function (e) {
-    const btn = e.target.closest('.app-item-delete');
-    if (!btn) return;
-    openConfirmDeleteModal(btn.dataset.deleteApp);
-});
 
 // ── Add Application Modal ────────────────────────────────────────────────────
 
@@ -452,17 +452,13 @@ function addAppToList(name) {
     const placeholder = container.querySelector('.list-placeholder');
     if (placeholder) placeholder.remove();
 
-    const item = document.createElement('div');
-    item.className = 'app-item';
-    item.dataset.app = name;
-    item.innerHTML = `
-        <span class="app-item-name">${escHtml(name)}</span>
-        <button class="app-item-delete" data-delete-app="${escHtml(name)}" title="Delete">&#10005;</button>
-    `;
+    const item = createAppItem(name);
     container.appendChild(item);
 
     item.classList.add('blink');
     item.addEventListener('animationend', () => item.classList.remove('blink'), { once: true });
+
+    return item;
 }
 
 // ── Confirm Delete Modal ─────────────────────────────────────────────────────
@@ -536,14 +532,22 @@ function handleFiringRecord(record) {
     const container = document.getElementById('app-list-container');
     const existing = Array.from(container.querySelectorAll('.app-item'))
         .find(el => el.dataset.app === appName);
-    if (!existing) {
-        addAppToList(appName);
-    }
 
-    if (selectedApp === appName) {
-        const pane = document.getElementById('tab-pane-exception');
-        if (pane) pane.innerHTML = renderExceptionAnalysisContent(appName);
+    if (existing) {
+        // 기존 앱 — 즉시 선택 후 렌더링
+        selectApp(existing, appName);
+    } else {
+        // 신규 앱 — 추가 후 깜빡임이 끝나면 선택
+        const item = addAppToList(appName);
+        item.addEventListener('animationend', () => selectApp(item, appName), { once: true });
     }
+}
+
+function selectApp(item, appName) {
+    document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+    item.classList.add('active');
+    selectedApp = appName;
+    renderAppDetail(appName);
 }
 
 // ── App Detail / Tabs ────────────────────────────────────────────────────────
@@ -587,7 +591,7 @@ function renderExceptionAnalysisContent(appName) {
         </div>
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis</div>
-            <div class="analysis-text">${escHtml(record.analyzeResults)}</div>
+            <div class="analysis-text markdown-body">${renderMarkdown(record.analyzeResults)}</div>
         </div>`;
 }
 
@@ -609,6 +613,57 @@ function escHtml(str) {
     const d = document.createElement('div');
     d.appendChild(document.createTextNode(String(str)));
     return d.innerHTML;
+}
+
+function renderInline(text) {
+    return text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function renderMarkdown(text) {
+    if (!text) return '';
+    const lines = text.split('\n');
+    let html = '';
+    let inUl = false;
+    let inOl = false;
+
+    const closeList = () => {
+        if (inUl) { html += '</ul>'; inUl = false; }
+        if (inOl) { html += '</ol>'; inOl = false; }
+    };
+
+    for (const raw of lines) {
+        const line = raw.trimEnd();
+        if (!line.trim()) {
+            closeList();
+            continue;
+        }
+        if (line.startsWith('### ')) {
+            closeList();
+            html += `<h3>${renderInline(line.slice(4))}</h3>`;
+        } else if (line.startsWith('## ')) {
+            closeList();
+            html += `<h2>${renderInline(line.slice(3))}</h2>`;
+        } else if (line.startsWith('# ')) {
+            closeList();
+            html += `<h1>${renderInline(line.slice(2))}</h1>`;
+        } else if (/^- /.test(line)) {
+            if (inOl) { html += '</ol>'; inOl = false; }
+            if (!inUl) { html += '<ul>'; inUl = true; }
+            html += `<li>${renderInline(line.slice(2))}</li>`;
+        } else if (/^\d+\. /.test(line)) {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            if (!inOl) { html += '<ol>'; inOl = true; }
+            html += `<li>${renderInline(line.replace(/^\d+\. /, ''))}</li>`;
+        } else {
+            closeList();
+            html += `<p>${renderInline(line)}</p>`;
+        }
+    }
+    closeList();
+    return html;
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
