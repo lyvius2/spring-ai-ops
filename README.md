@@ -505,7 +505,7 @@ POST /webhook/github[/{application}]
 ### 스크린샷
 
 #### LLM API 키 설정 화면
-*UI에서 LLM 제공자와 API 키를 입력합니다. 재시작 없이 즉시 모델이 활성화됩니다.*
+*UI에서 LLM 제공자와 API 키를 입력합니다. 재시작 없이 즉시 모델이 활성화됩니다.*  
 *Enter your LLM provider and API key through the UI. The model is activated immediately without restarting.*
 
 ![LLM API Key Configuration](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AIConfig.png?raw=true)
@@ -513,7 +513,7 @@ POST /webhook/github[/{application}]
 ---
 
 #### Grafana Alerting Webhook 수신 화면
-*Grafana 알림이 발생하면 webhook 페이로드가 Spring AI Ops로 실시간 전달됩니다.*
+*Grafana 알림이 발생하면 webhook 페이로드가 Spring AI Ops로 실시간 전달됩니다.*  
 *When a Grafana alert fires, the webhook payload is delivered to Spring AI Ops in real time.*
 
 ![Grafana Alerting Webhook](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/GrafanaAlerting.png?raw=true)
@@ -521,7 +521,7 @@ POST /webhook/github[/{application}]
 ---
 
 #### AI 오류 분석 결과 화면
-*LLM이 Grafana 알림 컨텍스트와 Loki 로그를 분석하여 근본 원인, 영향 범위, 조치 방법을 실시간 스트리밍합니다.*
+*LLM이 Grafana 알림 컨텍스트와 Loki 로그를 분석하여 근본 원인, 영향 범위, 조치 방법을 실시간 스트리밍합니다.*  
 *The LLM analyzes alert context and Loki logs, streaming root-cause analysis with affected components and recommended actions.*
 
 ![Firing Analysis 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_01.png?raw=true)
@@ -531,7 +531,7 @@ POST /webhook/github[/{application}]
 ---
 
 #### AI 코드 리뷰 결과 화면
-*GitHub push 이벤트 수신 시 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재 버그, 보안 고려사항, 개선 제안을 제공합니다.*
+*GitHub push 이벤트 수신 시 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재 버그, 보안 고려사항, 개선 제안을 제공합니다.*  
 *On GitHub push events, the LLM reviews each changed file's diff and delivers a structured code quality, bug, security, and improvement report.*
 
 ![Code Review 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_01.png?raw=true)
