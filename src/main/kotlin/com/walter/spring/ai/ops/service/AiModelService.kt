@@ -24,8 +24,10 @@ class AiModelService(
     private val redisTemplate: StringRedisTemplate,
     @Value("\${ai.model.open-ai:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.model.anthropic:claude-3-5-sonnet-20241022}") private val anthropicModel: String,
+    @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
+    private val languageOptions = "The analysis results should be derived in the '${resultLanguage}' language."
 
     @Volatile
     private var chatModel: ChatModel? = null
@@ -85,10 +87,13 @@ class AiModelService(
                 appendLine()
                 append(logSection)
                 appendLine()
-                appendLine("Based on the above alert and logs, please provide:")
+                appendLine("Based on the above alert and logs, please provide in markdown format:")
                 appendLine("1. Root cause analysis")
                 appendLine("2. Affected components")
                 appendLine("3. Recommended actions to resolve the issue")
+                if (resultLanguage != "en") {
+                    appendLine(languageOptions)
+                }
             }
         )
         val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
@@ -108,11 +113,14 @@ class AiModelService(
             buildString {
                 append(codeReviewSection)
                 appendLine()
-                appendLine("Based on the above diff, please provide:")
+                appendLine("Based on the above diff, please provide in markdown format:")
                 appendLine("1. Summary of changes")
                 appendLine("2. Potential issues or bugs")
                 appendLine("3. Security considerations")
                 appendLine("4. Suggestions for improvement")
+                if (resultLanguage != "en") {
+                    appendLine(languageOptions)
+                }
             }
         )
         val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))

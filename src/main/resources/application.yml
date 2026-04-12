@@ -45,3 +45,4 @@ github:
 analysis:
   data-retention-hours: 120 # Set the number of hours to retain analysis data : Default is 120 (5 days)
   maximum-view-count: 5     # Set the maximum number of views to retain per analysis (0 means unlimited) : Default is 5
+  result-language: en       # Set the language for analysis results (e.g., en for English) : Default is en
