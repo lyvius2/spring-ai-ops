@@ -154,6 +154,38 @@ body {
 
 .radio-option label .provider-icon { color: #999; }
 
+/* ── Provider logo (SVG img inside radio label) ── */
+.provider-logo {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    vertical-align: middle;
+    opacity: 0.45;
+    filter: grayscale(40%);
+    transition: opacity 0.15s, filter 0.15s;
+    flex-shrink: 0;
+}
+
+.radio-option input[type="radio"]:checked + label .provider-logo {
+    opacity: 1;
+    filter: none;
+}
+
+.radio-option label:hover .provider-logo {
+    opacity: 0.8;
+    filter: grayscale(10%);
+}
+
+/* logo displayed next to badge in the config panel */
+.provider-logo-badge {
+    opacity: 1;
+    filter: none;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
 .radio-option input[type="radio"]:checked + label {
     border-color: #6db33f;
     background: #f1f8e9;
