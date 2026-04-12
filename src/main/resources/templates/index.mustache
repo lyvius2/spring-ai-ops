@@ -546,6 +546,9 @@ function connectWebSocket() {
         stompClient.subscribe('/topic/firing', function (message) {
             handleFiringRecord(JSON.parse(message.body));
         });
+        stompClient.subscribe('/topic/commit', function (message) {
+            handleCommitRecord(JSON.parse(message.body));
+        });
     }, function () {
         setTimeout(connectWebSocket, 5000);
     });
@@ -585,6 +588,52 @@ function handleFiringRecord(record) {
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
+            document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            selectedApp = appName;
+        }, { once: true });
+    }
+}
+
+function handleCommitRecord(record) {
+    const appName = record.application;
+
+    // Prepend to local list and reset selection to newest
+    if (!appCommitLists[appName]) appCommitLists[appName] = [];
+    appCommitLists[appName].unshift(record);
+    appSelectedCommitIdx[appName] = 0;
+
+    // Always show notification
+    showCommitNotification(appName);
+
+    const container = document.getElementById('app-list-container');
+    const existing = Array.from(container.querySelectorAll('.app-item'))
+        .find(el => el.dataset.app === appName);
+
+    if (existing) {
+        if (selectedApp === appName) {
+            // 이미 선택된 앱: Code Review 탭으로 전환 후 in-place 업데이트
+            switchToTab('codereview');
+            const content = document.getElementById('codereview-content');
+            if (content) content.innerHTML = buildCodeReviewHtml(appName);
+        } else {
+            // 다른 앱이 선택 중: 렌더링 완료 후 Code Review 탭으로 전환 및 앱 활성화
+            renderAppDetailFromLocal(appName);
+            switchToTab('codereview');
+            const content = document.getElementById('codereview-content');
+            if (content) content.innerHTML = buildCodeReviewHtml(appName);
+            document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+            existing.classList.add('active');
+            selectedApp = appName;
+        }
+    } else {
+        // 신규 앱: 추가 후 깜빡임이 끝나면 렌더링 완료 후 Code Review 탭으로 전환 및 활성화
+        const item = addAppToList(appName);
+        item.addEventListener('animationend', () => {
+            renderAppDetailFromLocal(appName);
+            switchToTab('codereview');
+            const content = document.getElementById('codereview-content');
+            if (content) content.innerHTML = buildCodeReviewHtml(appName);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
@@ -836,6 +885,21 @@ function showNotification(appName) {
     const notif = document.createElement('div');
     notif.className = 'notification';
     notif.textContent = `New Firing Alert has occurred in ${appName}.`;
+    container.appendChild(notif);
+    setTimeout(() => notif.remove(), 4500);
+}
+
+function showCommitNotification(appName) {
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+    }
+    const notif = document.createElement('div');
+    notif.className = 'notification notification-commit';
+    notif.textContent = `Code Review completed for ${appName}.`;
     container.appendChild(notif);
     setTimeout(() => notif.remove(), 4500);
 }

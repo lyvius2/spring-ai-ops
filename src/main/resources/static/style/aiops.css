@@ -766,3 +766,5 @@ body {
     animation: notificationFadeUp 0.5s ease forwards;
     animation-delay: 4s;
 }
+
+.notification-commit { border-left-color: #1a56c4; }

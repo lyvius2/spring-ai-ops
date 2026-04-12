@@ -68,6 +68,10 @@ class AnalyzeFacade(
         messagingTemplate.convertAndSend("/topic/firing", record)
     }
 
+    private fun pushCodeReview(record: CodeReviewRecord) {
+        messagingTemplate.convertAndSend("/topic/commit", record)
+    }
+
     fun analyzeCodeDiffer(request: GithubPushRequest, application: String?) {
         recordAuditLog(request)
         runCatching {
@@ -78,7 +82,7 @@ class AnalyzeFacade(
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
             val record = createCodeReviewRecord(request, targetApplication, compareResult, reviewResult)
             githubService.saveCodeReviewRecord(record)
-            // TODO: websocket push
+            pushCodeReview(record)
         }.onFailure { log.error("Failed to analyze code review record : {}", it.message, it) }
     }
 
