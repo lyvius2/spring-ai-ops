@@ -37,7 +37,7 @@ class AiModelServiceTest {
     @BeforeEach
     fun setUp() {
         given(redisTemplate.opsForValue()).willReturn(valueOps)
-        aiModelService = AiModelService(redisTemplate, "gpt-4o-mini", "claude-3-5-sonnet-20241022")
+        aiModelService = AiModelService(redisTemplate, "gpt-4o-mini", "claude-3-5-sonnet-20241022", "en")
     }
 
     // ── initialize ────────────────────────────────────────────────────────────
