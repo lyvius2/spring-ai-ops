@@ -349,7 +349,7 @@ function createAppItem(name) {
         <span class="app-item-name">${escHtml(name)}</span>
         <button class="app-item-delete" title="Delete">&#10005;</button>
     `;
-    item.addEventListener('click', function (e) {
+    item.addEventListener('click', async function (e) {
         if (e.target.closest('.app-item-delete')) {
             openConfirmDeleteModal(name);
             return;
@@ -357,7 +357,7 @@ function createAppItem(name) {
         document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
         item.classList.add('active');
         selectedApp = name;
-        renderAppDetail(name);
+        await renderAppDetail(name);
     });
     return item;
 }
@@ -509,7 +509,8 @@ async function confirmDeleteApp() {
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
-const appAnalyses = {};
+const appFiringLists    = {};   // { appName: AnalyzeFiringRecord[] }  newest-first
+const appSelectedFiringIdx = {}; // { appName: number }
 let stompClient = null;
 
 function connectWebSocket() {
@@ -527,58 +528,78 @@ function connectWebSocket() {
 
 function handleFiringRecord(record) {
     const appName = record.application;
-    appAnalyses[appName] = record;
+
+    // Prepend to local list and reset selection to newest
+    if (!appFiringLists[appName]) appFiringLists[appName] = [];
+    appFiringLists[appName].unshift(record);
+    appSelectedFiringIdx[appName] = 0;
+
+    // Always show notification
+    showNotification(appName);
 
     const container = document.getElementById('app-list-container');
     const existing = Array.from(container.querySelectorAll('.app-item'))
         .find(el => el.dataset.app === appName);
 
     if (existing) {
-        // 기존 앱 — 즉시 선택 후 렌더링
-        selectApp(existing, appName);
+        if (selectedApp === appName) {
+            // 이미 선택된 앱: 레이어와 목록만 in-place 업데이트
+            const layersEl = document.getElementById('exception-layers');
+            if (layersEl) layersEl.innerHTML = renderAnalysisLayers(appName, record);
+            const tbody = document.getElementById('firing-list-body');
+            if (tbody) tbody.innerHTML = renderFiringListRows(appName);
+        } else {
+            // 다른 앱이 선택 중: 렌더링 완료 후 앱 활성화
+            renderAppDetailFromLocal(appName);
+            document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+            existing.classList.add('active');
+            selectedApp = appName;
+        }
     } else {
-        // 신규 앱 — 추가 후 깜빡임이 끝나면 선택
+        // 신규 앱: 추가 후 깜빡임이 끝나면 렌더링 완료 후 활성화
         const item = addAppToList(appName);
-        item.addEventListener('animationend', () => selectApp(item, appName), { once: true });
+        item.addEventListener('animationend', () => {
+            renderAppDetailFromLocal(appName);
+            document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            selectedApp = appName;
+        }, { once: true });
     }
 }
 
-function selectApp(item, appName) {
+async function selectApp(item, appName) {
     document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
     item.classList.add('active');
     selectedApp = appName;
-    renderAppDetail(appName);
+    await renderAppDetail(appName);
 }
 
 // ── App Detail / Tabs ────────────────────────────────────────────────────────
 
-function renderAppDetail(appName) {
-    document.getElementById('app-detail-panel').innerHTML = `
-        <div class="app-detail-header">${escHtml(appName)}</div>
-        <div class="tab-bar">
-            <button class="tab-btn active" data-tab="exception">Exception Analysis</button>
-            <button class="tab-btn"        data-tab="codereview">Code Review</button>
-        </div>
-        <div class="tab-content" id="tab-pane-exception">
-            ${renderExceptionAnalysisContent(appName)}
-        </div>
-        <div class="tab-content" id="tab-pane-codereview" style="display:none;">
-            <div class="info-message">
-                Please register <code>/webhook/github/${escHtml(appName)}</code>
-                as the Webhook URL triggered on push events in your GitHub Repository.
-            </div>
-        </div>
-    `;
+async function loadFiringList(appName) {
+    try {
+        const res  = await fetch(`/api/firing/${encodeURIComponent(appName)}/list`);
+        const data = await res.json();
+        appFiringLists[appName] = data.firings || [];
+    } catch (_) {
+        appFiringLists[appName] = appFiringLists[appName] || [];
+    }
 }
 
-function renderExceptionAnalysisContent(appName) {
-    const record = appAnalyses[appName];
+function formatOccupiedAt(dateStr) {
+    if (!dateStr) return '—';
+    const s = String(dateStr);
+    const tIdx = s.indexOf('T');
+    if (tIdx === -1) return s;
+    return s.substring(0, tIdx) + ' ' + s.substring(tIdx + 1, tIdx + 9);
+}
+
+function renderAnalysisLayers(appName, record) {
     if (!record) {
-        return `
-            <div class="info-message">
-                Please register <code>/webhook/grafana/${escHtml(appName)}</code>
-                as the Webhook URL in your Grafana Alerting Contact Point.
-            </div>`;
+        return `<div class="info-message">
+            Please register <code>/webhook/grafana/${escHtml(appName)}</code>
+            as the Webhook URL in your Grafana Alerting Contact Point.
+        </div>`;
     }
     return `
         <div class="analysis-layer">
@@ -595,16 +616,108 @@ function renderExceptionAnalysisContent(appName) {
         </div>`;
 }
 
+function renderFiringListRows(appName) {
+    const list        = appFiringLists[appName] || [];
+    const selectedIdx = appSelectedFiringIdx[appName] ?? 0;
+    if (list.length === 0) {
+        return `<tr><td colspan="2" style="padding:14px;color:#999;text-align:center;">No firing records yet.</td></tr>`;
+    }
+    return list.map((rec, idx) =>
+        `<tr class="${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}">
+            <td>${idx + 1}</td>
+            <td>${formatOccupiedAt(rec.occupiedAt)}</td>
+        </tr>`
+    ).join('');
+}
+
+function renderFiringListSection(appName) {
+    return `
+        <div class="firing-list-section">
+            <div class="layer-header">Firing List</div>
+            <table class="firing-table">
+                <thead><tr><th>#</th><th>Occurred At</th></tr></thead>
+                <tbody id="firing-list-body">${renderFiringListRows(appName)}</tbody>
+            </table>
+        </div>`;
+}
+
+function selectFiringRecord(appName, idx) {
+    appSelectedFiringIdx[appName] = idx;
+    const record   = (appFiringLists[appName] || [])[idx];
+    const layersEl = document.getElementById('exception-layers');
+    if (layersEl) layersEl.innerHTML = renderAnalysisLayers(appName, record);
+    const tbody = document.getElementById('firing-list-body');
+    if (tbody) tbody.innerHTML = renderFiringListRows(appName);
+}
+
+function showNotification(appName) {
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+    }
+    const notif = document.createElement('div');
+    notif.className = 'notification';
+    notif.textContent = `New Firing Alert has occurred in ${appName}.`;
+    container.appendChild(notif);
+    setTimeout(() => notif.remove(), 4500);
+}
+
+function buildAppDetailHtml(appName) {
+    const list   = appFiringLists[appName] || [];
+    const record = list[appSelectedFiringIdx[appName] ?? 0] || null;
+    return `
+        <div class="app-detail-header">${escHtml(appName)}</div>
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="exception">Exception Analysis</button>
+            <button class="tab-btn"        data-tab="codereview">Code Review</button>
+        </div>
+        <div class="tab-content" id="tab-pane-exception">
+            <div id="exception-layers">${renderAnalysisLayers(appName, record)}</div>
+            ${renderFiringListSection(appName)}
+        </div>
+        <div class="tab-content" id="tab-pane-codereview" style="display:none;">
+            <div class="info-message">
+                Please register <code>/webhook/github/${escHtml(appName)}</code>
+                as the Webhook URL triggered on push events in your GitHub Repository.
+            </div>
+        </div>
+    `;
+}
+
+// 수동 클릭 시: API에서 최신 목록을 가져온 후 렌더링
+async function renderAppDetail(appName) {
+    await loadFiringList(appName);
+    appSelectedFiringIdx[appName] = 0;
+    document.getElementById('app-detail-panel').innerHTML = buildAppDetailHtml(appName);
+}
+
+// WebSocket 수신 시: 로컬 상태로 즉시 렌더링 (API 호출 없음)
+function renderAppDetailFromLocal(appName) {
+    document.getElementById('app-detail-panel').innerHTML = buildAppDetailHtml(appName);
+}
+
 document.addEventListener('click', function (e) {
+    // Tab switching
     const btn = e.target.closest('.tab-btn');
-    if (!btn) return;
-    const tabName = btn.dataset.tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    ['exception', 'codereview'].forEach(t => {
-        const pane = document.getElementById('tab-pane-' + t);
-        if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
-    });
+    if (btn) {
+        const tabName = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ['exception', 'codereview'].forEach(t => {
+            const pane = document.getElementById('tab-pane-' + t);
+            if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
+        });
+        return;
+    }
+
+    // Firing list row selection
+    const row = e.target.closest('.firing-table tbody tr[data-idx]');
+    if (row && selectedApp) {
+        selectFiringRecord(selectedApp, parseInt(row.dataset.idx, 10));
+    }
 });
 
 // ── Utility ──────────────────────────────────────────────────────────────────
