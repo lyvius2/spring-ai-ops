@@ -58,3 +58,7 @@ springdoc:
   api-docs:
     path: /v3/api-docs
   paths-to-exclude: /
+
+logging:
+  level:
+    org.springframework.web.socket.sockjs.transport.handler.DefaultSockJsService: ERROR
