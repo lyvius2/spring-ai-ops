@@ -45,6 +45,7 @@ data class GrafanaAlert(
         private val LOKI_LABEL_KEYS = setOf(
             "job", "instance", "namespace", "pod", "container",
             "service_name", "app", "cluster", "env", "environment",
+            "application"
         )
     }
 }

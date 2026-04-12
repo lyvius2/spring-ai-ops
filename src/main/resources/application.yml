@@ -35,7 +35,7 @@ ai:
     model: gpt-4o-mini                  # Set OpenAI Model : Default is gpt-4o-mini
     api-key: ${AI_OPENAI_API_KEY:}      # Set your OpenAI API key for authentication
   anthropic:
-    model: claude-3-5-sonnet-20241022   # Set Anthropic Model : Default is claude-3-5-sonnet-20241022
+    model: claude-sonnet-4-6            # Set Anthropic Model : Default is claude-sonnet-4-6
     api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
 
 loki:

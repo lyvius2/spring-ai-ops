@@ -24,7 +24,7 @@ class AiModelService(
     private val redisTemplate: StringRedisTemplate,
     @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
-    @Value("\${ai.anthropic.model:claude-3-5-sonnet-20241022}") private val anthropicModel: String,
+    @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
     @Value("\${ai.anthropic.api-key:}") private val anthropicApiKey: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
@@ -93,7 +93,7 @@ class AiModelService(
             }
             "anthropic" -> {
                 val api = AnthropicApi.builder().apiKey(apiKey).build()
-                val options = AnthropicChatOptions.builder().model(anthropicModel).build()
+                val options = AnthropicChatOptions.builder().model(anthropicModel).maxTokens(1024).build()
                 AnthropicChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
             else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
