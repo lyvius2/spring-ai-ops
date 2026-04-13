@@ -394,7 +394,7 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
-| 2026-04-13 | Added Status column to Firing List — automatically extracts Exception/Error info from logs / Firing List에 Status 열 추가 — 로그에서 Exception/Error 정보 자동 추출하여 표시 |
+| 2026-04-13 | Added Status column to Firing List — automatically extracts Exception/Error info from logs |
 
 ---
 
