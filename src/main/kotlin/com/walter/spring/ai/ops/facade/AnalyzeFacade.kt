@@ -73,6 +73,10 @@ class AnalyzeFacade(
     }
 
     fun analyzeCodeDiffer(request: GithubPushRequest, application: String?) {
+        if (request.commits.isEmpty()) {
+            log.warn("GitHub push webhook skipped — no commits (ping or empty push)")
+            return
+        }
         recordAuditLog(request)
         runCatching {
             val targetApplication = application ?: "Unknown Application"
