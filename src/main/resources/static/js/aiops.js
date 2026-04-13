@@ -490,6 +490,41 @@ function formatOccupiedAt(dateStr) {
     return s.substring(0, tIdx) + ' ' + s.substring(tIdx + 1, tIdx + 9);
 }
 
+function lokiLevelClass(level) {
+    if (!level) return 'loki-level-other';
+    const l = level.toLowerCase();
+    if (l === 'error' || l === 'critical' || l === 'fatal') return 'loki-level-error';
+    if (l === 'warn'  || l === 'warning')                   return 'loki-level-warn';
+    if (l === 'info')                                       return 'loki-level-info';
+    if (l === 'debug')                                      return 'loki-level-debug';
+    if (l === 'trace')                                      return 'loki-level-trace';
+    return 'loki-level-other';
+}
+
+function renderLokiLog(log) {
+    if (!log) {
+        return `<div class="loki-empty">No log data.</div>`;
+    }
+    const results = log?.data?.result;
+    if (!results || !Array.isArray(results) || results.length === 0) {
+        return `<div class="loki-empty">No log entries found.</div>`;
+    }
+    return `<div class="loki-log-viewer">${results.map(stream => {
+        const meta  = stream.stream || {};
+        const level = meta.detected_level || meta.level || '';
+        const logger = meta.logger || meta.service_name || '';
+        const values = stream.values || [];
+        const headerParts = [
+            `<span class="loki-level-badge ${lokiLevelClass(level)}">${escHtml(level || '?')}</span>`,
+            logger ? `<span class="loki-logger">${escHtml(logger)}</span>` : '',
+        ].filter(Boolean).join('');
+        const entries = values.map(([, line]) =>
+            `<div class="loki-entry">${escHtml(line)}</div>`
+        ).join('');
+        return `<div class="loki-stream-header">${headerParts}</div>${entries}`;
+    }).join('')}</div>`;
+}
+
 function renderAnalysisLayers(appName, record) {
     if (!record) {
         return `<div class="info-message">
@@ -504,7 +539,7 @@ function renderAnalysisLayers(appName, record) {
         </div>
         <div class="analysis-layer">
             <div class="layer-header">Log</div>
-            <pre class="json-block">${syntaxHighlightJson(JSON.stringify(record.log, null, 2))}</pre>
+            ${renderLokiLog(record.log)}
         </div>
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis</div>
