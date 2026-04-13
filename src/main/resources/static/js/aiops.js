@@ -716,6 +716,7 @@ async function loadAndRenderCodeReview(appName) {
     if (!appName) return;
     const content = document.getElementById('codereview-content');
     if (!content) return;
+    showPanelLoading('codereview-content');
     await loadCommitList(appName);
     appSelectedCommitIdx[appName] = appSelectedCommitIdx[appName] ?? 0;
     content.innerHTML = buildCodeReviewHtml(appName);
@@ -773,7 +774,17 @@ function buildAppDetailHtml(appName) {
 }
 
 // 수동 클릭 시: API에서 최신 목록을 가져온 후 렌더링
+function showPanelLoading(elementId) {
+    const el = document.getElementById(elementId);
+    if (el) el.innerHTML = `
+        <div class="loading-overlay">
+            <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
+            <span>Loading...</span>
+        </div>`;
+}
+
 async function renderAppDetail(appName) {
+    showPanelLoading('app-detail-panel');
     await loadFiringList(appName);
     appSelectedFiringIdx[appName] = 0;
     document.getElementById('app-detail-panel').innerHTML = buildAppDetailHtml(appName);
