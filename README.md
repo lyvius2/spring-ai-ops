@@ -390,6 +390,14 @@ com.walter.spring.ai.ops
 
 ---
 
+## Changelog
+
+| Date | Description |
+|---|---|
+| 2026-04-13 | Firing List에 Status 열 추가 — 로그에서 Exception/Error 정보 자동 추출하여 표시 |
+
+---
+
 ## License
 
 This project is open source and available under the [MIT License](LICENSE).

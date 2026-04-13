@@ -545,15 +545,51 @@ function renderAnalysisLayers(appName, record) {
         </div>`;
 }
 
+function extractLogStatus(log) {
+    if (!log) return '—';
+    const results = log?.data?.result;
+    if (!results || !Array.isArray(results) || results.length === 0) return '—';
+
+    // ERROR 레벨 스트림을 우선 탐색
+    for (const stream of results) {
+        const meta  = stream.stream || {};
+        const level = (meta.detected_level || meta.level || '').toLowerCase();
+        if (level !== 'error' && level !== 'critical' && level !== 'fatal') continue;
+
+        // 로그 라인에서 XxxException / XxxError 패턴 추출
+        for (const [, line] of (stream.values || [])) {
+            const m = line.match(/\b([A-Z][a-zA-Z0-9]*(?:Exception|Error))\b/);
+            if (m) return m[1];
+        }
+
+        // logger 메타데이터의 마지막 세그먼트 사용 (e.g. c.w.l.a.c.GlobalExceptionHandler → GlobalExceptionHandler)
+        const logger = meta.logger || meta.service_name || '';
+        if (logger) return logger.split('.').pop();
+
+        return 'ERROR';
+    }
+
+    // ERROR 스트림 없으면 전체 라인에서 Exception/Error 탐색
+    for (const stream of results) {
+        for (const [, line] of (stream.values || [])) {
+            const m = line.match(/\b([A-Z][a-zA-Z0-9]*(?:Exception|Error))\b/);
+            if (m) return m[1];
+        }
+    }
+
+    return '—';
+}
+
 function renderFiringListRows(appName) {
     const list        = appFiringLists[appName] || [];
     const selectedIdx = appSelectedFiringIdx[appName] ?? 0;
     if (list.length === 0) {
-        return `<tr><td colspan="2" style="padding:14px;color:#999;text-align:center;">No firing records yet.</td></tr>`;
+        return `<tr><td colspan="3" style="padding:14px;color:#999;text-align:center;">No firing records yet.</td></tr>`;
     }
     return list.map((rec, idx) =>
         `<tr class="${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}">
             <td>${idx + 1}</td>
+            <td class="firing-status-cell">${escHtml(extractLogStatus(rec.log))}</td>
             <td>${formatOccupiedAt(rec.occupiedAt)}</td>
         </tr>`
     ).join('');
@@ -564,7 +600,7 @@ function renderFiringListSection(appName) {
         <div class="firing-list-section">
             <div class="layer-header">Firing List</div>
             <table class="firing-table">
-                <thead><tr><th>#</th><th>Occurred At</th></tr></thead>
+                <thead><tr><th>#</th><th>Status</th><th>Occurred At</th></tr></thead>
                 <tbody id="firing-list-body">${renderFiringListRows(appName)}</tbody>
             </table>
         </div>`;
