@@ -868,6 +868,22 @@ body {
     white-space: nowrap;
 }
 
+.compare-link {
+    font-size: 0.78rem;
+    color: #0074d9;
+    text-decoration: none;
+    font-weight: 500;
+}
+.compare-link:hover { text-decoration: underline; }
+
+.commit-ext-icon {
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    color: #aaa;
+    margin-left: auto;
+}
+.commit-link:hover .commit-ext-icon { color: #0074d9; }
+
 .commit-url-text {
     display: block;
     font-size: 0.78rem;

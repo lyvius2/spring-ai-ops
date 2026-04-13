@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GithubCompareResult(
     val files: List<GithubFile> = emptyList(),
+    val commits: List<GithubApiCommit> = emptyList(),
     val errorMessage: String = "",
 ) {
     fun createCodeReviewPrompt(): String {

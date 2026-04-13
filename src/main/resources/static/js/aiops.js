@@ -623,18 +623,27 @@ function renderCommitUrlSection(record) {
     if (!record) return '';
     const commits = record.commitSummaries;
     if (commits && commits.length > 0) {
+        const compareUrl = escHtml(record.githubUrl || '');
+        const compareLink = compareUrl
+            ? `<a class="compare-link" href="${compareUrl}" target="_blank" rel="noopener noreferrer">&#128279; View on GitHub</a>`
+            : '';
         const rows = commits.map(c => {
-            const msg = escHtml(c.message || '—');
+            const msg = escHtml((c.message || '—').split('\n')[0]); // 첫 번째 줄만 표시
             const url = escHtml(c.url || '');
-            const sha = escHtml((c.id || '').substring(0, 7));
-            return `<a class="commit-link" href="${url}" target="_blank" rel="noopener noreferrer">
+            const sha = escHtml((c.id || c.sha || '').substring(0, 7));
+            const linkAttr = url ? `href="${url}" target="_blank" rel="noopener noreferrer"` : '';
+            return `<a class="commit-link" ${linkAttr}>
                 <span class="commit-sha">${sha}</span>
                 <span class="commit-message-text">${msg}</span>
+                ${url ? '<span class="commit-ext-icon">&#8599;</span>' : ''}
             </a>`;
         }).join('');
         return `
             <div class="commit-url-section">
-                <div class="layer-header">Commits (${commits.length})</div>
+                <div class="layer-header" style="display:flex;align-items:center;justify-content:space-between;">
+                    <span>Commits (${commits.length})</span>
+                    ${compareLink}
+                </div>
                 ${rows}
             </div>`;
     }

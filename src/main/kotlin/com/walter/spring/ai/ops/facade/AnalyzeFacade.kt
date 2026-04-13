@@ -96,23 +96,35 @@ class AnalyzeFacade(
     }
 
     private fun createCodeReviewRecord(request: GithubPushRequest, targetApplication: String, compareResult: GithubCompareResult, analyzeResults: String): CodeReviewRecord {
-        val githubUrl = "${request.repository.htmlUrl}/commit/${request.after}"
+        val githubUrl = createGithubUrl(request)
         val latestPushedAt = request.commits.mapNotNull { it.timestamp.toISO8601() }.maxOrNull() ?: LocalDateTime.now()
         val changedFiles = compareResult.files.map { file ->
             ChangedFile(file.filename, file.status, file.additions, file.deletions, file.patch)
         }
-        val commitSummaries = request.commits.map { commit ->
-            CommitSummary(commit.id, commit.message, commit.url, commit.timestamp)
-        }
+        val commitSummaries = createCommitList(compareResult, request)
+        val latestCommitMessage = commitSummaries.lastOrNull()?.message ?: ""
         return CodeReviewRecord(
             latestPushedAt,
             targetApplication,
             githubUrl,
-            request.commits.firstOrNull()?.message ?: "",
+            latestCommitMessage,
             changedFiles,
             analyzeResults,
             LocalDateTime.now(),
             commitSummaries
         )
+    }
+
+private fun createGithubUrl(request: GithubPushRequest): String =
+    when {
+        request.isNewBranch() -> "${request.repository.htmlUrl}/commit/${request.after}"
+        else -> "${request.repository.htmlUrl}/compare/${request.before}...${request.after}"
+    }
+
+    private fun createCommitList(compareResult: GithubCompareResult, request: GithubPushRequest): List<CommitSummary> {
+        return compareResult.commits
+            .takeIf { it.isNotEmpty() }
+            ?.map { CommitSummary(it.sha, it.commit.message, it.htmlUrl, it.commit.author.date) }
+            ?: request.commits.map { CommitSummary(it.id, it.message, it.url, it.timestamp) }
     }
 }
