@@ -10,5 +10,6 @@ public record CodeReviewRecord(
     String commitMessage,
     List<ChangedFile> changedFiles,
     String reviewResult,
-    LocalDateTime completedAt
+    LocalDateTime completedAt,
+    List<CommitSummary> commitSummaries
 ) { }

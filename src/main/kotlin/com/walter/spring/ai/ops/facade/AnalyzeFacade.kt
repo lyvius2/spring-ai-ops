@@ -5,6 +5,7 @@ import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.record.ChangedFile
+import com.walter.spring.ai.ops.record.CommitSummary
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
@@ -96,18 +97,22 @@ class AnalyzeFacade(
 
     private fun createCodeReviewRecord(request: GithubPushRequest, targetApplication: String, compareResult: GithubCompareResult, analyzeResults: String): CodeReviewRecord {
         val githubUrl = "${request.repository.htmlUrl}/commit/${request.after}"
-        val headCommit = request.commits.firstOrNull()
+        val latestPushedAt = request.commits.mapNotNull { it.timestamp.toISO8601() }.maxOrNull() ?: LocalDateTime.now()
         val changedFiles = compareResult.files.map { file ->
             ChangedFile(file.filename, file.status, file.additions, file.deletions, file.patch)
         }
+        val commitSummaries = request.commits.map { commit ->
+            CommitSummary(commit.id, commit.message, commit.url, commit.timestamp)
+        }
         return CodeReviewRecord(
-            headCommit?.timestamp?.toISO8601() ?: LocalDateTime.now(),
+            latestPushedAt,
             targetApplication,
             githubUrl,
-            headCommit?.message ?: "",
+            request.commits.firstOrNull()?.message ?: "",
             changedFiles,
             analyzeResults,
-            LocalDateTime.now()
+            LocalDateTime.now(),
+            commitSummaries
         )
     }
 }
