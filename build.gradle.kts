@@ -42,6 +42,7 @@ dependencies {
     implementation("com.github.codemonstur:embedded-redis:1.4.3")
     implementation("org.webjars:sockjs-client:1.5.1")
     implementation("org.webjars:stomp-websocket:2.3.4")
+    implementation("org.webjars:highlightjs:11.10.0")
     implementation(kotlin("reflect"))
     implementation(kotlin("stdlib"))
 
