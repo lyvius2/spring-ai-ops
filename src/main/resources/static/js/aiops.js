@@ -427,13 +427,13 @@ function handleCommitRecord(record) {
             // 이미 선택된 앱: Code Review 탭으로 전환 후 in-place 업데이트
             switchToTab('codereview');
             const content = document.getElementById('codereview-content');
-            if (content) content.innerHTML = buildCodeReviewHtml(appName);
+            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
         } else {
             // 다른 앱이 선택 중: 렌더링 완료 후 Code Review 탭으로 전환 및 앱 활성화
             renderAppDetailFromLocal(appName);
             switchToTab('codereview');
             const content = document.getElementById('codereview-content');
-            if (content) content.innerHTML = buildCodeReviewHtml(appName);
+            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             existing.classList.add('active');
             selectedApp = appName;
@@ -445,7 +445,7 @@ function handleCommitRecord(record) {
             renderAppDetailFromLocal(appName);
             switchToTab('codereview');
             const content = document.getElementById('codereview-content');
-            if (content) content.innerHTML = buildCodeReviewHtml(appName);
+            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
@@ -576,7 +576,7 @@ function selectFiringRecord(appName, idx) {
     appSelectedFiringIdx[appName] = idx;
     const record   = (appFiringLists[appName] || [])[idx];
     const layersEl = document.getElementById('exception-layers');
-    if (layersEl) layersEl.innerHTML = renderAnalysisLayers(appName, record);
+    if (layersEl) { layersEl.innerHTML = renderAnalysisLayers(appName, record); applyHighlighting(layersEl); }
     const tbody = document.getElementById('firing-list-body');
     if (tbody) tbody.innerHTML = renderFiringListRows(appName);
 }
@@ -709,7 +709,7 @@ function buildCodeReviewHtml(appName) {
 function selectCommitRecord(appName, idx) {
     appSelectedCommitIdx[appName] = idx;
     const content = document.getElementById('codereview-content');
-    if (content) content.innerHTML = buildCodeReviewHtml(appName);
+    if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
 }
 
 async function loadAndRenderCodeReview(appName) {
@@ -720,6 +720,7 @@ async function loadAndRenderCodeReview(appName) {
     await loadCommitList(appName);
     appSelectedCommitIdx[appName] = appSelectedCommitIdx[appName] ?? 0;
     content.innerHTML = buildCodeReviewHtml(appName);
+    applyHighlighting(content);
 }
 
 function showNotification(appName) {
@@ -787,12 +788,16 @@ async function renderAppDetail(appName) {
     showPanelLoading('app-detail-panel');
     await loadFiringList(appName);
     appSelectedFiringIdx[appName] = 0;
-    document.getElementById('app-detail-panel').innerHTML = buildAppDetailHtml(appName);
+    const panel = document.getElementById('app-detail-panel');
+    panel.innerHTML = buildAppDetailHtml(appName);
+    applyHighlighting(panel);
 }
 
 // WebSocket 수신 시: 로컬 상태로 즉시 렌더링 (API 호출 없음)
 function renderAppDetailFromLocal(appName) {
-    document.getElementById('app-detail-panel').innerHTML = buildAppDetailHtml(appName);
+    const panel = document.getElementById('app-detail-panel');
+    panel.innerHTML = buildAppDetailHtml(appName);
+    applyHighlighting(panel);
 }
 
 document.addEventListener('click', async function (e) {
@@ -984,7 +989,8 @@ function renderMarkdown(text) {
                 inCode = false;
                 const escaped = codeLines.join('\n')
                     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                html += `<pre class="md-code-block"><code>${escaped}</code></pre>`;
+                const langAttr = codeLang ? ` class="language-${escHtml(codeLang)}"` : '';
+                html += `<pre class="md-code-block"><code${langAttr}>${escaped}</code></pre>`;
                 codeLines = []; codeLang = '';
             }
             continue;
@@ -1047,9 +1053,15 @@ function renderMarkdown(text) {
     if (inCode) {
         const escaped = codeLines.join('\n')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        html += `<pre class="md-code-block"><code>${escaped}</code></pre>`;
+        const langAttr = codeLang ? ` class="language-${escHtml(codeLang)}"` : '';
+        html += `<pre class="md-code-block"><code${langAttr}>${escaped}</code></pre>`;
     }
     return html;
+}
+
+function applyHighlighting(containerEl) {
+    if (!containerEl || typeof hljs === 'undefined') return;
+    containerEl.querySelectorAll('pre.md-code-block code').forEach(el => hljs.highlightElement(el));
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
