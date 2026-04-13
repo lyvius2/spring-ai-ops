@@ -928,19 +928,81 @@ function renderMarkdown(text) {
     let html = '';
     let inUl = false;
     let inOl = false;
+    let inCode = false;
+    let codeLang = '';
+    let codeLines = [];
+    let inTable = false;
+    let tableRows = [];
 
     const closeList = () => {
         if (inUl) { html += '</ul>'; inUl = false; }
         if (inOl) { html += '</ol>'; inOl = false; }
     };
 
+    const flushTable = () => {
+        if (!inTable) return;
+        inTable = false;
+        if (tableRows.length === 0) { tableRows = []; return; }
+        let t = '<table class="md-table">';
+        let isHeader = true;
+        for (const row of tableRows) {
+            if (/^\|[-| :]+\|$/.test(row.trim())) { isHeader = false; continue; }
+            const cells = row.trim().replace(/^\||\|$/g, '').split('|');
+            const tag = isHeader ? 'th' : 'td';
+            t += '<tr>' + cells.map(c => `<${tag}>${renderInline(c.trim())}</${tag}>`).join('') + '</tr>';
+            isHeader = false;
+        }
+        t += '</table>';
+        html += t;
+        tableRows = [];
+    };
+
     for (const raw of lines) {
         const line = raw.trimEnd();
-        if (!line.trim()) {
-            closeList();
+
+        // Fenced code block
+        if (line.startsWith('```')) {
+            if (!inCode) {
+                closeList();
+                flushTable();
+                inCode = true;
+                codeLang = line.slice(3).trim();
+                codeLines = [];
+            } else {
+                inCode = false;
+                const escaped = codeLines.join('\n')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += `<pre class="md-code-block"><code>${escaped}</code></pre>`;
+                codeLines = []; codeLang = '';
+            }
             continue;
         }
-        if (line.startsWith('### ')) {
+        if (inCode) { codeLines.push(raw); continue; }
+
+        // Table row
+        if (/^\s*\|/.test(line)) {
+            closeList();
+            inTable = true;
+            tableRows.push(line);
+            continue;
+        } else {
+            flushTable();
+        }
+
+        if (!line.trim()) { closeList(); continue; }
+
+        // Horizontal rule
+        if (/^[-*]{3,}$/.test(line.trim())) {
+            closeList();
+            html += '<hr>';
+            continue;
+        }
+
+        // Headings
+        if (line.startsWith('#### ')) {
+            closeList();
+            html += `<h4>${renderInline(line.slice(5))}</h4>`;
+        } else if (line.startsWith('### ')) {
             closeList();
             html += `<h3>${renderInline(line.slice(4))}</h3>`;
         } else if (line.startsWith('## ')) {
@@ -949,10 +1011,16 @@ function renderMarkdown(text) {
         } else if (line.startsWith('# ')) {
             closeList();
             html += `<h1>${renderInline(line.slice(2))}</h1>`;
+        // Blockquote
+        } else if (line.startsWith('> ')) {
+            closeList();
+            html += `<blockquote><p>${renderInline(line.slice(2))}</p></blockquote>`;
+        // Unordered list
         } else if (/^- /.test(line)) {
             if (inOl) { html += '</ol>'; inOl = false; }
             if (!inUl) { html += '<ul>'; inUl = true; }
             html += `<li>${renderInline(line.slice(2))}</li>`;
+        // Ordered list
         } else if (/^\d+\. /.test(line)) {
             if (inUl) { html += '</ul>'; inUl = false; }
             if (!inOl) { html += '<ol>'; inOl = true; }
@@ -963,6 +1031,12 @@ function renderMarkdown(text) {
         }
     }
     closeList();
+    flushTable();
+    if (inCode) {
+        const escaped = codeLines.join('\n')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html += `<pre class="md-code-block"><code>${escaped}</code></pre>`;
+    }
     return html;
 }
 
