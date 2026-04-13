@@ -184,7 +184,7 @@ class GithubServiceTest {
     fun givenValidRecord_whenSaveCodeReviewRecord_thenPushesToRedisList() {
         // given
         val service = buildService()
-        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com/owner/repo/commit/abc", "feat: add feature", emptyList(), "## Review", LocalDateTime.now())
+        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com/owner/repo/commit/abc", "feat: add feature", emptyList(), "## Review", LocalDateTime.now(), emptyList())
         given(redisTemplate.opsForList()).willReturn(listOperations)
         given(listOperations.range("commit:my-app", 0, -1)).willReturn(emptyList())
         given(objectMapper.writeValueAsString(record)).willReturn("""{"application":"my-app"}""")
@@ -204,7 +204,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         val json = """{"application":"my-app"}"""
-        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com", "commit msg", emptyList(), "review", LocalDateTime.now())
+        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com", "commit msg", emptyList(), "review", LocalDateTime.now(), emptyList())
         given(redisTemplate.opsForList()).willReturn(listOperations)
         given(listOperations.range("commit:my-app", 0, -1)).willReturn(listOf(json))
         given(objectMapper.readValue(json, CodeReviewRecord::class.java)).willReturn(record)
