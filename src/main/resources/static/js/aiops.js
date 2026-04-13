@@ -366,12 +366,11 @@ function connectWebSocket() {
     });
 }
 
-function handleFiringRecord(record) {
+async function handleFiringRecord(record) {
     const appName = record.application;
 
-    // Prepend to local list and reset selection to newest
-    if (!appFiringLists[appName]) appFiringLists[appName] = [];
-    appFiringLists[appName].unshift(record);
+    // API에서 최신 목록을 가져온 후 렌더링
+    await loadFiringList(appName);
     appSelectedFiringIdx[appName] = 0;
 
     // Always show notification
@@ -407,12 +406,11 @@ function handleFiringRecord(record) {
     }
 }
 
-function handleCommitRecord(record) {
+async function handleCommitRecord(record) {
     const appName = record.application;
 
-    // Prepend to local list and reset selection to newest
-    if (!appCommitLists[appName]) appCommitLists[appName] = [];
-    appCommitLists[appName].unshift(record);
+    // API에서 최신 목록을 가져온 후 렌더링
+    await loadCommitList(appName);
     appSelectedCommitIdx[appName] = 0;
 
     // Always show notification
@@ -971,6 +969,7 @@ function renderMarkdown(text) {
     let html = '';
     let inUl = false;
     let inOl = false;
+    let inNestedUl = false;
     let inCode = false;
     let codeLang = '';
     let codeLines = [];
@@ -978,6 +977,7 @@ function renderMarkdown(text) {
     let tableRows = [];
 
     const closeList = () => {
+        if (inNestedUl) { html += '</ul>'; inNestedUl = false; }
         if (inUl) { html += '</ul>'; inUl = false; }
         if (inOl) { html += '</ol>'; inOl = false; }
     };
@@ -1000,7 +1000,8 @@ function renderMarkdown(text) {
         tableRows = [];
     };
 
-    for (const raw of lines) {
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
         const line = raw.trimEnd();
         const trimmed = line.trimStart();
 
@@ -1034,7 +1035,19 @@ function renderMarkdown(text) {
             flushTable();
         }
 
-        if (!line.trim()) { closeList(); continue; }
+        if (!line.trim()) {
+            // OL 내 blank line: 다음 non-blank 줄이 번호 항목이면 OL을 유지
+            if (inOl) {
+                let j = i + 1;
+                while (j < lines.length && !lines[j].trim()) j++;
+                if (j < lines.length && /^\d+\. /.test(lines[j])) {
+                    if (inNestedUl) { html += '</ul>'; inNestedUl = false; }
+                    continue;
+                }
+            }
+            closeList();
+            continue;
+        }
 
         // Horizontal rule
         if (/^[-*]{3,}$/.test(line.trim())) {
@@ -1060,13 +1073,19 @@ function renderMarkdown(text) {
         } else if (line.startsWith('> ')) {
             closeList();
             html += `<blockquote><p>${renderInline(line.slice(2))}</p></blockquote>`;
+        // Indented unordered list (nested inside ordered list)
+        } else if (/^\s+- /.test(line) && inOl) {
+            if (!inNestedUl) { html += '<ul>'; inNestedUl = true; }
+            html += `<li>${renderInline(line.replace(/^\s+- /, ''))}</li>`;
         // Unordered list
         } else if (/^- /.test(line)) {
+            if (inNestedUl) { html += '</ul>'; inNestedUl = false; }
             if (inOl) { html += '</ol>'; inOl = false; }
             if (!inUl) { html += '<ul>'; inUl = true; }
             html += `<li>${renderInline(line.slice(2))}</li>`;
         // Ordered list
         } else if (/^\d+\. /.test(line)) {
+            if (inNestedUl) { html += '</ul>'; inNestedUl = false; }
             if (inUl) { html += '</ul>'; inUl = false; }
             if (!inOl) { html += '<ol>'; inOl = true; }
             html += `<li>${renderInline(line.replace(/^\d+\. /, ''))}</li>`;
