@@ -839,17 +839,33 @@ body {
 }
 
 .commit-link {
-    display: block;
-    padding: 12px 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 16px;
     text-decoration: none;
+    border-bottom: 1px solid #f5f5f5;
 }
+.commit-link:last-child { border-bottom: none; }
 .commit-link:hover { background: #f8f8f8; }
 
+.commit-sha {
+    flex-shrink: 0;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.75rem;
+    color: #0074d9;
+    background: #eef4ff;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
 .commit-message-text {
-    display: block;
     font-weight: 600;
     color: #333;
-    margin-bottom: 4px;
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .commit-url-text {

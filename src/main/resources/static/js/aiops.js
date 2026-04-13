@@ -621,6 +621,24 @@ function toggleFileDiff(headerEl) {
 
 function renderCommitUrlSection(record) {
     if (!record) return '';
+    const commits = record.commitSummaries;
+    if (commits && commits.length > 0) {
+        const rows = commits.map(c => {
+            const msg = escHtml(c.message || '—');
+            const url = escHtml(c.url || '');
+            const sha = escHtml((c.id || '').substring(0, 7));
+            return `<a class="commit-link" href="${url}" target="_blank" rel="noopener noreferrer">
+                <span class="commit-sha">${sha}</span>
+                <span class="commit-message-text">${msg}</span>
+            </a>`;
+        }).join('');
+        return `
+            <div class="commit-url-section">
+                <div class="layer-header">Commits (${commits.length})</div>
+                ${rows}
+            </div>`;
+    }
+    // fallback: old records without commitSummaries
     const msg = escHtml(record.commitMessage || record.githubUrl || '—');
     const url = escHtml(record.githubUrl || '');
     return `
