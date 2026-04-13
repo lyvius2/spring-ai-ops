@@ -274,13 +274,13 @@ analysis:
 ./gradlew test --tests "com.walter.spring.ai.ops.service.AiModelServiceTest"
 ```
 
-Open `http://localhost:8080` in your browser. On first launch you will be prompted to enter your LLM API key (unless pre-configured in yml).
+Open `http://localhost:7079` in your browser. On first launch you will be prompted to enter your LLM API key (unless pre-configured in yml).
 
 ### Setting Up Grafana
 
 1. In Grafana, go to **Alerting → Contact points → New contact point**.
 2. Select type **Webhook**.
-3. Set URL to `http://<your-host>:8080/webhook/grafana` (or `/webhook/grafana/{application}` to tag results with an application name).
+3. Set URL to `http://<your-host>:7079/webhook/grafana` (or `/webhook/grafana/{application}` to tag results with an application name).
 4. Add the contact point to your alert rule's notification policy.
 
 > Ensure Prometheus labels (`job`, `instance`, etc.) and Loki stream labels are identical so log queries work automatically.
@@ -290,7 +290,7 @@ Open `http://localhost:8080` in your browser. On first launch you will be prompt
 ### Setting Up GitHub Webhooks
 
 1. Go to **Repository → Settings → Webhooks → Add webhook**.
-2. Set **Payload URL** to `http://<your-host>:8080/webhook/github/{application}`.
+2. Set **Payload URL** to `http://<your-host>:7079/webhook/github/{application}`.
 3. Set **Content type** to `application/json`.
 4. Select event: **Just the push event**.
 5. Save the webhook.
@@ -333,9 +333,9 @@ Spring AI Ops integrates [springdoc-openapi](https://springdoc.org/) to provide 
 
 | URL | Description |
 |---|---|
-| `http://localhost:8080/swagger-ui.html` | Swagger UI — browse and try all REST endpoints |
-| `http://localhost:8080/v3/api-docs` | OpenAPI 3.0 spec (JSON) |
-| `http://localhost:8080/v3/api-docs.yaml` | OpenAPI 3.0 spec (YAML) |
+| `http://localhost:7079/swagger-ui.html` | Swagger UI — browse and try all REST endpoints |
+| `http://localhost:7079/v3/api-docs` | OpenAPI 3.0 spec (JSON) |
+| `http://localhost:7079/v3/api-docs.yaml` | OpenAPI 3.0 spec (YAML) |
 
 The Swagger UI is useful for testing webhook payloads and configuration endpoints without an external tool.
 
@@ -567,13 +567,13 @@ analysis:
 ./gradlew test
 ```
 
-브라우저에서 `http://localhost:8080`에 접속합니다. yml에 API 키가 설정되어 있으면 자동으로 LLM이 구성됩니다.
+브라우저에서 `http://localhost:7079`에 접속합니다. yml에 API 키가 설정되어 있으면 자동으로 LLM이 구성됩니다.
 
 #### Grafana 설정
 
 1. **Alerting → Contact points → New contact point**
 2. 유형: **Webhook**
-3. URL: `http://<your-host>:8080/webhook/grafana/{application}`
+3. URL: `http://<your-host>:7079/webhook/grafana/{application}`
 4. 알림 정책에 연결
 
 > **주의**: 현재 Loki 인증(Basic Auth, Bearer Token 등)은 지원하지 않습니다. 인증 없이 접근 가능한 Loki 엔드포인트만 사용할 수 있습니다.
@@ -581,7 +581,7 @@ analysis:
 #### GitHub Webhook 설정
 
 1. **Repository → Settings → Webhooks → Add webhook**
-2. Payload URL: `http://<your-host>:8080/webhook/github/{application}`
+2. Payload URL: `http://<your-host>:7079/webhook/github/{application}`
 3. Content type: `application/json`
 4. 이벤트: **Just the push event**
 
@@ -593,9 +593,9 @@ analysis:
 
 | URL | 설명 |
 |---|---|
-| `http://localhost:8080/swagger-ui.html` | Swagger UI — 모든 REST 엔드포인트를 브라우저에서 직접 테스트 가능 |
-| `http://localhost:8080/v3/api-docs` | OpenAPI 3.0 명세 (JSON) |
-| `http://localhost:8080/v3/api-docs.yaml` | OpenAPI 3.0 명세 (YAML) |
+| `http://localhost:7079/swagger-ui.html` | Swagger UI — 모든 REST 엔드포인트를 브라우저에서 직접 테스트 가능 |
+| `http://localhost:7079/v3/api-docs` | OpenAPI 3.0 명세 (JSON) |
+| `http://localhost:7079/v3/api-docs.yaml` | OpenAPI 3.0 명세 (YAML) |
 
 webhook 페이로드나 설정 엔드포인트를 별도 도구 없이 Swagger UI에서 바로 테스트할 수 있습니다.
 
