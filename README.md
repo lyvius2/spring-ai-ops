@@ -180,9 +180,7 @@ POST /webhook/github[/{application}]
 *The LLM analyzes the Grafana alert context along with the corresponding Loki logs and streams a root-cause analysis — including affected components and recommended actions — directly to the dashboard.*  
 *LLM이 Grafana 알림 컨텍스트와 Loki 로그를 함께 분석하여 근본 원인, 영향 범위, 조치 방법을 대시보드에 실시간으로 스트리밍합니다.*
 
-![Firing Analysis 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_01.png?raw=true)
-![Firing Analysis 2](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_02.png?raw=true)
-![Firing Analysis 3](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze_03.png?raw=true)
+![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
 
 ---
 
@@ -190,9 +188,7 @@ POST /webhook/github[/{application}]
 *When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*  
 *GitHub push 이벤트가 수신되면 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재적 버그, 보안 고려사항, 개선 제안을 구조화된 보고서로 제공합니다.*
 
-![Code Review 1](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_01.png?raw=true)
-![Code Review 2](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_02.png?raw=true)
-![Code Review 3](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview_03.png?raw=true)
+![Code Review](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview.png?raw=true)
 
 ---
 
