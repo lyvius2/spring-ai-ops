@@ -832,6 +832,16 @@ body {
     vertical-align: middle;
 }
 
+.firing-status-cell {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.8rem;
+    color: #c0392b;
+}
+
 /* ── Code Review ── */
 .commit-url-section,
 .changed-files-section {
