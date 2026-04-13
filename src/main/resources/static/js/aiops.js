@@ -959,14 +959,15 @@ function renderMarkdown(text) {
 
     for (const raw of lines) {
         const line = raw.trimEnd();
+        const trimmed = line.trimStart();
 
-        // Fenced code block
-        if (line.startsWith('```')) {
+        // Fenced code block (support leading whitespace up to 3 spaces)
+        if (/^`{3,}/.test(trimmed)) {
             if (!inCode) {
                 closeList();
                 flushTable();
                 inCode = true;
-                codeLang = line.slice(3).trim();
+                codeLang = trimmed.replace(/^`+/, '').trim();
                 codeLines = [];
             } else {
                 inCode = false;
