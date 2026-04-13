@@ -297,6 +297,8 @@ Open `http://localhost:8080` in your browser. On first launch you will be prompt
 
 Ensure your GitHub access token (configured in yml or via the UI) has `repo` read scope.
 
+> **Note**: GitHub Webhook **Secret** is not currently supported. Leave the Secret field blank when configuring the webhook. Secret-based HMAC-SHA256 signature verification is planned for a future release.
+
 ---
 
 ## API Reference
@@ -582,6 +584,8 @@ analysis:
 2. Payload URL: `http://<your-host>:8080/webhook/github/{application}`
 3. Content type: `application/json`
 4. 이벤트: **Just the push event**
+
+> **참고**: GitHub Webhook **Secret**은 현재 지원하지 않습니다. Webhook 설정 시 Secret 필드는 비워두세요. Secret 기반 HMAC-SHA256 서명 검증은 추후 지원 예정입니다.
 
 ### API 문서 (Swagger)
 
