@@ -163,10 +163,13 @@ const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectP
 <!-- ══ Modal 2: Loki Setup ══ -->
 <div id="loki-modal" class="modal-overlay" style="display:none;">
     <div class="modal-box">
-        <div class="modal-header">Loki Configuration Required</div>
+        <div class="modal-header">
+            Loki Configuration
+            <button id="loki-modal-close" class="modal-close-btn" onclick="closeLokiModal()" style="display:none;">&#10005;</button>
+        </div>
         <div class="modal-body">
             <p class="modal-desc">
-                Loki URL is not configured. Please enter the Loki base URL to enable log analysis.
+                Enter the Loki base URL to enable log analysis.
             </p>
             <div class="form-group">
                 <label class="form-label" for="loki-url-input">Loki Base URL</label>
@@ -194,17 +197,30 @@ const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectP
                 <tr>
                     <td>LLM Provider</td>
                     <td>
-                        {{#configured}}
-                            <span style="font-weight:600; text-transform:uppercase;">{{currentLlm}}</span> <span class="badge badge-up">UP</span>
-                        {{/configured}}
-                        {{^configured}}
-                            <span style="color:#aaa;">—</span> <span class="badge badge-down">NOT CONFIGURED</span>
-                        {{/configured}}
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <div>
+                                {{#configured}}
+                                    <img src="/images/{{currentLlm}}.svg" class="provider-logo provider-logo-badge" alt="{{currentLlm}}">
+                                    <span class="badge badge-up">{{currentLlm}}</span>
+                                    <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
+                                {{/configured}}
+                                {{^configured}}
+                                    <span style="color:#aaa;">—</span> <span class="badge badge-down">NOT CONFIGURED</span>
+                                {{/configured}}
+                            </div>
+                            {{#configured}}
+                                <button class="btn-secondary" style="margin-top:0;" onclick="openLlmModal(true)">Reconfigure</button>
+                            {{/configured}}
+                        </div>
                     </td>
                 </tr>
                 <tr>
-                    <td>Loki URL</td>
+                    <td>LOG Storage</td>
                     <td id="status-loki-url"><span style="color:#aaa;">—</span></td>
+                </tr>
+                <tr>
+                    <td>GIT Remote</td>
+                    <td id="status-git-remote"><span style="color:#aaa;">—</span></td>
                 </tr>
             </tbody>
         </table>
@@ -228,33 +244,6 @@ const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectP
                 <div class="empty-state">
                     <span>Select an application from the left panel to view details.</span>
                 </div>
-            </div>
-        </div>
-
-        <!-- 3. LLM Configuration -->
-        <div class="panel">
-            <div class="panel-header">LLM Configuration</div>
-            <div class="panel-body">
-                <table class="info-table" style="margin-bottom:14px;">
-                    <tbody>
-                        <tr>
-                            <td>Provider</td>
-                        <td id="llm-config-provider-cell">
-                            {{#configured}}
-                                <img src="/images/{{currentLlm}}.svg" class="provider-logo provider-logo-badge" alt="{{currentLlm}}">
-                                <span class="badge badge-up">{{currentLlm}}</span>
-                            {{/configured}}
-                        </td>
-                        </tr>
-                        <tr>
-                            <td>Connection</td>
-                            <td>
-                                <span style="color:#3c763d; font-weight:600;">&#10003; Connected</span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <button class="btn-secondary" onclick="openLlmModal(true)">Reconfigure</button>
             </div>
         </div>
 

@@ -953,6 +953,7 @@ async function saveGithubToken() {
 
         if (data.success) {
             document.getElementById('github-token-modal').style.display = 'none';
+            renderGitRemoteStatus(true);
             switchToTab('codereview');
         } else {
             errEl.textContent = data.message || 'Failed to save token.';
@@ -1148,10 +1149,45 @@ function applyHighlighting(containerEl) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
+function openLokiModal() {
+    document.getElementById('loki-modal-close').style.display = '';
+    document.getElementById('loki-modal').style.display = 'flex';
+}
+
+function closeLokiModal() {
+    document.getElementById('loki-modal').style.display = 'none';
+}
+
+function renderGitRemoteStatus(isConfigured) {
+    const cell = document.getElementById('status-git-remote');
+    if (!cell) return;
+    if (isConfigured) {
+        cell.innerHTML = `
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div>
+                    <img src="/images/github.svg" class="provider-logo provider-logo-badge" alt="GitHub">
+                    <span class="badge badge-up">GITHUB</span>
+                    <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
+                </div>
+                <button class="btn-secondary" style="margin-top:0;" onclick="openGithubTokenModal()">Reconfigure</button>
+            </div>
+        `;
+    }
+}
+
 function renderLokiStatus(lokiUrl) {
     const cell = document.getElementById('status-loki-url');
     if (lokiUrl) {
-        cell.innerHTML = `<span style="font-weight:600;">${escHtml(lokiUrl)}</span>&nbsp;<span class="badge badge-up">Connected</span>`;
+        cell.innerHTML = `
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div>
+                    <img src="/images/loki.svg" class="provider-logo provider-logo-badge" alt="Loki">
+                    <span class="badge badge-up">LOKI</span>
+                    <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected (${escHtml(lokiUrl)})</span>
+                </div>
+                <button class="btn-secondary" style="margin-top:0;" onclick="openLokiModal()">Reconfigure</button>
+            </div>
+        `;
     }
 }
 
@@ -1178,6 +1214,13 @@ async function init() {
     } catch (_) {
         // If check fails, proceed anyway
     }
+
+    // Step 3: check GitHub token status for System Status display
+    try {
+        const ghRes  = await fetch('/api/github/token/status');
+        const ghData = await ghRes.json();
+        if (ghData.isConfigured) renderGitRemoteStatus(true);
+    } catch (_) {}
 
     // Both configured → fade in main section
     showMainSection();
