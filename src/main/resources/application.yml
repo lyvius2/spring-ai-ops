@@ -2,6 +2,8 @@ server:
   port: 7079
 
 spring:
+  application:
+    name: spring-ai-ops
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   mustache:
@@ -61,6 +63,26 @@ springdoc:
   api-docs:
     path: /v3/api-docs
   paths-to-exclude: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name:spring-ai-ops}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.9, 0.95, 0.99
+  tracing:
+    sampling:
+      probability: 1.0
 
 logging:
   level:
