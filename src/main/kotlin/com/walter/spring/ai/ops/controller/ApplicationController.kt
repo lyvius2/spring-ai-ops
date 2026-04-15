@@ -23,7 +23,9 @@ class ApplicationController(
 ) {
     @Operation(summary = "List all registered applications")
     @GetMapping
-    fun getApps(): List<String> = applicationService.getApps()
+    fun getApps(): List<String> {
+        return applicationService.getApps()
+    }
 
     @Operation(
         summary = "Register a new application",
