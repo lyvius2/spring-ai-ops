@@ -9,6 +9,7 @@ import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.util.listPushWithTtl
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
@@ -23,6 +24,8 @@ class GithubService(
     @Value("\${github.access-token:}") private val configuredToken: String,
     @Value("\${github.url:https://api.github.com}") private val githubUrlFromConfig: String,
 ) {
+    private val log = LoggerFactory.getLogger(GithubService::class.java)
+
     companion object {
         const val EMPTY_SHA = "0000000000000000000000000000000000000000"
     }
@@ -42,23 +45,35 @@ class GithubService(
         return null
     }
 
-    fun isTokenConfigured(): Boolean = !getGithubToken().isNullOrBlank()
+    fun isTokenConfigured(): Boolean{
+        return !getGithubToken().isNullOrBlank()
+    }
 
     fun setGithubUrl(url: String) {
         redisTemplate.opsForValue().set(REDIS_KEY_GITHUB_URL, url)
     }
 
-    fun getGithubUrl(): String =
-        redisTemplate.opsForValue().get(REDIS_KEY_GITHUB_URL)?.takeIf { it.isNotBlank() }
+    fun getGithubUrl(): String {
+        return redisTemplate.opsForValue().get(REDIS_KEY_GITHUB_URL)?.takeIf { it.isNotBlank() }
             ?: githubUrlFromConfig
+    }
 
-    fun isUrlConfigured(): Boolean = getGithubUrl().isNotBlank()
+
+    fun isUrlConfigured(): Boolean {
+        return getGithubUrl().isNotBlank()
+    }
 
     fun executeInquiryDiffer(inquiry: GithubDifferInquiry): GithubCompareResult {
         return if (inquiry.base == EMPTY_SHA) {
             githubConnector.getCommit(inquiry.owner, inquiry.repo, inquiry.head)
         } else {
-            githubConnector.compare(inquiry.owner, inquiry.repo, "${inquiry.base}...${inquiry.head}")
+            val compareResult = githubConnector.compare(inquiry.owner, inquiry.repo, "${inquiry.base}...${inquiry.head}")
+            if (compareResult.files.isEmpty() && compareResult.errorMessage.isBlank()) {
+                log.warn("GitHub compare returned empty files (250-commit limit?), falling back to getCommit: head={}", inquiry.head)
+                githubConnector.getCommit(inquiry.owner, inquiry.repo, inquiry.head)
+            } else {
+                compareResult
+            }
         }
     }
 

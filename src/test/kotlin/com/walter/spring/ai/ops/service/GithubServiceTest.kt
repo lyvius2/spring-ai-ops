@@ -230,6 +230,45 @@ class GithubServiceTest {
     }
 
     @Test
+    @DisplayName("compare 결과 files가 비어있으면 getCommit으로 fallback (250 커밋 제한)")
+    fun givenCompareReturnsEmptyFiles_whenExecuteInquiryDiffer_thenFallsBackToGetCommit() {
+        // given
+        val service = buildService()
+        val inquiry = GithubDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val emptyCompareResult = GithubCompareResult(files = emptyList())
+        val fallbackResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified")))
+        given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(emptyCompareResult)
+        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(fallbackResult)
+
+        // when
+        val result = service.executeInquiryDiffer(inquiry)
+
+        // then
+        verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
+        verify(githubConnector).getCommit("owner", "repo", "head-sha")
+        assertThat(result.files).hasSize(1)
+        assertThat(result.files[0].filename).isEqualTo("src/Main.kt")
+    }
+
+    @Test
+    @DisplayName("compare 결과 files가 비어있어도 errorMessage가 있으면 fallback 하지 않음")
+    fun givenCompareReturnsErrorMessage_whenExecuteInquiryDiffer_thenDoesNotFallBack() {
+        // given
+        val service = buildService()
+        val inquiry = GithubDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val errorResult = GithubCompareResult(files = emptyList(), errorMessage = "Failed to connect to GitHub API.")
+        given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(errorResult)
+
+        // when
+        val result = service.executeInquiryDiffer(inquiry)
+
+        // then
+        verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
+        assertThat(result.errorMessage).isNotBlank()
+        assertThat(result.files).isEmpty()
+    }
+
+    @Test
     @DisplayName("compare 호출 시 base...head 형식으로 basehead 구성")
     fun givenInquiry_whenExecuteInquiryDiffer_thenCallsCompareWithCorrectBasehead() {
         // given
