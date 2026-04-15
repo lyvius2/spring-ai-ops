@@ -12,9 +12,7 @@ import org.springframework.scheduling.annotation.EnableAsync
 @EnableAsync
 class VirtualThreadConfig {
     @Bean(TaskExecutionAutoConfiguration.APPLICATION_TASK_EXECUTOR_BEAN_NAME)
-    fun applicationTaskExecutor(
-        @Value("\${app.async.virtual.max-concurrency:100}") maxConcurrency: Int,
-    ): AsyncTaskExecutor {
+    fun applicationTaskExecutor(@Value("\${app.async.virtual.max-concurrency:100}") maxConcurrency: Int): AsyncTaskExecutor {
         val executor = SimpleAsyncTaskExecutor("vt-")
         executor.setVirtualThreads(true)
         executor.concurrencyLimit = maxConcurrency
