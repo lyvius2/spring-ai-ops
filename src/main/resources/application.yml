@@ -55,6 +55,11 @@ analysis:
   maximum-view-count: 5     # Set the maximum number of views to retain per analysis (0 means unlimited) : Default is 5
   result-language: en       # Set the language for analysis results (e.g., en for English) : Default is en
 
+app:
+  async:
+    virtual:
+      max-concurrency: 100  # Max in-flight async analysis tasks when using virtual threads
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
