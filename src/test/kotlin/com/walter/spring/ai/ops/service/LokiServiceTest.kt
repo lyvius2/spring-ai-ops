@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.sun.net.httpserver.HttpServer
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LOKI_URL
 import com.walter.spring.ai.ops.connector.LokiConnector
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -42,6 +43,8 @@ class LokiServiceTest {
     @DisplayName("config에 URL이 설정된 경우 true 반환")
     fun isConfigured_returnsTrue_whenConfigUrlIsSet() {
         // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
         val lokiService = LokiService(redisTemplate, lokiConnector, "http://loki:3100")
 
         // when
@@ -56,7 +59,7 @@ class LokiServiceTest {
     fun isConfigured_returnsTrue_whenConfigIsBlankAndRedisHasUrl() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("lokiUrl")).thenReturn("http://loki:3100")
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn("http://loki:3100")
         val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
@@ -71,7 +74,7 @@ class LokiServiceTest {
     fun isConfigured_returnsFalse_whenBothConfigAndRedisAreBlank() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("lokiUrl")).thenReturn(null)
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
         val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
@@ -84,9 +87,11 @@ class LokiServiceTest {
     // ── getLokiUrl ────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("config에 URL이 있으면 config 값 반환")
-    fun getLokiUrl_returnsConfigUrl_whenConfigIsSet() {
+    @DisplayName("Redis에 URL이 없으면 config 값 반환")
+    fun getLokiUrl_returnsConfigUrl_whenRedisIsBlank() {
         // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
         val lokiService = LokiService(redisTemplate, lokiConnector, "http://loki:3100")
 
         // when
@@ -97,11 +102,26 @@ class LokiServiceTest {
     }
 
     @Test
-    @DisplayName("config가 비어있으면 Redis 값 반환")
+    @DisplayName("Redis와 config 둘 다 값이 있으면 Redis 값 우선 반환")
+    fun getLokiUrl_returnsRedisUrl_whenBothRedisAndConfigAreSet() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn("http://redis-loki:3100")
+        val lokiService = LokiService(redisTemplate, lokiConnector, "http://config-loki:3100")
+
+        // when
+        val result = lokiService.getLokiUrl()
+
+        // then
+        assertThat(result).isEqualTo("http://redis-loki:3100")
+    }
+
+    @Test
+    @DisplayName("Redis에 URL이 있으면 Redis 값 반환")
     fun getLokiUrl_returnsRedisUrl_whenConfigIsBlank() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("lokiUrl")).thenReturn("http://redis-loki:3100")
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn("http://redis-loki:3100")
         val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
@@ -116,7 +136,7 @@ class LokiServiceTest {
     fun getLokiUrl_returnsEmptyString_whenBothConfigAndRedisAreBlank() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("lokiUrl")).thenReturn(null)
+        `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
         val lokiService = LokiService(redisTemplate, lokiConnector, "")
 
         // when
@@ -147,7 +167,7 @@ class LokiServiceTest {
         lokiService.setLokiUrl("http://localhost:$port")
 
         // then
-        verify(valueOperations).set("lokiUrl", "http://localhost:$port")
+        verify(valueOperations).set(REDIS_KEY_LOKI_URL, "http://localhost:$port")
     }
 
     @Test

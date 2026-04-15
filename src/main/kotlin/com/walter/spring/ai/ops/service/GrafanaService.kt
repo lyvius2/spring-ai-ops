@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_FIRING_PREFIX
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
@@ -16,10 +17,6 @@ class GrafanaService(
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
 ) {
-    companion object {
-        const val APP_KEY_PREFIX = "firing:"
-    }
-
     fun convertLogInquiry(request: GrafanaAlertingRequest): LokiQueryInquiry {
         val alert = request.alerts.firstOrNull { it.isFiring() }
             ?: request.alerts.firstOrNull()
@@ -47,12 +44,12 @@ class GrafanaService(
     }
 
     fun saveAnalyzeFiringRecord(record: AnalyzeFiringRecord) {
-        val key = "${APP_KEY_PREFIX}${record.application}"
+        val key = "${REDIS_KEY_FIRING_PREFIX}${record.application}"
         redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 
     fun getAnalyzeFiringRecords(application: String): List<AnalyzeFiringRecord> {
-        val key = "${APP_KEY_PREFIX}${application}"
+        val key = "${REDIS_KEY_FIRING_PREFIX}${application}"
         return (redisTemplate.opsForList().range(key, 0, -1) ?: emptyList())
             .mapNotNull { runCatching { objectMapper.readValue(it.substringBeforeLast("::"), AnalyzeFiringRecord::class.java) }.getOrNull() }
             .sortedByDescending { it.occupiedAt }

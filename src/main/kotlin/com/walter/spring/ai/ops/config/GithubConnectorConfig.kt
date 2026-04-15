@@ -1,14 +1,26 @@
 package com.walter.spring.ai.ops.config
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
+import com.walter.spring.ai.ops.config.base.DynamicConnectorConfig
 import feign.RequestInterceptor
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.core.StringRedisTemplate
 
 class GithubConnectorConfig(
-    private val redisTemplate: StringRedisTemplate,
+    override val redisTemplate: StringRedisTemplate,
+    @Value("\${github.url:https://api.github.com}") override val configuredUrl: String,
     @Value("\${github.access-token:}") private val configuredToken: String,
-) {
+    @Value("\${github.api-version:}") private val apiVersion: String,
+) : DynamicConnectorConfig() {
+
+    companion object {
+        const val PLACEHOLDER_URL = "https://api.github.com"
+    }
+
+    override val placeholderUrl: String = PLACEHOLDER_URL
+    override val redisUrlKey: String = REDIS_KEY_GITHUB_URL
+
     @Bean
     fun githubAuthInterceptor(): RequestInterceptor = RequestInterceptor { template ->
         val token = redisTemplate.opsForValue().get("githubToken")
@@ -17,7 +29,7 @@ class GithubConnectorConfig(
         if (!token.isNullOrBlank()) {
             template.header("Authorization", "Bearer $token")
             template.header("Accept", "application/vnd.github+json")
-            template.header("X-GitHub-Api-Version", "2022-11-28")
+            template.header("X-GitHub-Api-Version", apiVersion)
         }
     }
 }

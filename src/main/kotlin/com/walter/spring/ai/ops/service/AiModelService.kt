@@ -1,7 +1,8 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
 import io.micrometer.observation.ObservationRegistry
-import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
 import org.springframework.ai.anthropic.AnthropicChatOptions
@@ -16,6 +17,8 @@ import org.springframework.ai.openai.OpenAiChatOptions
 import org.springframework.ai.openai.api.OpenAiApi
 import org.springframework.ai.retry.RetryUtils
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.context.event.ApplicationStartedEvent
+import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
@@ -34,10 +37,10 @@ class AiModelService(
     @Volatile
     private var chatModel: ChatModel? = null
 
-    @PostConstruct
+    @EventListener(ApplicationStartedEvent::class)
     fun initialize() {
-        val llm = redisTemplate.opsForValue().get("llm")
-        val apiKey = redisTemplate.opsForValue().get("llmKey")
+        val llm = redisTemplate.opsForValue().get(REDIS_KEY_LLM)
+        val apiKey = redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
         if (!llm.isNullOrBlank() && !apiKey.isNullOrBlank()) {
             runCatching { chatModel = buildChatModel(llm, apiKey) }
                 .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
@@ -55,8 +58,9 @@ class AiModelService(
         }
     }
 
-    fun isSelectProviderRequired(): Boolean =
-        openAiApiKey.isNotBlank() && anthropicApiKey.isNotBlank() && chatModel == null
+    fun isSelectProviderRequired(): Boolean {
+        return openAiApiKey.isNotBlank() && anthropicApiKey.isNotBlank() && chatModel == null
+    }
 
     fun configureFromYml(llm: String) {
         val apiKey = when (llm) {
@@ -64,21 +68,29 @@ class AiModelService(
             "anthropic" -> anthropicApiKey
             else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
         }
-        if (apiKey.isBlank()) throw IllegalStateException("API key for '$llm' is not configured in application.yml")
+        if (apiKey.isBlank()) {
+            throw IllegalStateException("API key for '$llm' is not configured in application.yml")
+        }
         configure(llm, apiKey)
     }
 
     fun configure(llm: String, apiKey: String) {
         chatModel = buildChatModel(llm, apiKey)
-        redisTemplate.opsForValue().set("llm", llm)
-        redisTemplate.opsForValue().set("llmKey", apiKey)
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM, llm)
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, apiKey)
     }
 
-    fun isConfigured(): Boolean = chatModel != null
+    fun isConfigured(): Boolean {
+        return chatModel != null
+    }
 
-    fun getCurrentLlm(): String? = redisTemplate.opsForValue().get("llm")
+    fun getCurrentLlm(): String? {
+        return redisTemplate.opsForValue().get(REDIS_KEY_LLM)
+    }
 
-    fun getChatModel(): ChatModel = chatModel ?: error("ChatModel is not configured")
+    fun getChatModel(): ChatModel {
+        return chatModel ?: error("ChatModel is not configured")
+    }
 
     private fun buildChatModel(llm: String, apiKey: String): ChatModel {
         val toolCallingManager = ToolCallingManager.builder().build()

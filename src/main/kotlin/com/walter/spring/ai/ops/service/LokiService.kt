@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LOKI_URL
 import com.walter.spring.ai.ops.connector.LokiConnector
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
@@ -19,15 +20,13 @@ class LokiService(
         return getLokiUrl().isNotBlank()
     }
 
-    fun getLokiUrl(): String {
-        return lokiUrlFromConfig.ifBlank {
-            redisTemplate.opsForValue().get("lokiUrl") ?: ""
-        }
-    }
+    fun getLokiUrl(): String =
+        redisTemplate.opsForValue().get(REDIS_KEY_LOKI_URL)?.takeIf { it.isNotBlank() }
+            ?: lokiUrlFromConfig
 
     fun setLokiUrl(lokiUrl: String) {
         URI(lokiUrl).verifyHttpConnection()
-        redisTemplate.opsForValue().set("lokiUrl", lokiUrl)
+        redisTemplate.opsForValue().set(REDIS_KEY_LOKI_URL, lokiUrl)
     }
 
     fun executeLogQuery(request: LokiQueryInquiry): LokiQueryResult {

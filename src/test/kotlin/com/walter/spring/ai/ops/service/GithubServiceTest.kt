@@ -1,6 +1,8 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
@@ -28,8 +30,10 @@ class GithubServiceTest {
     @Mock private lateinit var valueOperations: ValueOperations<String, String>
     @Mock private lateinit var listOperations: ListOperations<String, String>
 
-    private fun buildService(configuredToken: String = "") =
-        GithubService(redisTemplate, githubConnector, objectMapper, 120L, 5L, configuredToken)
+    private fun buildService(
+        configuredToken: String = "",
+        githubUrlFromConfig: String = "https://api.github.com",
+    ) = GithubService(redisTemplate, githubConnector, objectMapper, 120L, 5L, configuredToken, githubUrlFromConfig)
 
     // ── getGithubToken ────────────────────────────────────────────────────────
 
@@ -39,7 +43,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(GithubService.GITHUB_TOKEN_KEY)).willReturn("redis-token")
+        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn("redis-token")
 
         // when
         val result = service.getGithubToken()
@@ -54,7 +58,7 @@ class GithubServiceTest {
         // given
         val service = buildService(configuredToken = "config-token")
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(GithubService.GITHUB_TOKEN_KEY)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
 
         // when
         val result = service.getGithubToken()
@@ -69,7 +73,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(GithubService.GITHUB_TOKEN_KEY)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
 
         // when
         val result = service.getGithubToken()
@@ -91,7 +95,7 @@ class GithubServiceTest {
         service.setGithubToken("my-token")
 
         // then
-        verify(valueOperations).set(GithubService.GITHUB_TOKEN_KEY, "my-token")
+        verify(valueOperations).set(REDIS_KEY_GIT_REMOTE_TOKEN, "my-token")
     }
 
     // ── isTokenConfigured ─────────────────────────────────────────────────────
@@ -102,7 +106,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(GithubService.GITHUB_TOKEN_KEY)).willReturn("some-token")
+        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn("some-token")
 
         // when
         val result = service.isTokenConfigured()
@@ -117,13 +121,76 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(GithubService.GITHUB_TOKEN_KEY)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
 
         // when
         val result = service.isTokenConfigured()
 
         // then
         assertThat(result).isFalse()
+    }
+
+    // ── getGithubUrl ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Redis에 URL이 있으면 Redis 값 반환 (Redis 우선)")
+    fun givenUrlInRedis_whenGetGithubUrl_thenReturnsRedisUrl() {
+        // given
+        val service = buildService(githubUrlFromConfig = "https://api.github.com")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITHUB_URL)).willReturn("https://github.example.com")
+
+        // when
+        val result = service.getGithubUrl()
+
+        // then
+        assertThat(result).isEqualTo("https://github.example.com")
+    }
+
+    @Test
+    @DisplayName("Redis에 URL이 없으면 property 설정값 반환")
+    fun givenNoRedisUrl_whenGetGithubUrl_thenReturnsConfigUrl() {
+        // given
+        val service = buildService(githubUrlFromConfig = "https://api.github.com")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITHUB_URL)).willReturn(null)
+
+        // when
+        val result = service.getGithubUrl()
+
+        // then
+        assertThat(result).isEqualTo("https://api.github.com")
+    }
+
+    @Test
+    @DisplayName("Redis와 property 둘 다 값이 있으면 Redis 값이 우선")
+    fun givenBothRedisAndConfigUrl_whenGetGithubUrl_thenRedisHasPriority() {
+        // given
+        val service = buildService(githubUrlFromConfig = "https://api.github.com")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITHUB_URL)).willReturn("https://github.enterprise.com")
+
+        // when
+        val result = service.getGithubUrl()
+
+        // then
+        assertThat(result).isEqualTo("https://github.enterprise.com")
+    }
+
+    // ── setGithubUrl ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("setGithubUrl 호출 시 Redis에 저장")
+    fun givenValidUrl_whenSetGithubUrl_thenSavesToRedis() {
+        // given
+        val service = buildService()
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+
+        // when
+        service.setGithubUrl("https://github.enterprise.com")
+
+        // then
+        verify(valueOperations).set(REDIS_KEY_GITHUB_URL, "https://github.enterprise.com")
     }
 
     // ── executeInquiryDiffer ──────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -28,7 +29,7 @@ class ApplicationServiceTest {
     fun getApps_returnsList_whenRedisHasApps() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1", "app2"))
+        `when`(listOperations.range(REDIS_KEY_APPLICATIONS, 0, -1)).thenReturn(listOf("app1", "app2"))
         val applicationService = ApplicationService(redisTemplate)
 
         // when
@@ -43,7 +44,7 @@ class ApplicationServiceTest {
     fun getApps_returnsEmptyList_whenRedisReturnsNull() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("apps", 0, -1)).thenReturn(null)
+        `when`(listOperations.range(REDIS_KEY_APPLICATIONS, 0, -1)).thenReturn(null)
         val applicationService = ApplicationService(redisTemplate)
 
         // when
@@ -60,14 +61,14 @@ class ApplicationServiceTest {
     fun addApp_addsToRedis_whenListIsEmpty() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("apps", 0, -1)).thenReturn(emptyList())
+        `when`(listOperations.range(REDIS_KEY_APPLICATIONS, 0, -1)).thenReturn(emptyList())
         val applicationService = ApplicationService(redisTemplate)
 
         // when
         applicationService.addApp("app1")
 
         // then
-        verify(listOperations).rightPush("apps", "app1")
+        verify(listOperations).rightPush(REDIS_KEY_APPLICATIONS, "app1")
     }
 
     @Test
@@ -75,14 +76,14 @@ class ApplicationServiceTest {
     fun addApp_addsToRedis_whenAppIsNew() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
+        `when`(listOperations.range(REDIS_KEY_APPLICATIONS, 0, -1)).thenReturn(listOf("app1"))
         val applicationService = ApplicationService(redisTemplate)
 
         // when
         applicationService.addApp("app2")
 
         // then
-        verify(listOperations).rightPush("apps", "app2")
+        verify(listOperations).rightPush(REDIS_KEY_APPLICATIONS, "app2")
     }
 
     @Test
@@ -90,7 +91,7 @@ class ApplicationServiceTest {
     fun addApp_completesWithoutException_whenAppAlreadyExists() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
+        `when`(listOperations.range(REDIS_KEY_APPLICATIONS, 0, -1)).thenReturn(listOf("app1"))
         val applicationService = ApplicationService(redisTemplate)
 
         // when & then (예외 발생 시 테스트 실패)
@@ -102,14 +103,14 @@ class ApplicationServiceTest {
     fun addApp_doesNotPushToRedis_whenAppAlreadyExists() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("apps", 0, -1)).thenReturn(listOf("app1"))
+        `when`(listOperations.range(REDIS_KEY_APPLICATIONS, 0, -1)).thenReturn(listOf("app1"))
         val applicationService = ApplicationService(redisTemplate)
 
         // when
         applicationService.addApp("app1")
 
         // then
-        verify(listOperations).range("apps", 0, -1)
+        verify(listOperations).range(REDIS_KEY_APPLICATIONS, 0, -1)
         verifyNoMoreInteractions(listOperations)
     }
 
@@ -126,7 +127,7 @@ class ApplicationServiceTest {
         applicationService.removeApp("app1")
 
         // then
-        verify(listOperations).remove("apps", 0, "app1")
+        verify(listOperations).remove(REDIS_KEY_APPLICATIONS, 0, "app1")
     }
 }
 

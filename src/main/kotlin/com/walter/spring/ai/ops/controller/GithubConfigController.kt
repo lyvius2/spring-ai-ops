@@ -3,6 +3,9 @@ package com.walter.spring.ai.ops.controller
 import com.walter.spring.ai.ops.controller.dto.GithubTokenRequest
 import com.walter.spring.ai.ops.controller.dto.GithubTokenSaveResponse
 import com.walter.spring.ai.ops.controller.dto.GithubTokenStatusResponse
+import com.walter.spring.ai.ops.controller.dto.GithubUrlRequest
+import com.walter.spring.ai.ops.controller.dto.GithubUrlSaveResponse
+import com.walter.spring.ai.ops.controller.dto.GithubUrlStatusResponse
 import com.walter.spring.ai.ops.service.GithubService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -35,5 +38,24 @@ class GithubConfigController(
         }
         githubService.setGithubToken(request.token)
         return GithubTokenSaveResponse.success()
+    }
+
+    @Operation(summary = "Get GitHub base URL configuration status")
+    @GetMapping("/url/status")
+    fun urlStatus(): GithubUrlStatusResponse {
+        return GithubUrlStatusResponse(githubService.isUrlConfigured(), githubService.getGithubUrl())
+    }
+
+    @Operation(
+        summary = "Save GitHub base URL",
+        description = "Persists the URL in Redis. Redis value takes priority over the property-configured URL."
+    )
+    @PostMapping("/url")
+    fun saveUrl(@RequestBody request: GithubUrlRequest): GithubUrlSaveResponse {
+        if (request.url.isBlank()) {
+            return GithubUrlSaveResponse.failure("URL must not be blank.")
+        }
+        githubService.setGithubUrl(request.url)
+        return GithubUrlSaveResponse.success()
     }
 }

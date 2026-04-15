@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_FIRING_PREFIX
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlert
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
@@ -239,7 +240,7 @@ class GrafanaServiceTest {
         val json = """{"application":"my-app"}"""
         val record = createRecord("my-app")
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:my-app", 0, -1)).thenReturn(listOf(json))
+        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}my-app", 0, -1)).thenReturn(listOf(json))
         `when`(objectMapper.readValue(json, AnalyzeFiringRecord::class.java)).thenReturn(record)
 
         // when
@@ -255,7 +256,7 @@ class GrafanaServiceTest {
     fun getAnalyzeFiringRecords_returnsEmptyList_whenRedisReturnsNull() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:my-app", 0, -1)).thenReturn(null)
+        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}my-app", 0, -1)).thenReturn(null)
 
         // when
         val result = grafanaService.getAnalyzeFiringRecords("my-app")
@@ -272,7 +273,7 @@ class GrafanaServiceTest {
         val invalidJson = """{"invalid":true}"""
         val record = createRecord()
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:my-app", 0, -1)).thenReturn(listOf(validJson, invalidJson))
+        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}my-app", 0, -1)).thenReturn(listOf(validJson, invalidJson))
         `when`(objectMapper.readValue(validJson, AnalyzeFiringRecord::class.java)).thenReturn(record)
         `when`(objectMapper.readValue(invalidJson, AnalyzeFiringRecord::class.java)).thenThrow(RuntimeException("Parse error"))
 
@@ -288,12 +289,12 @@ class GrafanaServiceTest {
     fun getAnalyzeFiringRecords_queriesRedisWithCorrectKeyAndRange() {
         // given
         `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("firing:payment-service", 0, -1)).thenReturn(emptyList())
+        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}payment-service", 0, -1)).thenReturn(emptyList())
 
         // when
         grafanaService.getAnalyzeFiringRecords("payment-service")
 
         // then
-        verify(listOperations).range("firing:payment-service", 0, -1)
+        verify(listOperations).range("${REDIS_KEY_FIRING_PREFIX}payment-service", 0, -1)
     }
 }

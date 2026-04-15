@@ -1,6 +1,9 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_PREFIX
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
@@ -18,19 +21,18 @@ class GithubService(
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
     @Value("\${github.access-token:}") private val configuredToken: String,
+    @Value("\${github.url:https://api.github.com}") private val githubUrlFromConfig: String,
 ) {
     companion object {
-        const val GITHUB_TOKEN_KEY = "githubToken"
-        const val COMMIT_KEY_PREFIX = "commit:"
         const val EMPTY_SHA = "0000000000000000000000000000000000000000"
     }
 
     fun setGithubToken(token: String) {
-        redisTemplate.opsForValue().set(GITHUB_TOKEN_KEY, token)
+        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, token)
     }
 
     fun getGithubToken(): String? {
-        val redisToken = redisTemplate.opsForValue().get(GITHUB_TOKEN_KEY)
+        val redisToken = redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE_TOKEN)
         if (!redisToken.isNullOrBlank()) {
             return redisToken
         }
@@ -42,6 +44,16 @@ class GithubService(
 
     fun isTokenConfigured(): Boolean = !getGithubToken().isNullOrBlank()
 
+    fun setGithubUrl(url: String) {
+        redisTemplate.opsForValue().set(REDIS_KEY_GITHUB_URL, url)
+    }
+
+    fun getGithubUrl(): String =
+        redisTemplate.opsForValue().get(REDIS_KEY_GITHUB_URL)?.takeIf { it.isNotBlank() }
+            ?: githubUrlFromConfig
+
+    fun isUrlConfigured(): Boolean = getGithubUrl().isNotBlank()
+
     fun executeInquiryDiffer(inquiry: GithubDifferInquiry): GithubCompareResult {
         return if (inquiry.base == EMPTY_SHA) {
             githubConnector.getCommit(inquiry.owner, inquiry.repo, inquiry.head)
@@ -51,12 +63,12 @@ class GithubService(
     }
 
     fun saveCodeReviewRecord(record: CodeReviewRecord) {
-        val key = "${COMMIT_KEY_PREFIX}${record.application}"
+        val key = "${REDIS_KEY_COMMIT_PREFIX}${record.application}"
         redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 
     fun getCodeReviewRecords(application: String): List<CodeReviewRecord> {
-        val key = "${COMMIT_KEY_PREFIX}${application}"
+        val key = "${REDIS_KEY_COMMIT_PREFIX}${application}"
         return (redisTemplate.opsForList().range(key, 0, -1) ?: emptyList())
             .mapNotNull { runCatching { objectMapper.readValue(it.substringBeforeLast("::"), CodeReviewRecord::class.java) }.getOrNull() }
             .sortedByDescending { it.pushedAt }

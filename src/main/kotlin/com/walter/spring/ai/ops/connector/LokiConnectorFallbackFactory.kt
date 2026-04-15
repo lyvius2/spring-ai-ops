@@ -13,9 +13,7 @@ class LokiConnectorFallbackFactory : FallbackFactory<LokiConnector> {
         return object : LokiConnector {
             override fun queryRange(inquiry: LokiQueryInquiry): LokiQueryResult {
                 log.error("Loki query failed: {}", cause.message, cause)
-                return LokiQueryResult(
-                    errorMessage = cause.message ?: "Failed to connect to Loki.",
-                )
+                return LokiQueryResult(errorMessage = cause.message ?: "Failed to connect to Loki.")
             }
         }
     }

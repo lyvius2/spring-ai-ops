@@ -242,12 +242,15 @@ loki:
 github:
   url: ${GITHUB_URL:https://api.github.com}
   access-token: ${GITHUB_ACCESS_TOKEN:}  # GitHub personal access token
+  api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API version header
 
 analysis:
   data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
   maximum-view-count: 5      # Max records shown per application (0 = unlimited)
   result-language: en        # Language of LLM analysis output (e.g. ko, ja, en)
 ```
+
+If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
 
 **LLM key auto-configuration behaviour**
 
@@ -394,6 +397,9 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-15 | Abstracted external connector integration with a shared dynamic URL resolution base for GitHub and Loki |
+| 2026-04-15 | Fixed embedded Redis startup failure on macOS ARM64 — requires `brew install openssl@3` due to dynamic link dependency in the bundled binary |
+| 2026-04-15 | Replaced `@PostConstruct` with `@EventListener(ApplicationReadyEvent::class)` in `AiModelService` to prevent Redis connection attempts before embedded Redis has fully started |
 | 2026-04-13 | Added Status column to Firing List — automatically extracts Exception/Error info from logs |
 
 ---
@@ -554,13 +560,17 @@ loki:
   url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100) — 인증 미지원
 
 github:
-  access-token: ${GITHUB_ACCESS_TOKEN:}  # GitHub 액세스 토큰
+  url: ${GITHUB_URL:https://api.github.com}      # GitHub API URL
+  access-token: ${GITHUB_ACCESS_TOKEN:}          # GitHub 액세스 토큰
+  api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API 버전 헤더
 
 analysis:
   data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
   maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
-  result-language: ko        # LLM 분석 결과 언어 (ko, en, ja 등)
+  result-language: en        # LLM 분석 결과 언어 (ko, en, ja 등)
 ```
+
+동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
 
 #### 실행
 

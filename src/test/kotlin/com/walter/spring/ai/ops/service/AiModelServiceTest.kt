@@ -1,5 +1,7 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubFile
 import org.assertj.core.api.Assertions.assertThat
@@ -48,8 +50,8 @@ class AiModelServiceTest {
     @Test
     @DisplayName("Redis에 llm과 llmKey가 모두 있으면 initialize 후 ChatModel이 구성됨")
     fun initialize_configuresChatModel_whenRedisHasBothKeys() {
-        given(valueOps.get("llm")).willReturn("openai")
-        given(valueOps.get("llmKey")).willReturn("sk-fake-key")
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn("openai")
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn("sk-fake-key")
 
         aiModelService.initialize()
 
@@ -59,7 +61,7 @@ class AiModelServiceTest {
     @Test
     @DisplayName("Redis에 llm 키가 없으면 initialize 후에도 ChatModel이 구성되지 않음")
     fun initialize_doesNotConfigureChatModel_whenLlmKeyMissing() {
-        given(valueOps.get("llm")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn(null)
 
         aiModelService.initialize()
 
@@ -69,8 +71,8 @@ class AiModelServiceTest {
     @Test
     @DisplayName("Redis에 llmKey가 없으면 initialize 후에도 ChatModel이 구성되지 않음")
     fun initialize_doesNotConfigureChatModel_whenApiKeyMissing() {
-        given(valueOps.get("llm")).willReturn("openai")
-        given(valueOps.get("llmKey")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn("openai")
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
 
         aiModelService.initialize()
 
@@ -85,8 +87,8 @@ class AiModelServiceTest {
         aiModelService.configure("openai", "sk-fake-key")
 
         assertThat(aiModelService.isConfigured()).isTrue()
-        verify(valueOps).set("llm", "openai")
-        verify(valueOps).set("llmKey", "sk-fake-key")
+        verify(valueOps).set(REDIS_KEY_LLM, "openai")
+        verify(valueOps).set(REDIS_KEY_LLM_API_KEY, "sk-fake-key")
     }
 
     @Test
@@ -95,8 +97,8 @@ class AiModelServiceTest {
         aiModelService.configure("anthropic", "sk-ant-fake-key")
 
         assertThat(aiModelService.isConfigured()).isTrue()
-        verify(valueOps).set("llm", "anthropic")
-        verify(valueOps).set("llmKey", "sk-ant-fake-key")
+        verify(valueOps).set(REDIS_KEY_LLM, "anthropic")
+        verify(valueOps).set(REDIS_KEY_LLM_API_KEY, "sk-ant-fake-key")
     }
 
     @Test
@@ -128,7 +130,7 @@ class AiModelServiceTest {
     @Test
     @DisplayName("Redis에 llm 값이 있으면 해당 값 반환")
     fun getCurrentLlm_returnsLlmValue_whenPresentInRedis() {
-        given(valueOps.get("llm")).willReturn("openai")
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn("openai")
 
         assertThat(aiModelService.getCurrentLlm()).isEqualTo("openai")
     }
@@ -136,7 +138,7 @@ class AiModelServiceTest {
     @Test
     @DisplayName("Redis에 llm 값이 없으면 null 반환")
     fun getCurrentLlm_returnsNull_whenAbsentInRedis() {
-        given(valueOps.get("llm")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn(null)
 
         assertThat(aiModelService.getCurrentLlm()).isNull()
     }
@@ -236,8 +238,8 @@ class AiModelServiceTest {
     @Test
     @DisplayName("OpenAI yml 키만 있으면 initialize 시 OpenAI로 자동 설정됨")
     fun initialize_autoConfiguresOpenAi_whenOnlyOpenAiYmlKeyPresent() {
-        given(valueOps.get("llm")).willReturn(null)
-        given(valueOps.get("llmKey")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
         val service = buildService(openAiApiKey = "sk-yml-key")
 
         service.initialize()
@@ -248,8 +250,8 @@ class AiModelServiceTest {
     @Test
     @DisplayName("Anthropic yml 키만 있으면 initialize 시 Anthropic으로 자동 설정됨")
     fun initialize_autoConfiguresAnthropic_whenOnlyAnthropicYmlKeyPresent() {
-        given(valueOps.get("llm")).willReturn(null)
-        given(valueOps.get("llmKey")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
         val service = buildService(anthropicApiKey = "sk-ant-yml-key")
 
         service.initialize()
@@ -260,8 +262,8 @@ class AiModelServiceTest {
     @Test
     @DisplayName("두 yml 키가 모두 있으면 initialize 시 자동 설정되지 않음 (Provider 선택 필요)")
     fun initialize_doesNotAutoConfigure_whenBothYmlKeysPresent() {
-        given(valueOps.get("llm")).willReturn(null)
-        given(valueOps.get("llmKey")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
         val service = buildService(openAiApiKey = "sk-openai", anthropicApiKey = "sk-ant")
 
         service.initialize()
@@ -274,8 +276,8 @@ class AiModelServiceTest {
     @Test
     @DisplayName("두 yml 키 모두 있고 ChatModel 미설정이면 isSelectProviderRequired는 true")
     fun isSelectProviderRequired_returnsTrue_whenBothYmlKeysAndNotConfigured() {
-        given(valueOps.get("llm")).willReturn(null)
-        given(valueOps.get("llmKey")).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM)).willReturn(null)
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
         val service = buildService(openAiApiKey = "sk-openai", anthropicApiKey = "sk-ant")
 
         assertThat(service.isSelectProviderRequired()).isTrue()

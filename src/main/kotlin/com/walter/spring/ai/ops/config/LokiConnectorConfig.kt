@@ -1,32 +1,19 @@
 package com.walter.spring.ai.ops.config
 
-import feign.Client
-import feign.Request
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LOKI_URL
+import com.walter.spring.ai.ops.config.base.DynamicConnectorConfig
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.core.StringRedisTemplate
 
 class LokiConnectorConfig(
-    private val redisTemplate: StringRedisTemplate,
-    @Value("\${loki.url:}") private val lokiUrlFromConfig: String,
-) {
+    override val redisTemplate: StringRedisTemplate,
+    @Value("\${loki.url:}") override val configuredUrl: String,
+) : DynamicConnectorConfig() {
+
     companion object {
-        const val PLACEHOLDER_URL = "http://loki-placeholder"
+        const val PLACEHOLDER_URL = "http://127.0.0.1.3100"
     }
 
-    @Bean
-    fun lokiClient(): Client = Client { request, options ->
-        val lokiUrl = lokiUrlFromConfig.ifBlank {
-            redisTemplate.opsForValue().get("lokiUrl") ?: ""
-        }
-        val resolvedRequest = Request.create(
-            request.httpMethod(),
-            request.url().replace(PLACEHOLDER_URL, lokiUrl),
-            request.headers(),
-            request.body(),
-            request.charset(),
-            request.requestTemplate(),
-        )
-        Client.Default(null, null).execute(resolvedRequest, options)
-    }
+    override val placeholderUrl: String = PLACEHOLDER_URL
+    override val redisUrlKey: String = REDIS_KEY_LOKI_URL
 }
