@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
+import com.walter.spring.ai.ops.util.CryptoProvider
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service
 @Service
 class AiModelService(
     private val redisTemplate: StringRedisTemplate,
+    private val cryptoProvider: CryptoProvider,
     @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
@@ -41,6 +43,7 @@ class AiModelService(
     fun initialize() {
         val llm = redisTemplate.opsForValue().get(REDIS_KEY_LLM)
         val apiKey = redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
+            ?.let { cryptoProvider.decrypt(it) }
         if (!llm.isNullOrBlank() && !apiKey.isNullOrBlank()) {
             runCatching { chatModel = buildChatModel(llm, apiKey) }
                 .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
@@ -77,7 +80,7 @@ class AiModelService(
     fun configure(llm: String, apiKey: String) {
         chatModel = buildChatModel(llm, apiKey)
         redisTemplate.opsForValue().set(REDIS_KEY_LLM, llm)
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, apiKey)
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, cryptoProvider.encrypt(apiKey))
     }
 
     fun isConfigured(): Boolean {

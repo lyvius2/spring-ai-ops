@@ -17,6 +17,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Configuration](#configuration)
+  - [Sensitive Value Encryption](#sensitive-value-encryption)
   - [Running](#running)
   - [Setting Up Grafana](#setting-up-grafana)
   - [Setting Up GitHub Webhooks](#setting-up-github-webhooks)
@@ -251,6 +252,31 @@ analysis:
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
+
+### Sensitive Value Encryption
+
+API keys and access tokens saved to Redis are encrypted at rest using **AES-256-GCM**.
+
+To enable encryption, set the secret key via environment variable or `application.yml`:
+
+```bash
+# Environment variable (recommended for production)
+export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
+```
+
+```yaml
+# application.yml
+crypto:
+  secret-key: ${CRYPTO_SECRET_KEY:}
+```
+
+| Situation | Behaviour |
+|---|---|
+| `crypto.secret-key` is set | All values written to Redis are AES-256-GCM encrypted |
+| `crypto.secret-key` is blank | Values are stored as plaintext — a warning is logged on startup |
+| Secret key changes after values are stored | Existing encrypted values cannot be decrypted; re-enter API keys via the UI to re-encrypt them with the new key |
+
+> **Production recommendation**: Always set `CRYPTO_SECRET_KEY` in production environments. Without it, API keys stored in Redis remain in plaintext.
 
 **LLM key auto-configuration behaviour**
 
@@ -571,6 +597,31 @@ analysis:
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
+
+#### 민감 정보 암호화
+
+Redis에 저장되는 API 키와 액세스 토큰은 **AES-256-GCM** 방식으로 암호화되어 보관됩니다.
+
+암호화를 활성화하려면 환경 변수 또는 `application.yml`에 시크릿 키를 설정합니다:
+
+```bash
+# 환경 변수 (운영 환경 권장)
+export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
+```
+
+```yaml
+# application.yml
+crypto:
+  secret-key: ${CRYPTO_SECRET_KEY:}
+```
+
+| 상황 | 동작 |
+|---|---|
+| `crypto.secret-key` 설정됨 | Redis에 저장되는 모든 민감 값이 AES-256-GCM으로 암호화됨 |
+| `crypto.secret-key` 미설정 | 값이 평문으로 저장됨 — 애플리케이션 기동 시 경고 로그 출력 |
+| 키를 변경한 경우 | 기존 암호화 값 복호화 불가 — UI에서 API 키를 재입력하면 새 키로 재암호화됨 |
+
+> **운영 환경 권고사항**: 반드시 `CRYPTO_SECRET_KEY`를 설정하세요. 미설정 시 Redis에 저장된 API 키가 평문으로 보관됩니다.
 
 #### 실행
 

@@ -8,32 +8,45 @@ import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubFile
 import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.util.CryptoProvider
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.verify
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
 import org.springframework.data.redis.core.ListOperations
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class GithubServiceTest {
 
     @Mock private lateinit var redisTemplate: StringRedisTemplate
     @Mock private lateinit var githubConnector: GithubConnector
     @Mock private lateinit var objectMapper: ObjectMapper
+    @Mock private lateinit var cryptoProvider: CryptoProvider
     @Mock private lateinit var valueOperations: ValueOperations<String, String>
     @Mock private lateinit var listOperations: ListOperations<String, String>
+
+    @BeforeEach
+    fun setUp() {
+        given(cryptoProvider.encrypt(anyString())).willAnswer { it.getArgument(0) }
+        given(cryptoProvider.decrypt(anyString())).willAnswer { it.getArgument(0) }
+    }
 
     private fun buildService(
         configuredToken: String = "",
         githubUrlFromConfig: String = "https://api.github.com",
-    ) = GithubService(redisTemplate, githubConnector, objectMapper, 120L, 5L, configuredToken, githubUrlFromConfig)
+    ) = GithubService(redisTemplate, githubConnector, objectMapper, cryptoProvider, 120L, 5L, configuredToken, githubUrlFromConfig)
 
     // ── getGithubToken ────────────────────────────────────────────────────────
 

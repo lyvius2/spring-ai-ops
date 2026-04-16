@@ -50,6 +50,9 @@ github:
   access-token: ${GITHUB_ACCESS_TOKEN:}         # Set your GitHub access token for authentication
   api-version: ${GITHUB_API_VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28) : Default is 2022-11-28
 
+crypto:
+  secret-key: ${CRYPTO_SECRET_KEY:}  # AES-256-GCM key for encrypting Redis-stored credentials. Must be set in production.
+
 analysis:
   data-retention-hours: 120 # Set the number of hours to retain analysis data : Default is 120 (5 days)
   maximum-view-count: 5     # Set the maximum number of views to retain per analysis (0 means unlimited) : Default is 5

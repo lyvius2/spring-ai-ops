@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.util.CryptoProvider
 import com.walter.spring.ai.ops.util.zSetPushWithTtl
 import com.walter.spring.ai.ops.util.zSetRangeAllDesc
 import org.slf4j.LoggerFactory
@@ -20,6 +21,7 @@ class GithubService(
     private val redisTemplate: StringRedisTemplate,
     private val githubConnector: GithubConnector,
     private val objectMapper: ObjectMapper,
+    private val cryptoProvider: CryptoProvider,
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
     @Value("\${github.access-token:}") private val configuredToken: String,
@@ -32,11 +34,12 @@ class GithubService(
     }
 
     fun setGithubToken(token: String) {
-        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, token)
+        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, cryptoProvider.encrypt(token))
     }
 
     fun getGithubToken(): String? {
         val redisToken = redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE_TOKEN)
+            ?.let { cryptoProvider.decrypt(it) }
         if (!redisToken.isNullOrBlank()) {
             return redisToken
         }
