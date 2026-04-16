@@ -10,23 +10,12 @@ fun StringRedisTemplate.listPushIfAbsent(key: String, value: String) {
     }
 }
 
-fun StringRedisTemplate.listPushWithTtl(key: String, value: String, retentionHours: Long) {
+fun StringRedisTemplate.zSetPushWithTtl(key: String, value: String, retentionHours: Long) {
     val now = Instant.now()
-    val cutoff = now.minusSeconds(retentionHours * 3600)
-
-    val existing = opsForList().range(key, 0, -1) ?: emptyList()
-
-    existing.forEach { element ->
-        val insertedAt = element.toInsertedAt() ?: return@forEach
-        if (insertedAt.isBefore(cutoff)) {
-            opsForList().remove(key, 0, element)
-        }
-    }
-
-    opsForList().rightPush(key, "${value}::${now.toEpochMilli()}")
+    val cutoff = now.minusSeconds(retentionHours * 3600).toEpochMilli().toDouble()
+    opsForZSet().removeRangeByScore(key, Double.NEGATIVE_INFINITY, cutoff)
+    opsForZSet().add(key, value, now.toEpochMilli().toDouble())
 }
 
-private fun String.toInsertedAt(): Instant? {
-    val epochMillis = substringAfterLast("::").toLongOrNull() ?: return null
-    return Instant.ofEpochMilli(epochMillis)
-}
+fun StringRedisTemplate.zSetRangeAllDesc(key: String): List<String> =
+    opsForZSet().reverseRange(key, 0, -1)?.toList() ?: emptyList()

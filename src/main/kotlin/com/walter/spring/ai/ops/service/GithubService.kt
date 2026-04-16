@@ -8,7 +8,8 @@ import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
-import com.walter.spring.ai.ops.util.listPushWithTtl
+import com.walter.spring.ai.ops.util.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.zSetRangeAllDesc
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -79,14 +80,13 @@ class GithubService(
 
     fun saveCodeReviewRecord(record: CodeReviewRecord) {
         val key = "${REDIS_KEY_COMMIT_PREFIX}${record.application}"
-        redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
+        redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 
     fun getCodeReviewRecords(application: String): List<CodeReviewRecord> {
         val key = "${REDIS_KEY_COMMIT_PREFIX}${application}"
-        return (redisTemplate.opsForList().range(key, 0, -1) ?: emptyList())
-            .mapNotNull { runCatching { objectMapper.readValue(it.substringBeforeLast("::"), CodeReviewRecord::class.java) }.getOrNull() }
-            .sortedByDescending { it.pushedAt }
+        return redisTemplate.zSetRangeAllDesc(key)
+            .mapNotNull { runCatching { objectMapper.readValue(it, CodeReviewRecord::class.java) }.getOrNull() }
             .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 }
