@@ -9,18 +9,14 @@ class ApplicationService(
     private val redisTemplate: StringRedisTemplate
 ) {
     fun getApps(): List<String> {
-        return redisTemplate.opsForList().range(REDIS_KEY_APPLICATIONS, 0, -1) ?: emptyList()
+        return redisTemplate.opsForSet().members(REDIS_KEY_APPLICATIONS)?.toList() ?: emptyList()
     }
 
     fun addApp(name: String) {
-        val existing = redisTemplate.opsForList().range(REDIS_KEY_APPLICATIONS, 0, -1) ?: emptyList()
-        if (name in existing) {
-            return
-        }
-        redisTemplate.opsForList().rightPush(REDIS_KEY_APPLICATIONS, name)
+        redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
     }
 
     fun removeApp(name: String) {
-        redisTemplate.opsForList().remove(REDIS_KEY_APPLICATIONS, 0, name)
+        redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, name)
     }
 }
