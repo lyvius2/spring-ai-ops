@@ -61,7 +61,7 @@ analysis:
 app:
   async:
     virtual:
-      max-concurrency: 100  # Max in-flight async analysis tasks when using virtual threads
+      llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
 
 springdoc:
   swagger-ui:

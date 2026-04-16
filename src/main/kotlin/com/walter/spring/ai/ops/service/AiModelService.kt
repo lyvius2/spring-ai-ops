@@ -21,12 +21,15 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import java.util.concurrent.Semaphore
 
 @Service
 class AiModelService(
     private val redisTemplate: StringRedisTemplate,
     private val cryptoProvider: CryptoProvider,
+    @Qualifier("llmRateLimiter") private val llmRateLimiter: Semaphore,
     @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
@@ -137,8 +140,13 @@ class AiModelService(
                 }
             }
         )
-        val response = model.call(Prompt(listOf(systemMessage, userMessage)))
-        return response.result.output.text ?: ""
+        llmRateLimiter.acquire()
+        return try {
+            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
+            response.result.output.text ?: ""
+        } finally {
+            llmRateLimiter.release()
+        }
     }
 
     fun executeAnalyzeCodeDiffer(codeReviewSection: String): String {
@@ -162,7 +170,12 @@ class AiModelService(
                 }
             }
         )
-        val response = model.call(Prompt(listOf(systemMessage, userMessage)))
-        return response.result.output.text ?: ""
+        llmRateLimiter.acquire()
+        return try {
+            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
+            response.result.output.text ?: ""
+        } finally {
+            llmRateLimiter.release()
+        }
     }
 }

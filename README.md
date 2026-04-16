@@ -49,7 +49,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
-| **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads |
+| **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 10 concurrent) |
 
 ---
 
@@ -206,12 +206,16 @@ POST /webhook/github[/{application}]
 | Real-Time | Spring WebSocket (STOMP over SockJS) |
 | Templating | Mustache |
 | API Docs | springdoc-openapi 2.8.3 (Swagger UI) |
-| Async | Java 21 Virtual Threads (`CompletableFuture` + `VirtualThreadTaskExecutor`) |
+| Async | Java 21 Virtual Threads (`CompletableFuture` + unlimited `SimpleAsyncTaskExecutor`) + Semaphore-based LLM rate limiter |
 | Build | Gradle Kotlin DSL |
 
 **Design note — Spring AI AutoConfiguration disabled**
 
 All Spring AI `AutoConfiguration` classes are explicitly excluded in `application.yml`. `AiModelService` builds `OpenAiChatModel` / `AnthropicChatModel` directly using `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP`. This gives full control over model instantiation and allows hot-swapping the LLM provider at runtime.
+
+**Design note — Virtual Thread concurrency**
+
+The `SimpleAsyncTaskExecutor` runs with **no concurrency limit** (`-1`). Virtual Threads release their OS carrier thread on blocking I/O, so an artificial cap would only trigger `ConcurrencyThrottledException` without providing any backpressure benefit. Instead, a `Semaphore` (`app.async.virtual.llm-max-concurrency`, default `10`) guards only the actual LLM API call inside `AiModelService`. Excess requests wait in a fair queue rather than failing, and the virtual-thread executor itself remains unblocked.
 
 ---
 
@@ -249,6 +253,11 @@ analysis:
   data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
   maximum-view-count: 5      # Max records shown per application (0 = unlimited)
   result-language: en        # Language of LLM analysis output (e.g. ko, ja, en)
+
+app:
+  async:
+    virtual:
+      llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
@@ -482,7 +491,7 @@ SOFTWARE.
 | **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic 전환 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
 | **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
-| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리 |
+| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 10) |
 
 ---
 
@@ -557,7 +566,7 @@ POST /webhook/github[/{application}]
 | 실시간 통신 | Spring WebSocket (STOMP over SockJS) |
 | 템플릿 | Mustache |
 | API 문서 | springdoc-openapi 2.8.3 (Swagger UI) |
-| 비동기 | Java 21 Virtual Thread (`CompletableFuture` + `VirtualThreadTaskExecutor`) |
+| 비동기 | Java 21 Virtual Thread (무제한 `SimpleAsyncTaskExecutor`) + Semaphore 기반 LLM 호출 수 제한 |
 | 빌드 | Gradle Kotlin DSL |
 
 ---
@@ -594,6 +603,11 @@ analysis:
   data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
   maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
   result-language: en        # LLM 분석 결과 언어 (ko, en, ja 등)
+
+app:
+  async:
+    virtual:
+      llm-max-concurrency: 10  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
