@@ -74,6 +74,8 @@ springdoc:
   paths-to-exclude: /
 
 management:
+  server:
+    port: 7081
   endpoints:
     web:
       exposure:
