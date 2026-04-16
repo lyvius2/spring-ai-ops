@@ -27,6 +27,7 @@ import org.springframework.ai.chat.model.Generation
 import org.springframework.ai.chat.prompt.Prompt
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
+import java.util.concurrent.Semaphore
 
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -48,7 +49,7 @@ class AiModelServiceTest {
     }
 
     private fun buildService(openAiApiKey: String = "", anthropicApiKey: String = "") =
-        AiModelService(redisTemplate, cryptoProvider, "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, "en")
+        AiModelService(redisTemplate, cryptoProvider, Semaphore(10), "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, "en")
 
     // ── initialize ────────────────────────────────────────────────────────────
 
