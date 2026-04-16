@@ -217,6 +217,12 @@ All Spring AI `AutoConfiguration` classes are explicitly excluded in `applicatio
 
 The `SimpleAsyncTaskExecutor` runs with **no concurrency limit** (`-1`). Virtual Threads release their OS carrier thread on blocking I/O, so an artificial cap would only trigger `ConcurrencyThrottledException` without providing any backpressure benefit. Instead, a `Semaphore` (`app.async.virtual.llm-max-concurrency`, default `10`) guards only the actual LLM API call inside `AiModelService`. Excess requests wait in a fair queue rather than failing, and the virtual-thread executor itself remains unblocked.
 
+**Design note — Resilience4j TimeLimiter + Virtual Thread compatibility**
+
+Resilience4j's `TimeLimiter` cancels timed-out tasks via `future.cancel(true)`, which calls `Thread.interrupt()`. Virtual Threads handle interrupts differently from platform threads — particularly when pinned to a carrier thread — so the interrupt may not propagate correctly, leaving tasks running past the timeout silently.
+
+To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` is set to `false`. This disables the interrupt-based cancellation. Actual I/O timeouts are enforced instead by Feign's own `Request.Options` (`feign.loki.*` / `feign.github.*`), which operate at the socket level and are not affected by the Virtual Thread interrupt issue. The Circuit Breaker state machine (open/half-open/closed) and `FallbackFactory` remain fully active.
+
 ---
 
 ## Getting Started
@@ -258,6 +264,14 @@ app:
   async:
     virtual:
       llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
+
+feign:
+  loki:
+    connect-timeout: 5000   # Loki connect timeout (ms)
+    read-timeout: 30000     # Loki read timeout (ms)
+  github:
+    connect-timeout: 5000   # GitHub API connect timeout (ms)
+    read-timeout: 30000     # GitHub API read timeout (ms)
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
@@ -608,6 +622,14 @@ app:
   async:
     virtual:
       llm-max-concurrency: 10  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
+
+feign:
+  loki:
+    connect-timeout: 5000   # Loki 연결 타임아웃 (ms)
+    read-timeout: 30000     # Loki 읽기 타임아웃 (ms)
+  github:
+    connect-timeout: 5000   # GitHub API 연결 타임아웃 (ms)
+    read-timeout: 30000     # GitHub API 읽기 타임아웃 (ms)
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.

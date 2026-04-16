@@ -18,6 +18,21 @@ spring:
     openfeign:
       circuitbreaker:
         enabled: true
+
+feign:
+  loki:
+    connect-timeout: 5000   # Loki connect timeout (ms). Actual I/O timeout — takes effect before Resilience4j TimeLimiter.
+    read-timeout: 30000     # Loki read timeout (ms)
+  github:
+    connect-timeout: 5000   # GitHub API connect timeout (ms)
+    read-timeout: 30000     # GitHub API read timeout (ms)
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 35s  # Safety net only — Feign read-timeout (30s) fires first
+        cancel-running-future: false  # Prevent Thread.interrupt() on Virtual Threads
   autoconfigure:
     exclude:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration

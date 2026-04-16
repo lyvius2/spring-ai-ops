@@ -13,6 +13,8 @@ class GithubConnectorConfig(
     @Value("\${github.url:https://api.github.com}") override val configuredUrl: String,
     @Value("\${github.access-token:}") private val configuredToken: String,
     @Value("\${github.api-version:}") private val apiVersion: String,
+    @Value("\${feign.github.connect-timeout:5000}") override val connectTimeout: Long,
+    @Value("\${feign.github.read-timeout:30000}") override val readTimeout: Long,
 ) : DynamicConnectorConfig() {
 
     companion object {

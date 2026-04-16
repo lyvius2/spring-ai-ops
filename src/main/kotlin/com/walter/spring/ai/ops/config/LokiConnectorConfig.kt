@@ -8,6 +8,8 @@ import org.springframework.data.redis.core.StringRedisTemplate
 class LokiConnectorConfig(
     override val redisTemplate: StringRedisTemplate,
     @Value("\${loki.url:}") override val configuredUrl: String,
+    @Value("\${feign.loki.connect-timeout:5000}") override val connectTimeout: Long,
+    @Value("\${feign.loki.read-timeout:30000}") override val readTimeout: Long,
 ) : DynamicConnectorConfig() {
 
     companion object {

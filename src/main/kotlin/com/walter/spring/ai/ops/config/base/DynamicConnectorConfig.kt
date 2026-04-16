@@ -5,11 +5,15 @@ import feign.Request
 import feign.okhttp.OkHttpClient
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.core.StringRedisTemplate
+import java.util.concurrent.TimeUnit
 
 abstract class DynamicConnectorConfig {
     protected abstract val redisTemplate: StringRedisTemplate
     protected abstract val configuredUrl: String
     protected abstract val redisUrlKey: String
+    protected abstract val connectTimeout: Long
+    protected abstract val readTimeout: Long
+
     abstract val placeholderUrl: String
 
     protected open fun resolveUrl(): String =
@@ -17,6 +21,10 @@ abstract class DynamicConnectorConfig {
             ?: configuredUrl
 
     protected val httpClient: OkHttpClient = OkHttpClient()
+
+    @Bean
+    fun feignOptions(): Request.Options =
+        Request.Options(connectTimeout, TimeUnit.MILLISECONDS, readTimeout, TimeUnit.MILLISECONDS, true)
 
     @Bean
     fun externalClient(): Client = Client { request, options ->
