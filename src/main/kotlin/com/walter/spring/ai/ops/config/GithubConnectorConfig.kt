@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.config
 
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
 import com.walter.spring.ai.ops.config.base.DynamicConnectorConfig
 import feign.RequestInterceptor
 import org.springframework.beans.factory.annotation.Value
@@ -23,7 +24,7 @@ class GithubConnectorConfig(
 
     @Bean
     fun githubAuthInterceptor(): RequestInterceptor = RequestInterceptor { template ->
-        val token = redisTemplate.opsForValue().get("githubToken")
+        val token = redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE_TOKEN)
             ?.takeIf { it.isNotBlank() }
             ?: configuredToken.takeIf { it.isNotBlank() }
         if (!token.isNullOrBlank()) {

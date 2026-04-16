@@ -113,9 +113,7 @@ class AiModelService(
     }
 
     fun executeAnalyzeFiring(alertSection: String, logSection: String): String {
-        if (chatModel == null) {
-            return ""
-        }
+        val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert in analyzing application errors and logs. " +
                     "Analyze the provided Grafana alert context and application logs, " +
@@ -136,14 +134,12 @@ class AiModelService(
                 }
             }
         )
-        val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
+        val response = model.call(Prompt(listOf(systemMessage, userMessage)))
         return response.result.output.text ?: ""
     }
 
     fun executeAnalyzeCodeDiffer(codeReviewSection: String): String {
-        if (chatModel == null) {
-            return ""
-        }
+        val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert code reviewer. " +
                     "Analyze the provided code diff and give a thorough code review. " +
@@ -163,7 +159,7 @@ class AiModelService(
                 }
             }
         )
-        val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
+        val response = model.call(Prompt(listOf(systemMessage, userMessage)))
         return response.result.output.text ?: ""
     }
 }

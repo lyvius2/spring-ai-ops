@@ -11,7 +11,7 @@ class LokiConnectorConfig(
 ) : DynamicConnectorConfig() {
 
     companion object {
-        const val PLACEHOLDER_URL = "http://127.0.0.1.3100"
+        const val PLACEHOLDER_URL = "http://127.0.0.1:3100"
     }
 
     override val placeholderUrl: String = PLACEHOLDER_URL

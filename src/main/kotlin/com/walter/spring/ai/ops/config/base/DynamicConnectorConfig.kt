@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.config.base
 
 import feign.Client
 import feign.Request
+import feign.okhttp.OkHttpClient
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.core.StringRedisTemplate
 
@@ -42,6 +43,8 @@ abstract class DynamicConnectorConfig {
         redisTemplate.opsForValue().get(redisUrlKey)?.takeIf { it.isNotBlank() }
             ?: configuredUrl
 
+    protected val httpClient = OkHttpClient()
+
     @Bean
     fun externalClient(): Client = Client { request, options ->
         val resolvedUrl = resolveUrl()
@@ -53,6 +56,6 @@ abstract class DynamicConnectorConfig {
             request.charset(),
             request.requestTemplate(),
         )
-        Client.Default(null, null).execute(resolvedRequest, options)
+        httpClient.execute(resolvedRequest, options)
     }
 }
