@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.controller.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.walter.spring.ai.ops.code.GitHubConstants.Companion.EMPTY_SHA
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GithubPushRequest(
@@ -9,9 +10,5 @@ data class GithubPushRequest(
     val repository: GithubPushRepository = GithubPushRepository(),
     val commits: List<GithubPushCommit> = emptyList(),
 ) {
-    companion object {
-        const val EMPTY_SHA = "0000000000000000000000000000000000000000"
-    }
-
     fun isNewBranch(): Boolean = before == EMPTY_SHA
 }

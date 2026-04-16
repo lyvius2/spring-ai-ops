@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.GitHubConstants.Companion.EMPTY_SHA
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
@@ -15,15 +16,16 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.verify
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
-import org.springframework.data.redis.core.ListOperations
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
+import org.springframework.data.redis.core.ZSetOperations
 import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
@@ -35,7 +37,7 @@ class GithubServiceTest {
     @Mock private lateinit var objectMapper: ObjectMapper
     @Mock private lateinit var cryptoProvider: CryptoProvider
     @Mock private lateinit var valueOperations: ValueOperations<String, String>
-    @Mock private lateinit var listOperations: ListOperations<String, String>
+    @Mock private lateinit var zSetOperations: ZSetOperations<String, String>
 
     @BeforeEach
     fun setUp() {
@@ -230,7 +232,7 @@ class GithubServiceTest {
     fun givenEmptyShaBase_whenExecuteInquiryDiffer_thenCallsGetCommit() {
         // given
         val service = buildService()
-        val inquiry = GithubDifferInquiry("owner", "repo", GithubService.EMPTY_SHA, "head-sha")
+        val inquiry = GithubDifferInquiry("owner", "repo", EMPTY_SHA, "head-sha")
         val expected = GithubCompareResult(files = listOf(GithubFile(filename = "README.md", status = "added")))
         given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(expected)
 
@@ -299,20 +301,20 @@ class GithubServiceTest {
     // ── saveCodeReviewRecord ──────────────────────────────────────────────────
 
     @Test
-    @DisplayName("saveCodeReviewRecord 호출 시 Redis list에 저장")
-    fun givenValidRecord_whenSaveCodeReviewRecord_thenPushesToRedisList() {
+    @DisplayName("saveCodeReviewRecord 호출 시 Redis ZSet에 저장")
+    fun givenValidRecord_whenSaveCodeReviewRecord_thenPushesToRedisZSet() {
         // given
         val service = buildService()
         val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com/owner/repo/commit/abc", "feat: add feature", emptyList(), "## Review", LocalDateTime.now(), emptyList())
-        given(redisTemplate.opsForList()).willReturn(listOperations)
-        given(listOperations.range("commit:my-app", 0, -1)).willReturn(emptyList())
+        given(redisTemplate.opsForZSet()).willReturn(zSetOperations)
         given(objectMapper.writeValueAsString(record)).willReturn("""{"application":"my-app"}""")
+        given(redisTemplate.executePipelined(org.mockito.ArgumentMatchers.any<org.springframework.data.redis.core.RedisCallback<*>>())).willReturn(emptyList<Any>())
 
         // when
         service.saveCodeReviewRecord(record)
 
         // then
-        verify(listOperations).rightPush(org.mockito.ArgumentMatchers.eq("commit:my-app"), org.mockito.ArgumentMatchers.anyString())
+        verify(redisTemplate).executePipelined(org.mockito.ArgumentMatchers.any<org.springframework.data.redis.core.RedisCallback<*>>())
     }
 
     // ── getCodeReviewRecords ──────────────────────────────────────────────────
@@ -324,8 +326,8 @@ class GithubServiceTest {
         val service = buildService()
         val json = """{"application":"my-app"}"""
         val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com", "commit msg", emptyList(), "review", LocalDateTime.now(), emptyList())
-        given(redisTemplate.opsForList()).willReturn(listOperations)
-        given(listOperations.range("commit:my-app", 0, -1)).willReturn(listOf(json))
+        given(redisTemplate.opsForZSet()).willReturn(zSetOperations)
+        given(zSetOperations.reverseRange(eq("commit:my-app"), eq(0L), eq(4L))).willReturn(linkedSetOf(json))
         given(objectMapper.readValue(json, CodeReviewRecord::class.java)).willReturn(record)
 
         // when
@@ -341,8 +343,8 @@ class GithubServiceTest {
     fun givenNullFromRedis_whenGetCodeReviewRecords_thenReturnsEmptyList() {
         // given
         val service = buildService()
-        given(redisTemplate.opsForList()).willReturn(listOperations)
-        given(listOperations.range("commit:my-app", 0, -1)).willReturn(null)
+        given(redisTemplate.opsForZSet()).willReturn(zSetOperations)
+        given(zSetOperations.reverseRange(eq("commit:my-app"), eq(0L), eq(4L))).willReturn(null)
 
         // when
         val result = service.getCodeReviewRecords("my-app")

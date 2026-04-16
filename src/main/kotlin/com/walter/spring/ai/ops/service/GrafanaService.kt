@@ -51,8 +51,7 @@ class GrafanaService(
 
     fun getAnalyzeFiringRecords(application: String): List<AnalyzeFiringRecord> {
         val key = "${REDIS_KEY_FIRING_PREFIX}${application}"
-        return redisTemplate.zSetRangeAllDesc(key)
+        return redisTemplate.zSetRangeAllDesc(key, maximumViewCount)
             .mapNotNull { runCatching { objectMapper.readValue(it, AnalyzeFiringRecord::class.java) }.getOrNull() }
-            .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 }

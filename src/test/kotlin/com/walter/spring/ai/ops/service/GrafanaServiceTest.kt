@@ -16,12 +16,15 @@ import org.mockito.Mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.data.redis.core.ListOperations
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ZSetOperations
 import java.time.Instant
 import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class GrafanaServiceTest {
 
     @Mock
@@ -31,7 +34,7 @@ class GrafanaServiceTest {
     private lateinit var objectMapper: ObjectMapper
 
     @Mock
-    private lateinit var listOperations: ListOperations<String, String>
+    private lateinit var zSetOperations: ZSetOperations<String, String>
 
     private lateinit var grafanaService: GrafanaService
 
@@ -239,8 +242,8 @@ class GrafanaServiceTest {
         // given
         val json = """{"application":"my-app"}"""
         val record = createRecord("my-app")
-        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}my-app", 0, -1)).thenReturn(listOf(json))
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOperations)
+        `when`(zSetOperations.reverseRange("${REDIS_KEY_FIRING_PREFIX}my-app", 0, 4)).thenReturn(linkedSetOf(json))
         `when`(objectMapper.readValue(json, AnalyzeFiringRecord::class.java)).thenReturn(record)
 
         // when
@@ -255,8 +258,8 @@ class GrafanaServiceTest {
     @DisplayName("Redis가 null을 반환하면 빈 목록 반환")
     fun getAnalyzeFiringRecords_returnsEmptyList_whenRedisReturnsNull() {
         // given
-        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}my-app", 0, -1)).thenReturn(null)
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOperations)
+        `when`(zSetOperations.reverseRange("${REDIS_KEY_FIRING_PREFIX}my-app", 0, 4)).thenReturn(null)
 
         // when
         val result = grafanaService.getAnalyzeFiringRecords("my-app")
@@ -272,8 +275,8 @@ class GrafanaServiceTest {
         val validJson = """{"valid":true}"""
         val invalidJson = """{"invalid":true}"""
         val record = createRecord()
-        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}my-app", 0, -1)).thenReturn(listOf(validJson, invalidJson))
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOperations)
+        `when`(zSetOperations.reverseRange("${REDIS_KEY_FIRING_PREFIX}my-app", 0, 4)).thenReturn(linkedSetOf(validJson, invalidJson))
         `when`(objectMapper.readValue(validJson, AnalyzeFiringRecord::class.java)).thenReturn(record)
         `when`(objectMapper.readValue(invalidJson, AnalyzeFiringRecord::class.java)).thenThrow(RuntimeException("Parse error"))
 
@@ -288,13 +291,13 @@ class GrafanaServiceTest {
     @DisplayName("'firing:{application}' key로 maximumViewCount 범위만큼 Redis 조회")
     fun getAnalyzeFiringRecords_queriesRedisWithCorrectKeyAndRange() {
         // given
-        `when`(redisTemplate.opsForList()).thenReturn(listOperations)
-        `when`(listOperations.range("${REDIS_KEY_FIRING_PREFIX}payment-service", 0, -1)).thenReturn(emptyList())
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOperations)
+        `when`(zSetOperations.reverseRange("${REDIS_KEY_FIRING_PREFIX}payment-service", 0, 4)).thenReturn(linkedSetOf())
 
         // when
         grafanaService.getAnalyzeFiringRecords("payment-service")
 
         // then
-        verify(listOperations).range("${REDIS_KEY_FIRING_PREFIX}payment-service", 0, -1)
+        verify(zSetOperations).reverseRange("${REDIS_KEY_FIRING_PREFIX}payment-service", 0, 4)
     }
 }

@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.GitHubConstants.Companion.EMPTY_SHA
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_PREFIX
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
@@ -29,10 +30,6 @@ class GithubService(
 ) {
     private val log = LoggerFactory.getLogger(GithubService::class.java)
 
-    companion object {
-        const val EMPTY_SHA = "0000000000000000000000000000000000000000"
-    }
-
     fun setGithubToken(token: String) {
         redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, cryptoProvider.encrypt(token))
     }
@@ -40,16 +37,12 @@ class GithubService(
     fun getGithubToken(): String? {
         val redisToken = redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE_TOKEN)
             ?.let { cryptoProvider.decrypt(it) }
-        if (!redisToken.isNullOrBlank()) {
-            return redisToken
-        }
-        if (configuredToken.isNotBlank()) {
-            return configuredToken
-        }
+        if (!redisToken.isNullOrBlank()) return redisToken
+        if (configuredToken.isNotBlank()) return configuredToken
         return null
     }
 
-    fun isTokenConfigured(): Boolean{
+    fun isTokenConfigured(): Boolean {
         return !getGithubToken().isNullOrBlank()
     }
 
@@ -61,7 +54,6 @@ class GithubService(
         return redisTemplate.opsForValue().get(REDIS_KEY_GITHUB_URL)?.takeIf { it.isNotBlank() }
             ?: githubUrlFromConfig
     }
-
 
     fun isUrlConfigured(): Boolean {
         return getGithubUrl().isNotBlank()
@@ -88,8 +80,7 @@ class GithubService(
 
     fun getCodeReviewRecords(application: String): List<CodeReviewRecord> {
         val key = "${REDIS_KEY_COMMIT_PREFIX}${application}"
-        return redisTemplate.zSetRangeAllDesc(key)
+        return redisTemplate.zSetRangeAllDesc(key, maximumViewCount)
             .mapNotNull { runCatching { objectMapper.readValue(it, CodeReviewRecord::class.java) }.getOrNull() }
-            .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 }

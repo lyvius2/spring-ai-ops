@@ -18,6 +18,8 @@ spring:
     openfeign:
       circuitbreaker:
         enabled: true
+      # Keep Feign log level at NONE to prevent request/response bodies (including tokens) from appearing in logs
+      loggerLevel: none
   autoconfigure:
     exclude:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
