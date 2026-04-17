@@ -1,18 +1,20 @@
 package com.walter.spring.ai.ops.facade
 
+import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.config.annotation.Facade
-import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
-import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
+import com.walter.spring.ai.ops.connector.dto.GitCompareResult
+import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
-import com.walter.spring.ai.ops.record.ChangedFile
-import com.walter.spring.ai.ops.record.CommitSummary
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.record.CommitSummary
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
+import com.walter.spring.ai.ops.service.GitlabService
+import com.walter.spring.ai.ops.service.GitRemoteService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.util.toISO8601
@@ -26,10 +28,17 @@ class AnalyzeFacade(
     private val grafanaService: GrafanaService,
     private val lokiService: LokiService,
     private val githubService: GithubService,
+    private val gitlabService: GitlabService,
     private val aiModelService: AiModelService,
     private val messagingTemplate: SimpMessagingTemplate,
 ) {
     private val log = LoggerFactory.getLogger(AnalyzeFacade::class.java)
+
+    private fun resolveGitService(): GitRemoteService =
+        when (githubService.getGitRemoteProvider()) {
+            GitRemoteProvider.GITLAB -> gitlabService
+            else -> githubService
+        }
 
     fun analyzeFiring(request: GrafanaAlertingRequest, application: String?) {
         if (request.isResolved()) {
@@ -56,12 +65,13 @@ class AnalyzeFacade(
     }
 
     private fun createAnalyzeFiringRecord(request: GrafanaAlertingRequest, targetApplication: String, logResults: LokiQueryResult, analyzeResults: String): AnalyzeFiringRecord {
-        return AnalyzeFiringRecord(request.alerts.first().startsAt.toISO8601(),
+        return AnalyzeFiringRecord(
+            request.alerts.first().startsAt.toISO8601(),
             targetApplication,
             request,
             logResults,
             analyzeResults,
-            LocalDateTime.now()
+            LocalDateTime.now(),
         )
     }
 
@@ -75,56 +85,38 @@ class AnalyzeFacade(
 
     fun analyzeCodeDiffer(request: GithubPushRequest, application: String?) {
         if (request.commits.isEmpty()) {
-            log.warn("GitHub push webhook skipped — no commits (ping or empty push)")
+            log.warn("Git push webhook skipped — no commits (ping or empty push)")
             return
         }
         recordAuditLog(request)
         runCatching {
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(targetApplication)
-            val inquiry = GithubDifferInquiry.of(request)
-            val compareResult = githubService.executeInquiryDiffer(inquiry)
+            val gitService = resolveGitService()
+            val inquiry = GitDifferInquiry.of(request)
+            val compareResult = gitService.executeInquiryDiffer(inquiry)
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
             val record = createCodeReviewRecord(request, targetApplication, compareResult, reviewResult)
-            githubService.saveCodeReviewRecord(record)
+            gitService.saveCodeReviewRecord(record)
             pushCodeReview(record)
         }.onFailure { log.error("Failed to analyze code review record : {}", it.message, it) }
     }
 
     private fun recordAuditLog(request: GithubPushRequest) {
-        log.info("GitHub push webhook received — repo: {}, before: {}, after: {}, commits: {}", request.repository.name, request.before, request.after, request.commits.size,)
+        log.info("Git push webhook received — repo: {}, before: {}, after: {}, commits: {}", request.repository.name, request.before, request.after, request.commits.size)
     }
 
-    private fun createCodeReviewRecord(request: GithubPushRequest, targetApplication: String, compareResult: GithubCompareResult, analyzeResults: String): CodeReviewRecord {
-        val githubUrl = createGithubUrl(request)
+    private fun createCodeReviewRecord(request: GithubPushRequest, targetApplication: String, compareResult: GitCompareResult, analyzeResults: String): CodeReviewRecord {
+        val repoUrl = if (request.isNewBranch())
+            "${request.repository.htmlUrl}/commit/${request.after}"
+        else
+            "${request.repository.htmlUrl}/compare/${request.before}...${request.after}"
         val latestPushedAt = request.commits.mapNotNull { it.timestamp.toISO8601() }.maxOrNull() ?: LocalDateTime.now()
-        val changedFiles = compareResult.files.map { file ->
-            ChangedFile(file.filename, file.status, file.additions, file.deletions, file.patch)
-        }
-        val commitSummaries = createCommitList(compareResult, request)
-        val latestCommitMessage = commitSummaries.lastOrNull()?.message ?: ""
-        return CodeReviewRecord(
-            latestPushedAt,
-            targetApplication,
-            githubUrl,
-            latestCommitMessage,
-            changedFiles,
-            analyzeResults,
-            LocalDateTime.now(),
-            commitSummaries
-        )
-    }
-
-private fun createGithubUrl(request: GithubPushRequest): String =
-    when {
-        request.isNewBranch() -> "${request.repository.htmlUrl}/commit/${request.after}"
-        else -> "${request.repository.htmlUrl}/compare/${request.before}...${request.after}"
-    }
-
-    private fun createCommitList(compareResult: GithubCompareResult, request: GithubPushRequest): List<CommitSummary> {
-        return compareResult.commits
+        val changedFiles = compareResult.changedFiles()
+        val commitSummaries = compareResult.commitSummaries()
             .takeIf { it.isNotEmpty() }
-            ?.map { CommitSummary(it.sha, it.commit.message, it.htmlUrl, it.commit.author.date) }
             ?: request.commits.map { CommitSummary(it.id, it.message, it.url, it.timestamp) }
+        val latestCommitMessage = commitSummaries.lastOrNull()?.message ?: ""
+        return CodeReviewRecord(latestPushedAt, targetApplication, repoUrl, latestCommitMessage, changedFiles, analyzeResults, LocalDateTime.now(), commitSummaries)
     }
 }

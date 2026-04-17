@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.concurrent.CompletableFuture
@@ -49,21 +50,28 @@ class WebhookController(
     }
 
     @Operation(
-        summary = "Receive GitHub push webhook",
+        summary = "Receive Git Remote push webhook (GitHub/GitLab)",
         description = """
-            Accepts a GitHub push event payload.
-            Triggers async pipeline: GitHub Commits API → LLM code review → WebSocket push to `/topic/commit`.
+            Accepts a Git Remote push event payload.
+            Triggers async pipeline: Git Remote Commits API → LLM code review → WebSocket push to `/topic/commit`.
 
             Optionally tag the push to a specific application via the `{application}` path segment.
         """
     )
-    @PostMapping(value = ["/github", "/github/{application}"])
+    @PostMapping(value = ["/git", "/git/{application}"])
     fun githubPush(
-        @RequestBody request: GithubPushRequest,
+        @RequestHeader(value = "X-GitHub-Event", required = false) githubEvent: String?,
+        @RequestHeader(value = "X-Gitlab-Event", required = false) gitlabEvent: String?,
+        @RequestBody body: Map<String, Any>,
         @Parameter(description = "Application name to associate this push with (optional)")
         @PathVariable application: String?
     ): GithubPushResponse {
-        CompletableFuture.runAsync({ analyzeFacade.analyzeCodeDiffer(request, application) }, executor)
+        CompletableFuture.runAsync({
+            val request = when {
+                githubEvent != null -> GithubPushRequest.fromGithubBody(body)
+                gitlabEvent != null -> GithubPushRequest.fromGitlabBody(body)
+                else -> throw IllegalArgumentException("Unsupported event type: missing X-GitHub-Event or X-Gitlab-Event header") }
+            analyzeFacade.analyzeCodeDiffer(request, application) }, executor)
         return GithubPushResponse.accepted()
     }
 }
