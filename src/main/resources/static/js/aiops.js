@@ -138,7 +138,7 @@ async function saveLokiUrl() {
         if (res.ok) {
             document.getElementById('loki-modal').style.display = 'none';
             renderLokiStatus(url);
-            showMainSection();
+            await checkGitRemoteAndProceed();
         } else {
             errEl.textContent = 'Failed to save Loki URL. Please try again.';
             errEl.style.display = 'block';
@@ -867,8 +867,6 @@ document.addEventListener('click', async function (e) {
     if (btn) {
         const tabName = btn.dataset.tab;
         if (tabName === 'codereview') {
-            const allowed = await checkGithubToken();
-            if (!allowed) return;
             switchToTab(tabName);
             await loadAndRenderCodeReview(selectedApp);
             return;
@@ -901,40 +899,143 @@ function switchToTab(tabName) {
     });
 }
 
-// ── GitHub Token Modal ────────────────────────────────────────────────────────
+// ── Git Remote Modal ──────────────────────────────────────────────────────────
 
-async function checkGithubToken() {
+let _gitRemoteStatusCache = null;
+
+/**
+ * Determines which action to take based on the git remote configuration status.
+ * Called after Loki is confirmed or on init.
+ */
+async function checkGitRemoteAndProceed() {
     try {
-        const res  = await fetch('/api/github/token/status');
+        const res  = await fetch('/api/github/config/status');
         const data = await res.json();
-        if (data.isConfigured) return true;
-    } catch (_) {}
-    openGithubTokenModal();
-    return false;
+        _gitRemoteStatusCache = data;
+
+        const ghOk   = data.githubTokenConfigured;
+        const glOk   = data.gitlabTokenConfigured;
+        const ghProp = data.githubPropertyConfigured;
+        const glProp = data.gitlabPropertyConfigured;
+
+        // Req 6: both providers fully configured → show modal to re-select
+        if (ghOk && glOk) {
+            openGitRemoteModal(data, true);
+            return;
+        }
+
+        // Req 5: exactly one property-configured → auto-use, no popup
+        if (ghProp && !glProp) { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
+        if (glProp && !ghProp) { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
+
+        // Exactly one Redis-configured → use it
+        if (ghOk && !glOk) { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
+        if (glOk && !ghOk) { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
+
+        // Neither configured → must setup
+        openGitRemoteModal(data, false);
+    } catch (_) {
+        showMainSection();
+    }
 }
 
-function openGithubTokenModal() {
-    document.getElementById('github-token-input').value = '';
-    document.getElementById('github-token-alert-error').style.display = 'none';
-    document.getElementById('github-token-save-btn').disabled = false;
-    document.getElementById('github-token-save-btn').textContent = 'Save';
-    document.getElementById('github-token-modal').style.display = 'flex';
-    setTimeout(() => document.getElementById('github-token-input').focus(), 50);
+function openGitRemoteModal(statusData, closeable) {
+    _gitRemoteStatusCache = statusData;
+
+    // Close button visibility
+    const closeBtn = document.getElementById('git-remote-modal-close');
+    closeBtn.style.display = closeable ? 'block' : 'none';
+
+    // Description
+    const desc = document.getElementById('git-remote-modal-desc');
+    desc.textContent = closeable
+        ? 'Both providers are configured. Select the one you want to use and confirm your credentials.'
+        : 'Select your Git provider and enter credentials to enable AI Code Review.';
+
+    // Build provider radio buttons dynamically from server-rendered enum values
+    const group = document.getElementById('git-remote-provider-group');
+    group.innerHTML = '';
+    GIT_REMOTE_PROVIDERS.forEach((p, idx) => {
+        const lname = p.name.toLowerCase();
+        const displayName = lname.charAt(0).toUpperCase() + lname.slice(1);
+        const div = document.createElement('div');
+        div.className = 'radio-option';
+        div.innerHTML = `
+            <input type="radio" name="git-remote-provider" id="git-remote-${lname}" value="${p.name}" ${idx === 0 ? 'checked' : ''}>
+            <label for="git-remote-${lname}">
+                <img src="/images/${lname}.svg" class="provider-logo" alt="${displayName}" onerror="this.style.display='none'">
+                ${displayName}
+            </label>`;
+        group.appendChild(div);
+    });
+
+    // Restore previously selected provider if any
+    if (statusData && statusData.currentProvider) {
+        const current = group.querySelector(`input[value="${statusData.currentProvider}"]`);
+        if (current) current.checked = true;
+    }
+
+    // Update URL placeholder when provider changes
+    group.querySelectorAll('input[name="git-remote-provider"]').forEach(radio => {
+        radio.addEventListener('change', updateGitRemoteUrlPlaceholder);
+    });
+    updateGitRemoteUrlPlaceholder();
+
+    // Reset form
+    document.getElementById('git-remote-token-input').value = '';
+    document.getElementById('git-remote-alert-error').style.display = 'none';
+    document.getElementById('git-remote-save-btn').disabled = false;
+    document.getElementById('git-remote-save-btn').textContent = 'Save & Connect';
+
+    document.getElementById('git-remote-modal').style.display = 'flex';
 }
 
-function closeGithubTokenModal() {
-    document.getElementById('github-token-modal').style.display = 'none';
-    // 저장 없이 닫으면 Exception Analysis 탭으로 복귀
-    switchToTab('exception');
+function updateGitRemoteUrlPlaceholder() {
+    const selected = document.querySelector('input[name="git-remote-provider"]:checked');
+    if (!selected) return;
+    const provider = GIT_REMOTE_PROVIDERS.find(p => p.name === selected.value);
+    if (!provider) return;
+
+    const urlInput = document.getElementById('git-remote-url-input');
+    // If a custom URL is already saved for this provider, show it as placeholder
+    let placeholder = provider.apiUrl;
+    if (_gitRemoteStatusCache) {
+        const saved = selected.value === 'GITHUB'
+            ? _gitRemoteStatusCache.githubUrl
+            : _gitRemoteStatusCache.gitlabUrl;
+        if (saved && saved !== provider.apiUrl) placeholder = saved;
+    }
+    urlInput.placeholder = placeholder;
 }
 
-async function saveGithubToken() {
-    const token = document.getElementById('github-token-input').value.trim();
-    const btn   = document.getElementById('github-token-save-btn');
-    const errEl = document.getElementById('github-token-alert-error');
+function closeGitRemoteModal() {
+    document.getElementById('git-remote-modal').style.display = 'none';
+}
 
+async function openGitRemoteModalForReconfigure() {
+    try {
+        const res  = await fetch('/api/github/config/status');
+        const data = await res.json();
+        openGitRemoteModal(data, true);
+    } catch (_) {
+        openGitRemoteModal(null, true);
+    }
+}
+
+async function saveGitRemoteConfig() {
+    const providerEl = document.querySelector('input[name="git-remote-provider"]:checked');
+    const urlInput   = document.getElementById('git-remote-url-input');
+    const token      = document.getElementById('git-remote-token-input').value.trim();
+    const btn        = document.getElementById('git-remote-save-btn');
+    const errEl      = document.getElementById('git-remote-alert-error');
+
+    if (!providerEl) {
+        errEl.textContent = 'Please select a provider.';
+        errEl.style.display = 'block';
+        return;
+    }
     if (!token) {
-        errEl.textContent = 'Please enter a GitHub Access Token.';
+        errEl.textContent = 'Please enter an access token.';
         errEl.style.display = 'block';
         return;
     }
@@ -943,29 +1044,33 @@ async function saveGithubToken() {
     btn.textContent = 'Saving...';
     errEl.style.display = 'none';
 
+    const provider = providerEl.value;
+    // Use typed URL or fall back to placeholder (default URL)
+    const url = urlInput.value.trim() || urlInput.placeholder;
+
     try {
-        const res  = await fetch('/api/github/token', {
+        const res  = await fetch('/api/github/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
+            body: JSON.stringify({ provider, token, url }),
         });
         const data = await res.json();
 
         if (data.success) {
-            document.getElementById('github-token-modal').style.display = 'none';
-            renderGitRemoteStatus(true);
-            switchToTab('codereview');
+            closeGitRemoteModal();
+            renderGitRemoteStatus(provider);
+            showMainSection();
         } else {
-            errEl.textContent = data.message || 'Failed to save token.';
+            errEl.textContent = data.message || 'Failed to save. Please try again.';
             errEl.style.display = 'block';
             btn.disabled = false;
-            btn.textContent = 'Save';
+            btn.textContent = 'Save & Connect';
         }
     } catch (e) {
         errEl.textContent = 'A network error occurred.';
         errEl.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = 'Save';
+        btn.textContent = 'Save & Connect';
     }
 }
 
@@ -1158,21 +1263,21 @@ function closeLokiModal() {
     document.getElementById('loki-modal').style.display = 'none';
 }
 
-function renderGitRemoteStatus(isConfigured) {
+function renderGitRemoteStatus(provider) {
     const cell = document.getElementById('status-git-remote');
-    if (!cell) return;
-    if (isConfigured) {
-        cell.innerHTML = `
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-                <div>
-                    <img src="/images/github.svg" class="provider-logo provider-logo-badge" alt="GitHub">
-                    <span class="badge badge-up">GITHUB</span>
-                    <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
-                </div>
-                <button class="btn-secondary" style="margin-top:0;" onclick="openGithubTokenModal()">Reconfigure</button>
+    if (!cell || !provider) return;
+    const lp = provider.toLowerCase();
+    const displayName = lp.charAt(0).toUpperCase() + lp.slice(1);
+    cell.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div>
+                <img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${displayName}" onerror="this.style.display='none'">
+                <span class="badge badge-up">${provider}</span>
+                <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
             </div>
-        `;
-    }
+            <button class="btn-secondary" style="margin-top:0;" onclick="openGitRemoteModalForReconfigure()">Reconfigure</button>
+        </div>
+    `;
 }
 
 function renderLokiStatus(lokiUrl) {
@@ -1192,7 +1297,7 @@ function renderLokiStatus(lokiUrl) {
 }
 
 async function init() {
-    // Step 1: LLM not configured → 상태에 따라 분기
+    // Step 1: LLM not configured → branch by state
     if (!LLM_CONFIGURED) {
         if (LLM_SELECT_PROVIDER) {
             openLlmSelectProviderModal();
@@ -1215,15 +1320,8 @@ async function init() {
         // If check fails, proceed anyway
     }
 
-    // Step 3: check GitHub token status for System Status display
-    try {
-        const ghRes  = await fetch('/api/github/token/status');
-        const ghData = await ghRes.json();
-        if (ghData.isConfigured) renderGitRemoteStatus(true);
-    } catch (_) {}
-
-    // Both configured → fade in main section
-    showMainSection();
+    // Step 3: check Git Remote → show modal if needed, or render status and proceed
+    await checkGitRemoteAndProceed();
 }
 
 document.addEventListener('DOMContentLoaded', init);

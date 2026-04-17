@@ -28,6 +28,8 @@ abstract class GitRemoteService(
     protected abstract val configuredUrl: String
     protected abstract val configuredToken: String
 
+    fun isPropertyConfigured(): Boolean = configuredToken.isNotBlank()
+
     fun setGitRemoteProvider(provider: GitRemoteProvider) {
         redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE, provider.name)
     }
@@ -74,4 +76,3 @@ abstract class GitRemoteService(
 
     abstract fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult
 }
-
