@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
+import com.walter.spring.ai.ops.util.CryptoProvider
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
@@ -20,11 +21,15 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import java.util.concurrent.Semaphore
 
 @Service
 class AiModelService(
     private val redisTemplate: StringRedisTemplate,
+    private val cryptoProvider: CryptoProvider,
+    @Qualifier("llmRateLimiter") private val llmRateLimiter: Semaphore,
     @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
@@ -41,6 +46,7 @@ class AiModelService(
     fun initialize() {
         val llm = redisTemplate.opsForValue().get(REDIS_KEY_LLM)
         val apiKey = redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
+            ?.let { cryptoProvider.decrypt(it) }
         if (!llm.isNullOrBlank() && !apiKey.isNullOrBlank()) {
             runCatching { chatModel = buildChatModel(llm, apiKey) }
                 .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
@@ -77,7 +83,7 @@ class AiModelService(
     fun configure(llm: String, apiKey: String) {
         chatModel = buildChatModel(llm, apiKey)
         redisTemplate.opsForValue().set(REDIS_KEY_LLM, llm)
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, apiKey)
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, cryptoProvider.encrypt(apiKey))
     }
 
     fun isConfigured(): Boolean {
@@ -113,9 +119,7 @@ class AiModelService(
     }
 
     fun executeAnalyzeFiring(alertSection: String, logSection: String): String {
-        if (chatModel == null) {
-            return ""
-        }
+        val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert in analyzing application errors and logs. " +
                     "Analyze the provided Grafana alert context and application logs, " +
@@ -136,14 +140,17 @@ class AiModelService(
                 }
             }
         )
-        val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
-        return response.result.output.text ?: ""
+        llmRateLimiter.acquire()
+        return try {
+            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
+            response.result.output.text ?: ""
+        } finally {
+            llmRateLimiter.release()
+        }
     }
 
     fun executeAnalyzeCodeDiffer(codeReviewSection: String): String {
-        if (chatModel == null) {
-            return ""
-        }
+        val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert code reviewer. " +
                     "Analyze the provided code diff and give a thorough code review. " +
@@ -163,7 +170,12 @@ class AiModelService(
                 }
             }
         )
-        val response = chatModel!!.call(Prompt(listOf(systemMessage, userMessage)))
-        return response.result.output.text ?: ""
+        llmRateLimiter.acquire()
+        return try {
+            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
+            response.result.output.text ?: ""
+        } finally {
+            llmRateLimiter.release()
+        }
     }
 }

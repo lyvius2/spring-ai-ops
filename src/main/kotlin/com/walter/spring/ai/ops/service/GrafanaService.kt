@@ -5,7 +5,8 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_FIRIN
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
-import com.walter.spring.ai.ops.util.listPushWithTtl
+import com.walter.spring.ai.ops.util.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.zSetRangeAllDesc
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
@@ -45,14 +46,13 @@ class GrafanaService(
 
     fun saveAnalyzeFiringRecord(record: AnalyzeFiringRecord) {
         val key = "${REDIS_KEY_FIRING_PREFIX}${record.application}"
-        redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
+        redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 
     fun getAnalyzeFiringRecords(application: String): List<AnalyzeFiringRecord> {
         val key = "${REDIS_KEY_FIRING_PREFIX}${application}"
-        return (redisTemplate.opsForList().range(key, 0, -1) ?: emptyList())
-            .mapNotNull { runCatching { objectMapper.readValue(it.substringBeforeLast("::"), AnalyzeFiringRecord::class.java) }.getOrNull() }
-            .sortedByDescending { it.occupiedAt }
+        return redisTemplate.zSetRangeAllDesc(key)
+            .mapNotNull { runCatching { objectMapper.readValue(it, AnalyzeFiringRecord::class.java) }.getOrNull() }
             .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 }

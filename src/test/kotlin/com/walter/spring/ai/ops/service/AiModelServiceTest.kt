@@ -4,6 +4,7 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubFile
+import com.walter.spring.ai.ops.util.CryptoProvider
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.mock
@@ -25,12 +27,14 @@ import org.springframework.ai.chat.model.Generation
 import org.springframework.ai.chat.prompt.Prompt
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
+import java.util.concurrent.Semaphore
 
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class AiModelServiceTest {
 
     @Mock private lateinit var redisTemplate: StringRedisTemplate
+    @Mock private lateinit var cryptoProvider: CryptoProvider
     @Mock private lateinit var valueOps: ValueOperations<String, String>
     @Mock private lateinit var mockChatModel: ChatModel
 
@@ -39,11 +43,13 @@ class AiModelServiceTest {
     @BeforeEach
     fun setUp() {
         given(redisTemplate.opsForValue()).willReturn(valueOps)
+        given(cryptoProvider.encrypt(anyString())).willAnswer { it.getArgument(0) }
+        given(cryptoProvider.decrypt(anyString())).willAnswer { it.getArgument(0) }
         aiModelService = buildService()
     }
 
     private fun buildService(openAiApiKey: String = "", anthropicApiKey: String = "") =
-        AiModelService(redisTemplate, "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, "en")
+        AiModelService(redisTemplate, cryptoProvider, Semaphore(10), "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, "en")
 
     // ── initialize ────────────────────────────────────────────────────────────
 

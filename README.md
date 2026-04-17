@@ -17,6 +17,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Configuration](#configuration)
+  - [Sensitive Value Encryption](#sensitive-value-encryption)
   - [Running](#running)
   - [Setting Up Grafana](#setting-up-grafana)
   - [Setting Up GitHub Webhooks](#setting-up-github-webhooks)
@@ -48,7 +49,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
-| **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads |
+| **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 10 concurrent) |
 
 ---
 
@@ -205,12 +206,22 @@ POST /webhook/github[/{application}]
 | Real-Time | Spring WebSocket (STOMP over SockJS) |
 | Templating | Mustache |
 | API Docs | springdoc-openapi 2.8.3 (Swagger UI) |
-| Async | Java 21 Virtual Threads (`CompletableFuture` + `VirtualThreadTaskExecutor`) |
+| Async | Java 21 Virtual Threads (`CompletableFuture` + unlimited `SimpleAsyncTaskExecutor`) + Semaphore-based LLM rate limiter |
 | Build | Gradle Kotlin DSL |
 
 **Design note — Spring AI AutoConfiguration disabled**
 
 All Spring AI `AutoConfiguration` classes are explicitly excluded in `application.yml`. `AiModelService` builds `OpenAiChatModel` / `AnthropicChatModel` directly using `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP`. This gives full control over model instantiation and allows hot-swapping the LLM provider at runtime.
+
+**Design note — Virtual Thread concurrency**
+
+The `SimpleAsyncTaskExecutor` runs with **no concurrency limit** (`-1`). Virtual Threads release their OS carrier thread on blocking I/O, so an artificial cap would only trigger `ConcurrencyThrottledException` without providing any backpressure benefit. Instead, a `Semaphore` (`app.async.virtual.llm-max-concurrency`, default `10`) guards only the actual LLM API call inside `AiModelService`. Excess requests wait in a fair queue rather than failing, and the virtual-thread executor itself remains unblocked.
+
+**Design note — Resilience4j TimeLimiter + Virtual Thread compatibility**
+
+Resilience4j's `TimeLimiter` cancels timed-out tasks via `future.cancel(true)`, which calls `Thread.interrupt()`. Virtual Threads handle interrupts differently from platform threads — particularly when pinned to a carrier thread — so the interrupt may not propagate correctly, leaving tasks running past the timeout silently.
+
+To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` is set to `false`. This disables the interrupt-based cancellation. Actual I/O timeouts are enforced instead by Feign's own `Request.Options` (`feign.loki.*` / `feign.github.*`), which operate at the socket level and are not affected by the Virtual Thread interrupt issue. The Circuit Breaker state machine (open/half-open/closed) and `FallbackFactory` remain fully active.
 
 ---
 
@@ -248,9 +259,47 @@ analysis:
   data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
   maximum-view-count: 5      # Max records shown per application (0 = unlimited)
   result-language: en        # Language of LLM analysis output (e.g. ko, ja, en)
+
+app:
+  async:
+    virtual:
+      llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
+
+feign:
+  loki:
+    connect-timeout: 5000   # Loki connect timeout (ms)
+    read-timeout: 30000     # Loki read timeout (ms)
+  github:
+    connect-timeout: 5000   # GitHub API connect timeout (ms)
+    read-timeout: 30000     # GitHub API read timeout (ms)
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
+
+### Sensitive Value Encryption
+
+API keys and access tokens saved to Redis are encrypted at rest using **AES-256-GCM**.
+
+To enable encryption, set the secret key via environment variable or `application.yml`:
+
+```bash
+# Environment variable (recommended for production)
+export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
+```
+
+```yaml
+# application.yml
+crypto:
+  secret-key: ${CRYPTO_SECRET_KEY:}
+```
+
+| Situation | Behaviour |
+|---|---|
+| `crypto.secret-key` is set | All values written to Redis are AES-256-GCM encrypted |
+| `crypto.secret-key` is blank | Values are stored as plaintext — a warning is logged on startup |
+| Secret key changes after values are stored | Existing encrypted values cannot be decrypted; re-enter API keys via the UI to re-encrypt them with the new key |
+
+> **Production recommendation**: Always set `CRYPTO_SECRET_KEY` in production environments. Without it, API keys stored in Redis remain in plaintext.
 
 **LLM key auto-configuration behaviour**
 
@@ -456,7 +505,7 @@ SOFTWARE.
 | **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic 전환 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
 | **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
-| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리 |
+| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 10) |
 
 ---
 
@@ -531,7 +580,7 @@ POST /webhook/github[/{application}]
 | 실시간 통신 | Spring WebSocket (STOMP over SockJS) |
 | 템플릿 | Mustache |
 | API 문서 | springdoc-openapi 2.8.3 (Swagger UI) |
-| 비동기 | Java 21 Virtual Thread (`CompletableFuture` + `VirtualThreadTaskExecutor`) |
+| 비동기 | Java 21 Virtual Thread (무제한 `SimpleAsyncTaskExecutor`) + Semaphore 기반 LLM 호출 수 제한 |
 | 빌드 | Gradle Kotlin DSL |
 
 ---
@@ -568,9 +617,47 @@ analysis:
   data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
   maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
   result-language: en        # LLM 분석 결과 언어 (ko, en, ja 등)
+
+app:
+  async:
+    virtual:
+      llm-max-concurrency: 10  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
+
+feign:
+  loki:
+    connect-timeout: 5000   # Loki 연결 타임아웃 (ms)
+    read-timeout: 30000     # Loki 읽기 타임아웃 (ms)
+  github:
+    connect-timeout: 5000   # GitHub API 연결 타임아웃 (ms)
+    read-timeout: 30000     # GitHub API 읽기 타임아웃 (ms)
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
+
+#### 민감 정보 암호화
+
+Redis에 저장되는 API 키와 액세스 토큰은 **AES-256-GCM** 방식으로 암호화되어 보관됩니다.
+
+암호화를 활성화하려면 환경 변수 또는 `application.yml`에 시크릿 키를 설정합니다:
+
+```bash
+# 환경 변수 (운영 환경 권장)
+export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
+```
+
+```yaml
+# application.yml
+crypto:
+  secret-key: ${CRYPTO_SECRET_KEY:}
+```
+
+| 상황 | 동작 |
+|---|---|
+| `crypto.secret-key` 설정됨 | Redis에 저장되는 모든 민감 값이 AES-256-GCM으로 암호화됨 |
+| `crypto.secret-key` 미설정 | 값이 평문으로 저장됨 — 애플리케이션 기동 시 경고 로그 출력 |
+| 키를 변경한 경우 | 기존 암호화 값 복호화 불가 — UI에서 API 키를 재입력하면 새 키로 재암호화됨 |
+
+> **운영 환경 권고사항**: 반드시 `CRYPTO_SECRET_KEY`를 설정하세요. 미설정 시 Redis에 저장된 API 키가 평문으로 보관됩니다.
 
 #### 실행
 

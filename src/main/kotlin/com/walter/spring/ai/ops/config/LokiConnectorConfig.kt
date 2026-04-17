@@ -8,10 +8,12 @@ import org.springframework.data.redis.core.StringRedisTemplate
 class LokiConnectorConfig(
     override val redisTemplate: StringRedisTemplate,
     @Value("\${loki.url:}") override val configuredUrl: String,
+    @Value("\${feign.loki.connect-timeout:5000}") override val connectTimeout: Long,
+    @Value("\${feign.loki.read-timeout:30000}") override val readTimeout: Long,
 ) : DynamicConnectorConfig() {
 
     companion object {
-        const val PLACEHOLDER_URL = "http://127.0.0.1.3100"
+        const val PLACEHOLDER_URL = "http://127.0.0.1:3100"
     }
 
     override val placeholderUrl: String = PLACEHOLDER_URL

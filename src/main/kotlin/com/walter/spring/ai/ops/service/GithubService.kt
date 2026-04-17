@@ -8,7 +8,9 @@ import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
-import com.walter.spring.ai.ops.util.listPushWithTtl
+import com.walter.spring.ai.ops.util.CryptoProvider
+import com.walter.spring.ai.ops.util.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.zSetRangeAllDesc
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -19,6 +21,7 @@ class GithubService(
     private val redisTemplate: StringRedisTemplate,
     private val githubConnector: GithubConnector,
     private val objectMapper: ObjectMapper,
+    private val cryptoProvider: CryptoProvider,
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
     @Value("\${github.access-token:}") private val configuredToken: String,
@@ -31,11 +34,12 @@ class GithubService(
     }
 
     fun setGithubToken(token: String) {
-        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, token)
+        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, cryptoProvider.encrypt(token))
     }
 
     fun getGithubToken(): String? {
         val redisToken = redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE_TOKEN)
+            ?.let { cryptoProvider.decrypt(it) }
         if (!redisToken.isNullOrBlank()) {
             return redisToken
         }
@@ -79,14 +83,13 @@ class GithubService(
 
     fun saveCodeReviewRecord(record: CodeReviewRecord) {
         val key = "${REDIS_KEY_COMMIT_PREFIX}${record.application}"
-        redisTemplate.listPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
+        redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 
     fun getCodeReviewRecords(application: String): List<CodeReviewRecord> {
         val key = "${REDIS_KEY_COMMIT_PREFIX}${application}"
-        return (redisTemplate.opsForList().range(key, 0, -1) ?: emptyList())
-            .mapNotNull { runCatching { objectMapper.readValue(it.substringBeforeLast("::"), CodeReviewRecord::class.java) }.getOrNull() }
-            .sortedByDescending { it.pushedAt }
+        return redisTemplate.zSetRangeAllDesc(key)
+            .mapNotNull { runCatching { objectMapper.readValue(it, CodeReviewRecord::class.java) }.getOrNull() }
             .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 }
