@@ -3,7 +3,7 @@ package com.walter.spring.ai.ops.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_PREFIX
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
@@ -34,11 +34,11 @@ class GithubService(
     }
 
     fun setGithubToken(token: String) {
-        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE_TOKEN, cryptoProvider.encrypt(token))
+        redisTemplate.opsForValue().set(REDIS_KEY_GITHUB_TOKEN, cryptoProvider.encrypt(token))
     }
 
     fun getGithubToken(): String? {
-        val redisToken = redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE_TOKEN)
+        val redisToken = redisTemplate.opsForValue().get(REDIS_KEY_GITHUB_TOKEN)
             ?.let { cryptoProvider.decrypt(it) }
         if (!redisToken.isNullOrBlank()) {
             return redisToken

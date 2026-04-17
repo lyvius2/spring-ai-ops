@@ -2,7 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
@@ -56,7 +56,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn("redis-token")
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn("redis-token")
 
         // when
         val result = service.getGithubToken()
@@ -71,7 +71,7 @@ class GithubServiceTest {
         // given
         val service = buildService(configuredToken = "config-token")
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
         val result = service.getGithubToken()
@@ -86,7 +86,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
         val result = service.getGithubToken()
@@ -108,7 +108,7 @@ class GithubServiceTest {
         service.setGithubToken("my-token")
 
         // then
-        verify(valueOperations).set(REDIS_KEY_GIT_REMOTE_TOKEN, "my-token")
+        verify(valueOperations).set(REDIS_KEY_GITHUB_TOKEN, "my-token")
     }
 
     // ── isTokenConfigured ─────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn("some-token")
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn("some-token")
 
         // when
         val result = service.isTokenConfigured()
@@ -134,7 +134,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
         val result = service.isTokenConfigured()
