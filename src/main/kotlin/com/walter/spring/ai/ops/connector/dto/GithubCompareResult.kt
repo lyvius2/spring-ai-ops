@@ -6,9 +6,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 data class GithubCompareResult(
     val files: List<GithubFile> = emptyList(),
     val commits: List<GithubApiCommit> = emptyList(),
-    val errorMessage: String = "",
-) {
-    fun createCodeReviewPrompt(): String {
+    override val errorMessage: String = "",
+) : GitCompareResult {
+    override fun createCodeReviewPrompt(): String {
         return buildString {
             appendLine("## Code Diff")
             appendLine()

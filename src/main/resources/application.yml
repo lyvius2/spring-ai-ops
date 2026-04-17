@@ -42,6 +42,9 @@ feign:
   github:
     connect-timeout: 5000   # GitHub API connect timeout (ms)
     read-timeout: 30000     # GitHub API read timeout (ms)
+  gitlab:
+    connect-timeout: 5000   # GitLab API connect timeout (ms)
+    read-timeout: 30000     # GitLab API read timeout (ms)
 
 resilience4j:
   timelimiter:
@@ -64,6 +67,9 @@ github:
   url: ${GITHUB_URL:https://api.github.com}     # Set your GitHub API URL (e.g., https://api.github.com)
   access-token: ${GITHUB_ACCESS_TOKEN:}         # Set your GitHub access token for authentication
   api-version: ${GITHUB_API_VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28) : Default is 2022-11-28
+gitlab:
+  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # Set your GitLab URL (e.g., https://gitlab.com/api/v4)
+  access-token: ${GITLAB_ACCESS_TOKEN:}         # Set your GitLab access token for authentication
 
 crypto:
   secret-key: ${CRYPTO_SECRET_KEY:}  # AES-256-GCM key for encrypting Redis-stored credentials. Must be set in production.
