@@ -723,10 +723,21 @@ function renderChangedFilesSection(record) {
 
 function renderCodeReviewSection(record) {
     if (!record) return '';
+    const reviewResult = (record.reviewResult || '').trim();
+    const isCredentialError = reviewResult.startsWith('[CREDENTIAL_ERROR]')
+        || reviewResult.includes('access token is not configured');
+    if (isCredentialError) {
+        const msg = escHtml(reviewResult.replace('[CREDENTIAL_ERROR]', '').trim());
+        return `
+        <div class="analysis-layer">
+            <div class="layer-header">AI Code Review</div>
+            <div class="credential-error-msg">&#9888; ${msg}</div>
+        </div>`;
+    }
     return `
         <div class="analysis-layer">
             <div class="layer-header">AI Code Review</div>
-            <div class="analysis-text markdown-body">${renderMarkdown(record.reviewResult || '')}</div>
+            <div class="analysis-text markdown-body">${renderMarkdown(reviewResult)}</div>
         </div>`;
 }
 
@@ -763,7 +774,7 @@ function buildCodeReviewHtml(appName) {
     const record = list[idx] || null;
     const layers = record
         ? renderCommitUrlSection(record) + renderChangedFilesSection(record) + renderCodeReviewSection(record)
-        : `<div class="info-message">Please register <code>/webhook/github/${escHtml(appName)}</code> as the Webhook URL triggered on push events in your GitHub Repository.</div>`;
+        : `<div class="info-message">Please register <code>/webhook/git/${escHtml(appName)}</code> as the Webhook URL triggered on push events in your GitHub Repository.</div>`;
     return layers + renderCommitListSection(appName);
 }
 

@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.controller
 
 import com.walter.spring.ai.ops.code.AlertingStatus
+import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushResponse
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
@@ -68,8 +69,8 @@ class WebhookController(
     ): GithubPushResponse {
         CompletableFuture.runAsync({
             val request = when {
-                githubEvent != null -> GithubPushRequest.fromGithubBody(body)
-                gitlabEvent != null -> GithubPushRequest.fromGitlabBody(body)
+                githubEvent != null -> GithubPushRequest.fromGithubBody(body).copy(source = GitRemoteProvider.GITHUB)
+                gitlabEvent != null -> GithubPushRequest.fromGitlabBody(body).copy(source = GitRemoteProvider.GITLAB)
                 else -> throw IllegalArgumentException("Unsupported event type: missing X-GitHub-Event or X-Gitlab-Event header") }
             analyzeFacade.analyzeCodeDiffer(request, application) }, executor)
         return GithubPushResponse.accepted()

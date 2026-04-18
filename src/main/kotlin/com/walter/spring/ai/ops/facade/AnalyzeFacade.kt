@@ -4,6 +4,7 @@ import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
+import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
@@ -34,11 +35,10 @@ class AnalyzeFacade(
 ) {
     private val log = LoggerFactory.getLogger(AnalyzeFacade::class.java)
 
-    private fun resolveGitService(): GitRemoteService =
-        when (githubService.getGitRemoteProvider()) {
-            GitRemoteProvider.GITLAB -> gitlabService
-            else -> githubService
-        }
+    private fun resolveGitServiceBySource(source: GitRemoteProvider): GitRemoteService = when (source) {
+        GitRemoteProvider.GITHUB -> githubService
+        GitRemoteProvider.GITLAB -> gitlabService
+    }
 
     fun analyzeFiring(request: GrafanaAlertingRequest, application: String?) {
         if (request.isResolved()) {
@@ -92,7 +92,20 @@ class AnalyzeFacade(
         runCatching {
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(targetApplication)
-            val gitService = resolveGitService()
+            val gitService = resolveGitServiceBySource(request.source)
+
+            if (!gitService.isTokenConfigured()) {
+                log.warn("Git push webhook received but {} token is not configured", request.source)
+                val errorRecord = createCodeReviewRecord(
+                    request, targetApplication,
+                    GithubCompareResult(),
+                    request.source.alertMessage,
+                )
+                gitService.saveCodeReviewRecord(errorRecord)
+                pushCodeReview(errorRecord)
+                return@runCatching
+            }
+
             val inquiry = GitDifferInquiry.of(request)
             val compareResult = gitService.executeInquiryDiffer(inquiry)
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())

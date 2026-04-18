@@ -1,6 +1,8 @@
 package com.walter.spring.ai.ops.controller.dto
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.walter.spring.ai.ops.code.GitRemoteProvider
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GithubPushRequest(
@@ -8,6 +10,7 @@ data class GithubPushRequest(
     val after: String = "",
     val repository: GithubPushRepository = GithubPushRepository(),
     val commits: List<GithubPushCommit> = emptyList(),
+    @JsonIgnore val source: GitRemoteProvider = GitRemoteProvider.GITHUB,
 ) {
     companion object {
         const val EMPTY_SHA = "0000000000000000000000000000000000000000"
