@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "GitHub Configuration", description = "GitHub personal access token management for code review")
 @RestController
 @RequestMapping("/api/github")
-class GithubConfigController(
+class GitRemoteConfigController(
     private val gitRemoteFacade: GitRemoteFacade
 ) {
     @Operation(summary = "Save Git Remote provider, access token and base URL")
