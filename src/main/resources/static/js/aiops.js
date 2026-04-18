@@ -1,3 +1,5 @@
+const MASKED_TOKEN = '••••••••••••';
+
 // ── Select Provider Modal ─────────────────────────────────────────────────────
 
 function openLlmSelectProviderModal() {
@@ -41,9 +43,30 @@ async function submitSelectProvider() {
 
 // ── LLM Modal ────────────────────────────────────────────────────────────────
 
+function hasLlmKeyConfigured(provider) {
+    if (!provider) return false;
+    if (provider === CURRENT_LLM) return true;   // active provider always has a key
+    return !!LLM_SELECT_PROVIDER;                // other provider only has key if both are configured
+}
+
+function updateLlmKeyInput() {
+    const selected = document.querySelector('input[name="llm-provider"]:checked');
+    if (!selected) return;
+    const apiKeyInput   = document.getElementById('llm-api-key');
+    const closeBtn      = document.getElementById('llm-modal-close');
+    const isReconfigure = closeBtn && closeBtn.style.display !== 'none';
+
+    if (isReconfigure && hasLlmKeyConfigured(selected.value)) {
+        apiKeyInput.value = MASKED_TOKEN;
+        apiKeyInput.placeholder = 'Leave blank or keep masked value to preserve current key';
+    } else {
+        apiKeyInput.value = '';
+        apiKeyInput.placeholder = selected.value === 'anthropic' ? 'sk-ant-...' : 'sk-...';
+    }
+}
+
 function openLlmModal(isReconfigure) {
     const closeBtn = document.getElementById('llm-modal-close');
-    const apiKeyInput = document.getElementById('llm-api-key');
     if (isReconfigure && CURRENT_LLM) {
         const radio = document.querySelector(`input[name="llm-provider"][value="${CURRENT_LLM}"]`);
         if (radio) radio.checked = true;
@@ -51,13 +74,21 @@ function openLlmModal(isReconfigure) {
             'Update your LLM provider or API key.';
         document.getElementById('llm-save-btn').textContent = 'Update & Reconnect';
         closeBtn.style.display = 'block';
-        apiKeyInput.value = '';
-        apiKeyInput.placeholder = 'Already configured — leave blank to keep current key';
     } else {
         closeBtn.style.display = 'none';
-        apiKeyInput.value = '';
-        apiKeyInput.placeholder = 'sk-...';
     }
+
+    // Wire up provider change → key input state update
+    document.querySelectorAll('input[name="llm-provider"]').forEach(radio => {
+        radio.onchange = updateLlmKeyInput;
+    });
+    updateLlmKeyInput();
+
+    // On focus, select all masked value for easy replacement
+    document.getElementById('llm-api-key').onfocus = function () {
+        if (this.value === MASKED_TOKEN) this.select();
+    };
+
     hideLlmAlerts();
     document.getElementById('llm-modal').style.display = 'flex';
 }
@@ -68,7 +99,8 @@ function closeLlmModal() {
 
 async function saveLlmConfig() {
     const llm    = document.querySelector('input[name="llm-provider"]:checked').value;
-    const apiKey = document.getElementById('llm-api-key').value.trim();
+    const rawKey = document.getElementById('llm-api-key').value.trim();
+    const apiKey = rawKey === MASKED_TOKEN ? '' : rawKey;
     const btn    = document.getElementById('llm-save-btn');
     const isReconfigure = btn.textContent.includes('Update');
 
@@ -942,7 +974,6 @@ function switchToTab(tabName) {
 // ── Git Remote Modal ──────────────────────────────────────────────────────────
 
 let _gitRemoteStatusCache = null;
-const MASKED_TOKEN = '••••••••••••';
 
 /**
  * Determines which action to take based on the git remote configuration status.
