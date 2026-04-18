@@ -913,26 +913,25 @@ async function checkGitRemoteAndProceed() {
         const data = await res.json();
         _gitRemoteStatusCache = data;
 
-        const ghOk   = data.githubTokenConfigured;
-        const glOk   = data.gitlabTokenConfigured;
-        const ghProp = data.githubPropertyConfigured;
-        const glProp = data.gitlabPropertyConfigured;
+        const ghOk      = data.githubTokenConfigured;
+        const glOk      = data.gitlabTokenConfigured;
+        const ghProp    = data.githubPropertyConfigured;
+        const glProp    = data.gitlabPropertyConfigured;
+        const current   = data.currentProvider; // Redis-persisted selection takes priority
 
-        // Req 6: both providers fully configured → show modal to re-select
-        if (ghOk && glOk) {
-            openGitRemoteModal(data, true);
-            return;
-        }
+        // Redis has an explicit provider selection → use it without popup
+        if (current === 'GITHUB') { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
+        if (current === 'GITLAB') { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
 
-        // Req 5: exactly one property-configured → auto-use, no popup
+        // No Redis selection yet — fall back to property-configured provider
         if (ghProp && !glProp) { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
         if (glProp && !ghProp) { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
 
-        // Exactly one Redis-configured → use it
+        // Exactly one token configured via Redis (legacy path)
         if (ghOk && !glOk) { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
         if (glOk && !ghOk) { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
 
-        // Neither configured → must setup
+        // Nothing configured → must setup
         openGitRemoteModal(data, false);
     } catch (_) {
         showMainSection();
