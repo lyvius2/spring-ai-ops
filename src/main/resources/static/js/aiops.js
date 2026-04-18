@@ -909,14 +909,14 @@ function buildAppDetailHtml(appName) {
     return `
         <div class="app-detail-header">${escHtml(appName)}</div>
         <div class="tab-bar">
-            <button class="tab-btn active" data-tab="exception">Exception Analysis</button>
-            <button class="tab-btn"        data-tab="codereview">Code Review</button>
+            <button class="tab-btn"        data-tab="exception">Incident Intelligence</button>
+            <button class="tab-btn active" data-tab="codereview">Code Review</button>
         </div>
-        <div class="tab-content" id="tab-pane-exception">
+        <div class="tab-content" id="tab-pane-exception" style="display:none;">
             <div id="exception-layers">${renderAnalysisLayers(appName, record)}</div>
             ${renderFiringListSection(appName)}
         </div>
-        <div class="tab-content" id="tab-pane-codereview" style="display:none;">
+        <div class="tab-content" id="tab-pane-codereview">
             <div id="codereview-content">
                 <div class="list-placeholder">Loading commit records...</div>
             </div>
@@ -941,6 +941,8 @@ async function renderAppDetail(appName) {
     const panel = document.getElementById('app-detail-panel');
     panel.innerHTML = buildAppDetailHtml(appName);
     applyHighlighting(panel);
+    // Code Review is the default active tab — load its content immediately
+    await loadAndRenderCodeReview(appName);
 }
 
 // WebSocket 수신 시: 로컬 상태로 즉시 렌더링 (API 호출 없음)
