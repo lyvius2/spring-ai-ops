@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <property name="LOG_PATH" value="./log"/>
+    <property name="LOG_FILE" value="spring-ai-ops"/>
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{60} - %msg%n"/>
+    <property name="LOG_PATTERN_4_LOKI"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} trace_id=%X{traceId} span_id=%X{spanId} [%thread] %-5level %logger{60} - %msg%n"/>
+
+    <!-- Console Appender (shared across all profiles) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- default, dev, local profiles: console output only -->
+    <springProfile name="default | dev | local">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- live profile: console + file + Loki output -->
+    <springProfile name="live">
+
+        <!-- Application Log File (daily rotation, retained for 30 days) -->
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/${LOG_FILE}.log</file>
+            <encoder>
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/${LOG_FILE}.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>3GB</totalSizeCap>
+            </rollingPolicy>
+        </appender>
+
+        <!-- Error Log File (ERROR level only, daily rotation, retained for 30 days) -->
+        <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/${LOG_FILE}-error.log</file>
+            <filter class="ch.qos.logback.classic.filter.LevelFilter">
+                <level>ERROR</level>
+                <onMatch>ACCEPT</onMatch>
+                <onMismatch>DENY</onMismatch>
+            </filter>
+            <encoder>
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/${LOG_FILE}-error.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>1GB</totalSizeCap>
+            </rollingPolicy>
+        </appender>
+
+        <!-- Loki Appender -->
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <!-- Suppress internal error logs when Loki is unavailable -->
+            <verbose>false</verbose>
+            <http>
+                <url>http://localhost:3100/loki/api/v1/push</url>
+                <connectionTimeoutMs>5000</connectionTimeoutMs>
+                <requestTimeoutMs>5000</requestTimeoutMs>
+                <!-- Do not retry when Loki is dead -->
+                <retryMaxAttempts>0</retryMaxAttempts>
+            </http>
+            <format>
+                <label>
+                    <pattern>application=spring-ai-ops,host=${HOSTNAME},level=%level,logger=%logger{36}</pattern>
+                </label>
+                <message>
+                    <pattern>${LOG_PATTERN_4_LOKI}</pattern>
+                </message>
+                <sortByTime>true</sortByTime>
+            </format>
+            <!-- Async processing to prevent Loki failures from affecting the application -->
+            <sendQueueMaxBytes>41943040</sendQueueMaxBytes>  <!-- 40MB -->
+            <batchMaxItems>1000</batchMaxItems>
+            <batchTimeoutMs>5000</batchTimeoutMs>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+            <appender-ref ref="LOKI"/>
+        </root>
+
+    </springProfile>
+</configuration>
