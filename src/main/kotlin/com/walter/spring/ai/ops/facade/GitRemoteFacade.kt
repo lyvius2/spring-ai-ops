@@ -13,7 +13,6 @@ class GitRemoteFacade(
     private val gitlabService: GitlabService,
 ) {
     fun setConfig(request: GitRemoteConfigRequest, provider: GitRemoteProvider) {
-        githubService.setGitRemoteProvider(provider)
         val service = resolveService(provider)
         if (request.token.isNotBlank()) {
             service.setToken(request.token)
@@ -25,7 +24,6 @@ class GitRemoteFacade(
 
     fun getConfig(): Map<String, Any?> {
         return mapOf(
-            "currentProvider" to githubService.getGitRemoteProvider()?.name,
             "githubTokenConfigured" to githubService.isTokenConfigured(),
             "githubPropertyConfigured" to githubService.isPropertyConfigured(),
             "gitlabTokenConfigured" to gitlabService.isTokenConfigured(),

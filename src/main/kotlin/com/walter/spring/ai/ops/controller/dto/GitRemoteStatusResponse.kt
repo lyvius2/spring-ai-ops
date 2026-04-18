@@ -4,7 +4,6 @@ data class GitRemoteStatusResponse(
     val githubPropertyConfigured: Boolean,
     val gitlabTokenConfigured: Boolean,
     val gitlabPropertyConfigured: Boolean,
-    val currentProvider: String?,
     val githubUrl: String,
     val gitlabUrl: String,
 ) {
@@ -15,7 +14,6 @@ data class GitRemoteStatusResponse(
                 githubPropertyConfigured = configMap["githubPropertyConfigured"] as? Boolean ?: false,
                 gitlabTokenConfigured = configMap["gitlabTokenConfigured"] as? Boolean ?: false,
                 gitlabPropertyConfigured = configMap["gitlabPropertyConfigured"] as? Boolean ?: false,
-                currentProvider = configMap["currentProvider"] as? String,
                 githubUrl = configMap["githubUrl"] as? String ?: "",
                 gitlabUrl = configMap["gitlabUrl"] as? String ?: "",
             )

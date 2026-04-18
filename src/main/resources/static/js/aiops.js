@@ -1,5 +1,3 @@
-const MASKED_TOKEN = '••••••••••••';
-
 // Mutable LLM state — updated after save so re-opens work without page reload
 let _llmConfigured     = !!LLM_CONFIGURED;
 let _currentLlm        = CURRENT_LLM;
@@ -62,8 +60,8 @@ function updateLlmKeyInput() {
     const isReconfigure = closeBtn && closeBtn.style.display !== 'none';
 
     if (isReconfigure && hasLlmKeyConfigured(selected.value)) {
-        apiKeyInput.value = MASKED_TOKEN;
-        apiKeyInput.placeholder = 'Leave blank or keep masked value to preserve current key';
+        apiKeyInput.value = '';
+        apiKeyInput.placeholder = 'API key already saved — leave blank to keep the existing key';
     } else {
         apiKeyInput.value = '';
         apiKeyInput.placeholder = selected.value === 'anthropic' ? 'sk-ant-...' : 'sk-...';
@@ -89,11 +87,6 @@ function openLlmModal(isReconfigure) {
     });
     updateLlmKeyInput();
 
-    // On focus, select all masked value for easy replacement
-    document.getElementById('llm-api-key').onfocus = function () {
-        if (this.value === MASKED_TOKEN) this.select();
-    };
-
     hideLlmAlerts();
     document.getElementById('llm-modal').style.display = 'flex';
 }
@@ -104,8 +97,7 @@ function closeLlmModal() {
 
 async function saveLlmConfig() {
     const llm    = document.querySelector('input[name="llm-provider"]:checked').value;
-    const rawKey = document.getElementById('llm-api-key').value.trim();
-    const apiKey = rawKey === MASKED_TOKEN ? '' : rawKey;
+    const apiKey = document.getElementById('llm-api-key').value.trim();
     const btn    = document.getElementById('llm-save-btn');
     const isReconfigure = btn.textContent.includes('Update');
 
@@ -997,23 +989,14 @@ async function checkGitRemoteAndProceed() {
         const data = await res.json();
         _gitRemoteStatusCache = data;
 
-        const ghOk      = data.githubTokenConfigured;
-        const glOk      = data.gitlabTokenConfigured;
-        const ghProp    = data.githubPropertyConfigured;
-        const glProp    = data.gitlabPropertyConfigured;
-        const current   = data.currentProvider; // Redis-persisted selection takes priority
+        const ghOk = data.githubTokenConfigured || data.githubPropertyConfigured;
+        const glOk = data.gitlabTokenConfigured  || data.gitlabPropertyConfigured;
 
-        // Redis has an explicit provider selection → use it without popup
-        if (current === 'GITHUB') { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
-        if (current === 'GITLAB') { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
-
-        // No Redis selection yet — fall back to property-configured provider
-        if (ghProp && !glProp) { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
-        if (glProp && !ghProp) { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
-
-        // Exactly one token configured via Redis (legacy path)
-        if (ghOk && !glOk) { renderGitRemoteStatus('GITHUB'); showMainSection(); return; }
-        if (glOk && !ghOk) { renderGitRemoteStatus('GITLAB'); showMainSection(); return; }
+        if (ghOk || glOk) {
+            renderGitRemoteStatus(data);
+            showMainSection();
+            return;
+        }
 
         // Nothing configured → must setup
         openGitRemoteModal(data, false);
@@ -1052,10 +1035,14 @@ function openGitRemoteModal(statusData, closeable) {
         group.appendChild(div);
     });
 
-    // Restore previously selected provider if any
-    if (statusData && statusData.currentProvider) {
-        const current = group.querySelector(`input[value="${statusData.currentProvider}"]`);
-        if (current) current.checked = true;
+    // If only GitLab is configured, pre-select GitLab; otherwise default to first (GitHub)
+    if (statusData) {
+        const ghOk = statusData.githubTokenConfigured || statusData.githubPropertyConfigured;
+        const glOk = statusData.gitlabTokenConfigured  || statusData.gitlabPropertyConfigured;
+        if (!ghOk && glOk) {
+            const glRadio = group.querySelector('input[value="GITLAB"]');
+            if (glRadio) glRadio.checked = true;
+        }
     }
 
     // Update URL/token fields when provider changes
@@ -1064,10 +1051,6 @@ function openGitRemoteModal(statusData, closeable) {
     });
     updateGitRemoteUrlPlaceholder();
 
-    // On focus, select all so typing replaces the masked value naturally
-    document.getElementById('git-remote-token-input').onfocus = function () {
-        if (this.value === MASKED_TOKEN) this.select();
-    };
     document.getElementById('git-remote-alert-error').style.display = 'none';
     document.getElementById('git-remote-save-btn').disabled = false;
     document.getElementById('git-remote-save-btn').textContent = 'Save & Connect';
@@ -1100,8 +1083,8 @@ function updateGitRemoteUrlPlaceholder() {
         ? (_gitRemoteStatusCache.githubTokenConfigured || _gitRemoteStatusCache.githubPropertyConfigured)
         : (_gitRemoteStatusCache.gitlabTokenConfigured || _gitRemoteStatusCache.gitlabPropertyConfigured)));
     if (isReconfigure && hasToken) {
-        tokenInput.value = MASKED_TOKEN;
-        tokenInput.placeholder = 'Leave blank or keep masked value to preserve current token';
+        tokenInput.value = '';
+        tokenInput.placeholder = 'Token already saved — leave blank to keep the existing token';
     } else {
         tokenInput.value = '';
         tokenInput.placeholder = selected.value === 'GITHUB' ? 'ghp_...' : (selected.value === 'GITLAB' ? 'glpat-...' : '');
@@ -1125,8 +1108,7 @@ async function openGitRemoteModalForReconfigure() {
 async function saveGitRemoteConfig() {
     const providerEl   = document.querySelector('input[name="git-remote-provider"]:checked');
     const urlInput     = document.getElementById('git-remote-url-input');
-    const rawToken     = document.getElementById('git-remote-token-input').value.trim();
-    const token        = rawToken === MASKED_TOKEN ? '' : rawToken;
+    const token        = document.getElementById('git-remote-token-input').value.trim();
     const btn          = document.getElementById('git-remote-save-btn');
     const errEl        = document.getElementById('git-remote-alert-error');
     const isReconfigure = document.getElementById('git-remote-modal-close').style.display !== 'none';
@@ -1160,7 +1142,13 @@ async function saveGitRemoteConfig() {
 
         if (data.success) {
             closeGitRemoteModal();
-            renderGitRemoteStatus(provider);
+            // Re-fetch to reflect the updated state of all providers
+            try {
+                const statusRes  = await fetch('/api/github/config/status');
+                const statusData = await statusRes.json();
+                _gitRemoteStatusCache = statusData;
+                renderGitRemoteStatus(statusData);
+            } catch (_) { /* status cell stays as-is */ }
             showMainSection();
         } else {
             errEl.textContent = data.message || 'Failed to save. Please try again.';
@@ -1377,16 +1365,25 @@ function closeLokiModal() {
     document.getElementById('loki-modal').style.display = 'none';
 }
 
-function renderGitRemoteStatus(provider) {
+function renderGitRemoteStatus(statusData) {
     const cell = document.getElementById('status-git-remote');
-    if (!cell || !provider) return;
-    const lp = provider.toLowerCase();
-    const displayName = lp.charAt(0).toUpperCase() + lp.slice(1);
+    if (!cell || !statusData) return;
+
+    const providers = [];
+    if (statusData.githubTokenConfigured || statusData.githubPropertyConfigured) providers.push('GITHUB');
+    if (statusData.gitlabTokenConfigured  || statusData.gitlabPropertyConfigured) providers.push('GITLAB');
+    if (providers.length === 0) return;
+
+    const badges = providers.map(p => {
+        const lp = p.toLowerCase();
+        return `<img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${p}" onerror="this.style.display='none'">
+                <span class="badge badge-up">${p}</span>`;
+    }).join(' ');
+
     cell.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between;">
             <div>
-                <img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${displayName}" onerror="this.style.display='none'">
-                <span class="badge badge-up">${provider}</span>
+                ${badges}
                 <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
             </div>
             <button class="btn-secondary" style="margin-top:0;" onclick="openGitRemoteModalForReconfigure()">Reconfigure</button>
