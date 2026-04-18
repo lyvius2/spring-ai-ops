@@ -1,9 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_PREFIX
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
@@ -29,14 +27,6 @@ abstract class GitRemoteService(
     protected abstract val configuredToken: String
 
     fun isPropertyConfigured(): Boolean = configuredToken.isNotBlank()
-
-    fun setGitRemoteProvider(provider: GitRemoteProvider) {
-        redisTemplate.opsForValue().set(REDIS_KEY_GIT_REMOTE, provider.name)
-    }
-
-    fun getGitRemoteProvider(): GitRemoteProvider? =
-        redisTemplate.opsForValue().get(REDIS_KEY_GIT_REMOTE)
-            ?.let { runCatching { GitRemoteProvider.valueOf(it) }.getOrNull() }
 
     fun setToken(token: String) {
         redisTemplate.opsForValue().set(redisTokenKey, cryptoProvider.encrypt(token))
