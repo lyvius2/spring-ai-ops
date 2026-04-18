@@ -264,21 +264,24 @@ class GithubServiceTest {
     }
 
     @Test
-    @DisplayName("compare 결과 files가 비어있어도 errorMessage가 있으면 fallback 하지 않음")
-    fun givenCompareReturnsErrorMessage_whenExecuteInquiryDiffer_thenDoesNotFallBack() {
+    @DisplayName("compare가 errorMessage를 반환하면 getCommit으로 fallback 함")
+    fun givenCompareReturnsErrorMessage_whenExecuteInquiryDiffer_thenFallsBackToGetCommit() {
         // given
         val service = buildService()
         val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha")
-        val errorResult = GithubCompareResult(files = emptyList(), errorMessage = "Failed to connect to GitHub API.")
+        val errorResult = GithubCompareResult(files = emptyList(), errorMessage = "[404] Not Found")
+        val fallbackResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified")))
         given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(errorResult)
+        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(fallbackResult)
 
         // when
         val result = service.executeInquiryDiffer(inquiry)
 
         // then
         verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
-        assertThat(result.errorMessage).isNotBlank()
-        assertThat((result as GithubCompareResult).files).isEmpty()
+        verify(githubConnector).getCommit("owner", "repo", "head-sha")
+        assertThat((result as GithubCompareResult).files).hasSize(1)
+        assertThat(result.files[0].filename).isEqualTo("src/Main.kt")
     }
 
     @Test

@@ -37,8 +37,12 @@ class GithubService(
             githubConnector.getCommit(inquiry.owner, inquiry.repo, inquiry.head)
         } else {
             val compareResult = githubConnector.compare(inquiry.owner, inquiry.repo, "${inquiry.base}...${inquiry.head}")
-            if (compareResult.files.isEmpty() && compareResult.errorMessage.isBlank()) {
-                log.warn("GitHub compare returned empty files (250-commit limit?), falling back to getCommit: head={}", inquiry.head)
+            if (compareResult.hasError() || compareResult.files.isEmpty()) {
+                if (compareResult.hasError()) {
+                    log.warn("GitHub compare failed, falling back to getCommit: head={}, error={}", inquiry.head, compareResult.errorMessage)
+                } else {
+                    log.warn("GitHub compare returned empty files (250-commit limit?), falling back to getCommit: head={}", inquiry.head)
+                }
                 githubConnector.getCommit(inquiry.owner, inquiry.repo, inquiry.head)
             } else {
                 compareResult
