@@ -982,6 +982,7 @@ function openGitRemoteModal(statusData, closeable) {
     updateGitRemoteUrlPlaceholder();
 
     // Reset form
+    document.getElementById('git-remote-url-input').value = '';
     document.getElementById('git-remote-token-input').value = '';
     document.getElementById('git-remote-alert-error').style.display = 'none';
     document.getElementById('git-remote-save-btn').disabled = false;
@@ -994,18 +995,29 @@ function updateGitRemoteUrlPlaceholder() {
     const selected = document.querySelector('input[name="git-remote-provider"]:checked');
     if (!selected) return;
     const provider = GIT_REMOTE_PROVIDERS.find(p => p.name === selected.value);
-    if (!provider) return;
 
-    const urlInput = document.getElementById('git-remote-url-input');
-    // If a custom URL is already saved for this provider, show it as placeholder
-    let placeholder = provider.apiUrl;
-    if (_gitRemoteStatusCache) {
-        const saved = selected.value === 'GITHUB'
-            ? _gitRemoteStatusCache.githubUrl
-            : _gitRemoteStatusCache.gitlabUrl;
-        if (saved && saved !== provider.apiUrl) placeholder = saved;
+    // Update URL placeholder (only when provider info is available)
+    if (provider) {
+        const urlInput = document.getElementById('git-remote-url-input');
+        let placeholder = provider.apiUrl;
+        if (_gitRemoteStatusCache) {
+            const saved = selected.value === 'GITHUB'
+                ? _gitRemoteStatusCache.githubUrl
+                : _gitRemoteStatusCache.gitlabUrl;
+            if (saved && saved !== provider.apiUrl) placeholder = saved;
+        }
+        urlInput.placeholder = placeholder;
     }
-    urlInput.placeholder = placeholder;
+
+    // Update token placeholder based on selected provider
+    const tokenInput = document.getElementById('git-remote-token-input');
+    if (selected.value === 'GITHUB') {
+        tokenInput.placeholder = 'ghp_...';
+    } else if (selected.value === 'GITLAB') {
+        tokenInput.placeholder = 'glpat-...';
+    } else {
+        tokenInput.placeholder = '';
+    }
 }
 
 function closeGitRemoteModal() {
@@ -1325,3 +1337,4 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+

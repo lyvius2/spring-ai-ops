@@ -155,13 +155,13 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
                 <!-- dynamically populated from GIT_REMOTE_PROVIDERS -->
             </div>
             <div class="form-group">
-                <label class="form-label" for="git-remote-url-input">Base URL <span style="color:#999;font-weight:400;">(leave blank to use default)</span></label>
+                <label class="form-label" for="git-remote-url-input">Base API URL <span style="color:#999;font-weight:400;">(leave blank to use default)</span></label>
                 <input type="text" id="git-remote-url-input" class="form-input" autocomplete="off" />
             </div>
             <div class="form-group">
                 <label class="form-label" for="git-remote-token-input">Access Token</label>
                 <input type="password" id="git-remote-token-input" class="form-input"
-                       placeholder="ghp_... or glpat-..." autocomplete="off" />
+                       placeholder="" autocomplete="off" />
             </div>
             <button class="btn-primary" id="git-remote-save-btn" onclick="saveGitRemoteConfig()">Save &amp; Connect</button>
             <div class="alert alert-error" id="git-remote-alert-error"></div>

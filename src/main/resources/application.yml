@@ -119,3 +119,4 @@ management:
 logging:
   level:
     org.springframework.web.socket.sockjs.transport.handler.DefaultSockJsService: ERROR
+    org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver: ERROR
