@@ -43,6 +43,7 @@ async function submitSelectProvider() {
 
 function openLlmModal(isReconfigure) {
     const closeBtn = document.getElementById('llm-modal-close');
+    const apiKeyInput = document.getElementById('llm-api-key');
     if (isReconfigure && CURRENT_LLM) {
         const radio = document.querySelector(`input[name="llm-provider"][value="${CURRENT_LLM}"]`);
         if (radio) radio.checked = true;
@@ -50,11 +51,14 @@ function openLlmModal(isReconfigure) {
             'Update your LLM provider or API key.';
         document.getElementById('llm-save-btn').textContent = 'Update & Reconnect';
         closeBtn.style.display = 'block';
+        apiKeyInput.value = '';
+        apiKeyInput.placeholder = 'Already configured — leave blank to keep current key';
     } else {
         closeBtn.style.display = 'none';
+        apiKeyInput.value = '';
+        apiKeyInput.placeholder = 'sk-...';
     }
     hideLlmAlerts();
-    document.getElementById('llm-api-key').value = '';
     document.getElementById('llm-modal').style.display = 'flex';
 }
 
@@ -66,8 +70,9 @@ async function saveLlmConfig() {
     const llm    = document.querySelector('input[name="llm-provider"]:checked').value;
     const apiKey = document.getElementById('llm-api-key').value.trim();
     const btn    = document.getElementById('llm-save-btn');
+    const isReconfigure = btn.textContent.includes('Update');
 
-    if (!apiKey) {
+    if (!apiKey && !isReconfigure) {
         showLlmAlert('error', 'Please enter an API key.');
         return;
     }
@@ -226,8 +231,17 @@ function closeAddAppModal() {
 }
 
 document.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && document.getElementById('add-app-modal').style.display === 'flex') {
+    if (e.key !== 'Enter') return;
+    if (document.getElementById('add-app-modal').style.display === 'flex') {
         saveApp();
+    } else if (document.getElementById('llm-modal').style.display === 'flex') {
+        saveLlmConfig();
+    } else if (document.getElementById('git-remote-modal').style.display === 'flex') {
+        saveGitRemoteConfig();
+    } else if (document.getElementById('loki-modal').style.display === 'flex') {
+        saveLokiUrl();
+    } else if (document.getElementById('select-provider-modal').style.display === 'flex') {
+        submitSelectProvider();
     }
 });
 
@@ -653,13 +667,22 @@ function toggleFileDiff(headerEl) {
     arrow.textContent = open ? '▼' : '▶';
 }
 
+function detectGitProvider(url) {
+    if (!url) return 'GITHUB';
+    return url.toLowerCase().includes('gitlab') ? 'GITLAB' : 'GITHUB';
+}
+
 function renderCommitUrlSection(record) {
     if (!record) return '';
     const commits = record.commitSummaries;
+    const provider = detectGitProvider(record.githubUrl);
+    const providerLabel = provider === 'GITLAB' ? 'VIEW ON GITLAB' : 'VIEW ON GITHUB';
+    const branch = record.branch || '-';
+
     if (commits && commits.length > 0) {
         const compareUrl = escHtml(record.githubUrl || '');
         const compareLink = compareUrl
-            ? `<a class="compare-link" href="${compareUrl}" target="_blank" rel="noopener noreferrer">&#128279; View on GitHub</a>`
+            ? `<a class="compare-link" href="${compareUrl}" target="_blank" rel="noopener noreferrer">&#128279; ${providerLabel}</a>`
             : '';
         const rows = commits.map(c => {
             const msg = escHtml((c.message || '—').split('\n')[0]); // 첫 번째 줄만 표시
@@ -676,7 +699,10 @@ function renderCommitUrlSection(record) {
             <div class="commit-url-section">
                 <div class="layer-header" style="display:flex;align-items:center;justify-content:space-between;">
                     <span>Commits (${commits.length})</span>
-                    ${compareLink}
+                    <span style="display:flex;align-items:center;gap:12px;">
+                        <span class="branch-badge">&#9135; ${escHtml(branch)}</span>
+                        ${compareLink}
+                    </span>
                 </div>
                 ${rows}
             </div>`;
@@ -686,7 +712,10 @@ function renderCommitUrlSection(record) {
     const url = escHtml(record.githubUrl || '');
     return `
         <div class="commit-url-section">
-            <div class="layer-header">Commit</div>
+            <div class="layer-header" style="display:flex;align-items:center;justify-content:space-between;">
+                <span>Commit</span>
+                <span class="branch-badge">&#9135; ${escHtml(branch)}</span>
+            </div>
             <a class="commit-link" href="${url}" target="_blank" rel="noopener noreferrer">
                 <span class="commit-message-text">${msg}</span>
                 <span class="commit-url-text">${url}</span>
@@ -991,9 +1020,20 @@ function openGitRemoteModal(statusData, closeable) {
     });
     updateGitRemoteUrlPlaceholder();
 
-    // Reset form
-    document.getElementById('git-remote-url-input').value = '';
-    document.getElementById('git-remote-token-input').value = '';
+    // Reset form — pre-fill URL and show masked token placeholder for reconfigure
+    const urlInput   = document.getElementById('git-remote-url-input');
+    const tokenInput = document.getElementById('git-remote-token-input');
+    if (closeable && statusData) {
+        const savedUrl = statusData.currentProvider === 'GITLAB'
+            ? statusData.gitlabUrl
+            : statusData.githubUrl;
+        urlInput.value = savedUrl || '';
+        tokenInput.value = '';
+        tokenInput.placeholder = 'Already configured — leave blank to keep current token';
+    } else {
+        urlInput.value = '';
+        tokenInput.value = '';
+    }
     document.getElementById('git-remote-alert-error').style.display = 'none';
     document.getElementById('git-remote-save-btn').disabled = false;
     document.getElementById('git-remote-save-btn').textContent = 'Save & Connect';
@@ -1045,18 +1085,19 @@ async function openGitRemoteModalForReconfigure() {
 }
 
 async function saveGitRemoteConfig() {
-    const providerEl = document.querySelector('input[name="git-remote-provider"]:checked');
-    const urlInput   = document.getElementById('git-remote-url-input');
-    const token      = document.getElementById('git-remote-token-input').value.trim();
-    const btn        = document.getElementById('git-remote-save-btn');
-    const errEl      = document.getElementById('git-remote-alert-error');
+    const providerEl   = document.querySelector('input[name="git-remote-provider"]:checked');
+    const urlInput     = document.getElementById('git-remote-url-input');
+    const token        = document.getElementById('git-remote-token-input').value.trim();
+    const btn          = document.getElementById('git-remote-save-btn');
+    const errEl        = document.getElementById('git-remote-alert-error');
+    const isReconfigure = document.getElementById('git-remote-modal-close').style.display !== 'none';
 
     if (!providerEl) {
         errEl.textContent = 'Please select a provider.';
         errEl.style.display = 'block';
         return;
     }
-    if (!token) {
+    if (!token && !isReconfigure) {
         errEl.textContent = 'Please enter an access token.';
         errEl.style.display = 'block';
         return;

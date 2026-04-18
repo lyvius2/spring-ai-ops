@@ -5,92 +5,98 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run
 
 ```bash
-# 빌드
+# Build
 ./gradlew build
 
-# 실행 (내장 Redis 자동 기동)
+# Run (embedded Redis starts automatically)
 ./gradlew bootRun
 
-# 테스트 전체
+# Run all tests
 ./gradlew test
 
-# 단일 테스트 클래스
+# Run a single test class
 ./gradlew test --tests "com.walter.spring.ai.ops.SomeTest"
 
-# 컴파일만
+# Compile only
 ./gradlew compileKotlin
 ```
 
-## 아키텍처 개요
+## Architecture Overview
 
-Grafana Alerting / GitHub webhook을 수신해 OpenAI 또는 Anthropic LLM으로 오류 분석·코드 리뷰를 수행하는 Spring Boot 애플리케이션.
+A Spring Boot application that receives Grafana Alerting and Git (GitHub/GitLab) webhooks and performs error analysis and code review using OpenAI or Anthropic LLMs.
 
-**기술 스택**: Spring Boot 3.4.4 · Kotlin · Spring AI 1.1.0 · Redis · Mustache
+**Tech stack**: Spring Boot 3.4.4 · Kotlin · Spring AI 1.1.0 · Redis · Mustache
 
-## 핵심 설계 결정
+## Key Design Decisions
 
-### Spring AI AutoConfiguration 전체 비활성화
-`application.yml`의 `spring.autoconfigure.exclude`에 모든 Spring AI AutoConfiguration 클래스를 명시적으로 나열한다. LLM 클라이언트는 자동 구성 없이 `AiClientService`에서 직접 인스턴스를 생성한다.
+### Spring AI AutoConfiguration Fully Disabled
+All Spring AI AutoConfiguration classes are explicitly listed under `spring.autoconfigure.exclude` in `application.yml`. LLM clients are instantiated directly in `AiModelService` without auto-configuration.
 
-### ChatModel 동적 생성 및 영속화
-- UI(`GET /`)에서 LLM 종류(openai/anthropic)와 API Key 입력
-- `POST /api/llm/config` → Redis에 `llm`, `llmKey` 키로 저장 → `AiClientService`가 `ChatModel` 인스턴스 생성 후 `@Volatile` 필드에 보관
-- 앱 재시작 시 `@PostConstruct`에서 Redis 값을 읽어 `ChatModel` 자동 복원
-- OpenAI: `gpt-4o-mini` / Anthropic: `claude-3-5-sonnet-20241022` 고정
+### Dynamic ChatModel Creation and Persistence
+- User selects LLM provider (openai/anthropic) and enters an API key via the UI (`GET /`)
+- `POST /api/llm/config` → saved to Redis under `llm` and `llmKey` keys → `AiModelService` creates a `ChatModel` instance and holds it in a `@Volatile` field
+- On restart, `@EventListener(ApplicationStartedEvent)` reads Redis values and restores the `ChatModel` automatically
+- OpenAI: `gpt-4o-mini` / Anthropic: `claude-3-5-sonnet-20241022` (fixed)
 
-### ChatModel 생성 방식
-AutoConfiguration이 비활성화되어 있으므로 `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, `ObservationRegistry.NOOP`을 직접 조합한다.
+### ChatModel Construction
+Because AutoConfiguration is disabled, `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP` are composed manually.
 
-### 개발 환경 내장 Redis
-`EmbeddedRedisConfig`가 `@PostConstruct`로 Redis 서버를 기동하고 `@PreDestroy`로 종료한다. 포트는 `application.yml`의 `spring.data.redis.port`를 따른다.
+### Embedded Redis for Local Development
+`EmbeddedRedisConfig` starts a Redis server in `@PostConstruct` and shuts it down in `@PreDestroy`. The port follows `spring.data.redis.port` in `application.yml`.
 
-## 패키지 구조
+## Package Structure
 
 ```
 com.walter.spring.ai.ops
 ├── code/
-│   ├── ConnectionStatus        # LLM 연결 결과 enum (SUCCESS, READY, FAILURE)
-│   └── AlertingStatus          # Grafana webhook 처리 결과 enum (FIRING, RESOLVED)
+│   ├── ConnectionStatus        # LLM connection result enum (SUCCESS, READY, FAILURE)
+│   └── AlertingStatus          # Grafana webhook processing result enum (FIRING, RESOLVED)
 ├── config/
-│   └── EmbeddedRedisConfig     # 개발용 내장 Redis 기동/종료
+│   └── EmbeddedRedisConfig     # Embedded Redis lifecycle for local dev
 ├── controller/
-│   ├── IndexController         # GET /  → index.mustache 렌더링
+│   ├── IndexController         # GET /  → renders index.mustache
 │   ├── AiConfigController      # POST /api/llm/config
-│   ├── WebhookController       # POST /webhook/grafana  (POST /webhook/github 예정)
+│   ├── WebhookController       # POST /webhook/grafana, POST /webhook/git/{app}
 │   └── dto/
 │       ├── AiConfigRequest / AiConfigResponse
-│       ├── GrafanaAlertingRequest   # Grafana webhook 최상위 페이로드
-│       ├── GrafanaAlert             # 개별 알림 객체 (lokiLabels, lokiStartNano, lokiEndNano 포함)
+│       ├── GrafanaAlertingRequest   # Top-level Grafana webhook payload
+│       ├── GrafanaAlert             # Individual alert object (lokiLabels, lokiStartNano, lokiEndNano)
 │       └── GrafanaAlertingResponse
+├── facade/
+│   ├── AnalyzeFacade           # Orchestrates firing analysis and code review workflows
+│   └── GitRemoteFacade         # Orchestrates Git remote provider configuration
 └── service/
-    ├── AiClientService         # ChatModel 생명주기 관리
-    └── FiringAnalysisService   # Grafana firing 분석 진입점 (Loki 조회 + LLM 분석 예정)
+    ├── AiModelService          # ChatModel lifecycle management
+    ├── GithubService           # GitHub API integration
+    ├── GitlabService           # GitLab API integration
+    ├── GrafanaService          # Grafana alert record management
+    └── LokiService             # Loki log query execution
 ```
 
-## API 엔드포인트
+## API Endpoints
 
-| Method | Path | 설명 |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/` | LLM 설정 UI |
-| POST | `/api/llm/config` | LLM 종류·API Key 저장 및 ChatModel 생성 |
-| POST | `/webhook/grafana` | Grafana Alerting webhook 수신 |
-| POST | `/webhook/github` | GitHub push webhook 수신 (예정) |
+| GET | `/` | LLM configuration UI |
+| POST | `/api/llm/config` | Save LLM provider and API key, create ChatModel |
+| POST | `/webhook/grafana/{app}` | Receive Grafana Alerting webhook |
+| POST | `/webhook/git/{app}` | Receive GitHub/GitLab push webhook |
 
-## Grafana → Loki → LLM 흐름
+## Grafana → Loki → LLM Flow
 
-`WebhookController` → `FiringAnalysisService` 순으로 처리된다.
+`WebhookController` → `AnalyzeFacade` → `GrafanaService` / `LokiService` / `AiModelService`
 
-1. `GrafanaAlertingRequest.isResolved()` 이면 조기 반환
-2. `GrafanaAlert.lokiLabels()` 로 Loki 스트림 셀렉터 구성 (`job`, `instance`, `namespace`, `pod`, `container` 등)
-3. `GrafanaAlert.lokiStartNano(bufferMinutes=5)` / `lokiEndNano()` 로 시간 범위 계산
-   - `endsAt`이 `0001-...`(zero-value)이면 현재 시각 사용
-4. `GET {loki.url}/loki/api/v1/query_range` 호출
-5. Alert 컨텍스트 + Loki 로그 → `AiClientService.getChatModel()` 로 LLM 분석
+1. Return early if `GrafanaAlertingRequest.isResolved()`
+2. Build Loki stream selector from `GrafanaAlert.lokiLabels()` (`job`, `instance`, `namespace`, `pod`, `container`, etc.)
+3. Compute time range via `GrafanaAlert.lokiStartNano(bufferMinutes=5)` / `lokiEndNano()`
+   - If `endsAt` is `0001-...` (zero-value), use current time
+4. Call `GET {loki.url}/loki/api/v1/query_range`
+5. Alert context + Loki logs → LLM analysis via `AiModelService.getChatModel()`
 
-### Loki 연동 전제 조건
-Prometheus 메트릭 레이블과 Loki 스트림 레이블이 동일해야 한다(`job`, `instance` 등). Promtail/Grafana Alloy에서 동일 레이블 세트로 설정하지 않으면 로그 조회 결과가 비어 있다.
+### Loki Integration Prerequisite
+Prometheus metric labels and Loki stream labels must be identical (`job`, `instance`, etc.). If Promtail/Grafana Alloy is not configured with the same label set, log query results will be empty.
 
-## application.yml 주요 설정
+## application.yml Key Settings
 
 ```yaml
 spring:
@@ -98,34 +104,41 @@ spring:
   profiles.active: ${SPRING_PROFILES_ACTIVE:local}
 
 loki:
-  url: ""   # Loki base URL (예: http://loki:3100)
+  url: ""   # Loki base URL (e.g. http://loki:3100)
 ```
 
-## Controller 작성 규칙
+## Layer Responsibilities
 
-- Controller는 RequestBody 수신 및 Response 반환만 담당한다. 비즈니스 로직은 사소한 것이라도 반드시 Service 또는 Facade에서 수행한다.
-- Controller의 반환 타입은 항상 DTO로 한다. `ResponseEntity`는 사용하지 않는다.
+### Controller
+- Responsible only for receiving the request body and returning the response DTO.
+- Must not contain any business logic — even trivial logic must be delegated to a Service or Facade.
+- Return type must always be a DTO. Do not use `ResponseEntity`.
 
-## Service 작성 규칙
+### Service
+- Owns a single, well-scoped area of business logic or external API integration. Adhere to the Single Responsibility Principle.
+- Implements the detailed business logic for a specific domain (e.g., token management, LLM invocation, record persistence).
+- Every new Service and every new public method added to an existing Service must have a corresponding test. All public methods must be covered.
 
-- Service는 Controller에서 호출되며, 비즈니스 로직과 외부 API 연동을 담당한다. 단일 책임 원칙을 준수하여 하나의 Service가 너무 많은 역할을 하지 않도록 한다.
-- Service를 새로 생성하거나, 기존 Service에 method를 추가할 때는 반드시 Test 클래스도 함께 작성한다. Service의 public method는 모두 테스트 대상이 되어야 한다.
+### Facade
+- Defines and implements the sequencing and orchestration of business logic across multiple Services.
+- Coordinates calls to Services in the correct order to fulfill a use case (e.g., fetch diff → call LLM → save record → push via WebSocket).
+- Does not contain detailed business logic itself; delegates to the appropriate Services.
 
-## Data Class 작성 규칙
+## Data Class Rules
 
-- 동일한 kotlin file 내에 1개를 넘는 data class를 작성하지 않는다. (예: `AiConfigRequest`와 `AiConfigResponse`는 각각 별도의 file로 분리)
-- Controller에서 사용하는 DTO는 `controller.dto` 패키지에, FeignClient에서 사용하는 DTO는 `connector.dto` 패키지에 작성한다. (예: `GrafanaAlertingRequest`는 `controller.dto`, `LokiQueryResult`는 `connector.dto`)
+- No more than one data class per Kotlin file. (e.g., `AiConfigRequest` and `AiConfigResponse` must be in separate files)
+- DTOs used by Controllers go in the `controller.dto` package; DTOs used by connectors go in the `connector.dto` package. (e.g., `GrafanaAlertingRequest` → `controller.dto`, `LokiQueryResult` → `connector.dto`)
 
-## Test 작성 규칙
+## Test Rules
 
-- Test 클래스는 `src/test/kotlin` 경로에 Controller, Service, Repository 별로 패키지를 나누어 작성한다. (예: `com.walter.spring.ai.ops.service.AiClientServiceTest`)
-- Test method 이름은 `given[Condition]_when[Action]_then[ExpectedResult]` 패턴을 따른다. (예: `givenValidLlmConfig_whenGetChatModel_thenReturnsChatModel`)
-- Test는 가능한 한 독립적으로 작성하여, 하나의 Test가 실패해도 다른 Test에 영향을 주지 않도록 한다. 필요한 경우 Mocking을 활용한다.
-- Test method는 // given, // when, // then 주석으로 Arrange, Act, Assert 구분을 명확히 한다.
-- Test method의 이름은 영어로 하고, 한국어 설명은 `@DisplayName` 어노테이션으로 작성한다.
+- Test classes go under `src/test/kotlin`, organized by layer package. (e.g., `com.walter.spring.ai.ops.service.AiModelServiceTest`)
+- Test method names follow the `given[Condition]_when[Action]_then[ExpectedResult]` pattern. (e.g., `givenValidLlmConfig_whenGetChatModel_thenReturnsChatModel`)
+- Tests must be independent — a failure in one test must not affect others. Use mocking where necessary.
+- Use `// given`, `// when`, `// then` comments to clearly separate Arrange, Act, and Assert sections.
+- Test method names must be in English; Korean descriptions go in the `@DisplayName` annotation.
 
-## 외부 서비스 연동 조건
+## External Service Integration
 
 **Grafana**: Contact Point → Webhook, URL `http://<host>:8080/webhook/grafana`
 
-**GitHub** (예정): Webhooks → Payload URL `http://<host>:8080/webhook/github`, Content-type `application/json`, Events: `push`, Secret으로 HMAC-SHA256 검증
+**GitHub / GitLab**: Webhooks → Payload URL `http://<host>:8080/webhook/git/{app}`, Content-type `application/json`, Events: `push`
