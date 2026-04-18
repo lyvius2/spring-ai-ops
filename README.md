@@ -1,6 +1,6 @@
 # Spring AI Ops
 
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting** and **GitHub**, then uses an LLM (OpenAI or Anthropic) to analyze errors and review code in real time — with results delivered to a live dashboard via WebSocket.
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI or Anthropic) to analyze errors and review code in real time — with results delivered to a live dashboard via WebSocket.
 
 ---
 
@@ -12,6 +12,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 - [Interface Flows](#interface-flows)
   - [Grafana → Loki → LLM](#grafana--loki--llm-error-analysis)
   - [GitHub → LLM](#github--llm-code-review)
+  - [GitLab → LLM](#gitlab--llm-code-review)
 - [Screenshots](#screenshots)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
@@ -21,6 +22,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
   - [Running](#running)
   - [Setting Up Grafana](#setting-up-grafana)
   - [Setting Up GitHub Webhooks](#setting-up-github-webhooks)
+  - [Setting Up GitLab Webhooks](#setting-up-gitlab-webhooks)
 - [API Reference](#api-reference)
 - [API Documentation (Swagger)](#api-documentation-swagger)
 - [Package Structure](#package-structure)
@@ -31,7 +33,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 
 ## Overview
 
-Spring AI Ops bridges your monitoring and version-control toolchain with large language models. When Grafana fires an alert, the application automatically queries the corresponding Loki logs, feeds the alert context and log lines to an LLM, and streams a root-cause analysis to the dashboard. When a GitHub push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review. All results are pushed to connected browsers in real time via STOMP WebSocket.
+Spring AI Ops bridges your monitoring and version-control toolchain with large language models. When Grafana fires an alert, the application automatically queries the corresponding Loki logs, feeds the alert context and log lines to an LLM, and streams a root-cause analysis to the dashboard. When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review. All results are pushed to connected browsers in real time via STOMP WebSocket.
 
 No relational database is used. Redis serves as the sole persistence layer — storing LLM configuration, application registry, alert analysis records, and code review records.
 
@@ -44,7 +46,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | Feature | Description |
 |---|---|
 | **LLM-Powered Error Analysis** | Grafana alert context + Loki logs → root cause, affected components, and recommended actions |
-| **Automated Code Review** | GitHub commit diff → code quality, potential bugs, security considerations |
+| **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
@@ -70,9 +72,11 @@ No relational database is used. Redis serves as the sole persistence layer — s
 │                           ├─ ApplicationService  ──► Redis      │
 │  AiConfigController       ├─ GrafanaService      ──► Redis      │
 │  LokiConfigController     ├─ GithubService       ──► Redis      │
-│  ApplicationController    ├─ LokiService         ──► Loki API   │
-│  FiringController         ├─ GithubConnector     ──► GitHub API │
-│  CommitController         └─ AiModelService      ──► LLM API   │
+│  ApplicationController    ├─ GitlabService       ──► Redis      │
+│  FiringController         ├─ LokiService         ──► Loki API   │
+│  CommitController         ├─ GithubConnector     ──► GitHub API │
+│                           ├─ GitlabConnector     ──► GitLab API │
+│                           └─ AiModelService      ──► LLM API   │
 │                                    │                            │
 │                           SimpMessagingTemplate                 │
 │                                    │                            │
@@ -136,13 +140,44 @@ POST /webhook/grafana[/{application}]
 git push to repository
         │
         ▼  (GitHub Webhook)
-POST /webhook/github[/{application}]
+POST /webhook/git[/{application}]
         │
         ├─ Extract owner / repo / before SHA / after SHA from payload
         │
         ├─ Call GitHub Commits API
         │    before == 0000...0000 (initial push) → GET /repos/{owner}/{repo}/commits/{sha}
         │    otherwise                             → GET /repos/{owner}/{repo}/compare/{base}...{head}
+        │
+        ├─ Call LLM
+        │    System: expert code reviewer
+        │    User:   diff per changed file
+        │            → summary / issues / security / suggestions
+        │
+        ├─ Save CodeReviewRecord to Redis  (key: commit:{application})
+        │
+        └─ Push to /topic/commit via WebSocket
+                │
+                ▼
+           Browser opens Code Review tab with result
+```
+
+---
+
+### GitLab → LLM (Code Review)
+
+```
+git push to repository
+        │
+        ▼  (GitLab Webhook)
+POST /webhook/git[/{application}]
+        │
+        ├─ Detected by X-Gitlab-Event header → parsed as GitLab payload
+        │
+        ├─ Extract project / before SHA / after SHA from payload
+        │
+        ├─ Call GitLab Repository API
+        │    before == 0000...0000 (initial push) → GET /projects/{id}/repository/commits/{sha}/diff
+        │    otherwise                             → GET /projects/{id}/repository/compare?from={base}&to={head}
         │
         ├─ Call LLM
         │    System: expert code reviewer
@@ -232,7 +267,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 - JDK 21+
 - (Optional) A running Loki instance if you want log queries
 - An API key for at least one LLM provider (OpenAI or Anthropic)
-- A GitHub personal access token if you want code review
+- A GitHub or GitLab personal access token if you want code review
 
 ### Configuration
 
@@ -255,6 +290,10 @@ github:
   access-token: ${GITHUB_ACCESS_TOKEN:}  # GitHub personal access token
   api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API version header
 
+gitlab:
+  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # GitLab API base URL (use your self-hosted URL if applicable)
+  access-token: ${GITLAB_ACCESS_TOKEN:}          # GitLab personal access token
+
 analysis:
   data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
   maximum-view-count: 5      # Max records shown per application (0 = unlimited)
@@ -272,6 +311,9 @@ feign:
   github:
     connect-timeout: 5000   # GitHub API connect timeout (ms)
     read-timeout: 30000     # GitHub API read timeout (ms)
+  gitlab:
+    connect-timeout: 5000   # GitLab API connect timeout (ms)
+    read-timeout: 30000     # GitLab API read timeout (ms)
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
@@ -342,14 +384,25 @@ Open `http://localhost:7079` in your browser. On first launch you will be prompt
 ### Setting Up GitHub Webhooks
 
 1. Go to **Repository → Settings → Webhooks → Add webhook**.
-2. Set **Payload URL** to `http://<your-host>:7079/webhook/github/{application}`.
+2. Set **Payload URL** to `http://<your-host>:7079/webhook/git/{application}`.
 3. Set **Content type** to `application/json`.
 4. Select event: **Just the push event**.
 5. Save the webhook.
 
-Ensure your GitHub access token (configured in yml or via the UI) has `repo` read scope.
+Ensure your GitHub personal access token (configured in yml or via the UI) has `repo` read scope (classic PAT) or `Contents: Read` permission (fine-grained PAT).
 
 > **Note**: GitHub Webhook **Secret** is not currently supported. Leave the Secret field blank when configuring the webhook. Secret-based HMAC-SHA256 signature verification is planned for a future release.
+
+### Setting Up GitLab Webhooks
+
+1. Go to **Project → Settings → Webhooks → Add new webhook**.
+2. Set **URL** to `http://<your-host>:7079/webhook/git/{application}`.
+3. Under **Trigger**, check **Push events**.
+4. Save the webhook.
+
+Ensure your GitLab personal access token (configured in yml or via the UI) has `read_api` scope. For self-hosted GitLab instances, set `gitlab.url` to your instance's API base URL (e.g. `https://gitlab.example.com/api/v4`).
+
+> **Note**: GitLab Webhook **Secret Token** is not currently supported. Leave the Secret Token field blank when configuring the webhook.
 
 ---
 
@@ -361,14 +414,15 @@ Ensure your GitHub access token (configured in yml or via the UI) has `repo` rea
 | `POST` | `/api/llm/config` | Save LLM provider + API key |
 | `POST` | `/api/llm/select-provider` | Select provider when both yml keys are present |
 | `POST` | `/api/loki/config` | Save Loki base URL |
-| `POST` | `/api/github/token` | Save GitHub access token |
+| `POST` | `/api/github/config` | Save GitHub / GitLab access token and base URL |
+| `GET` | `/api/github/config/status` | Get Git provider configuration status |
 | `GET` | `/api/app/list` | List registered applications |
 | `POST` | `/api/app/add` | Register a new application |
 | `DELETE` | `/api/app/remove/{application}` | Remove an application |
 | `GET` | `/api/firing/{application}/list` | Get alert analysis records for an application |
 | `GET` | `/api/commit/{application}/list` | Get code review records for an application |
 | `POST` | `/webhook/grafana[/{application}]` | Grafana Alerting webhook receiver |
-| `POST` | `/webhook/github[/{application}]` | GitHub push webhook receiver |
+| `POST` | `/webhook/git[/{application}]` | GitHub / GitLab push webhook receiver |
 
 **WebSocket topics** (STOMP over SockJS at `/ws`)
 
@@ -414,7 +468,7 @@ com.walter.spring.ai.ops
 │   └── dto/                       # Response DTOs (GithubCompareResult, LokiQueryResult, ...)
 ├── controller/
 │   ├── IndexController.kt         # GET /
-│   ├── WebhookController.kt       # POST /webhook/grafana, /webhook/github
+│   ├── WebhookController.kt       # POST /webhook/grafana, /webhook/git
 │   ├── AiConfigController.kt      # POST /api/llm/*
 │   ├── LokiConfigController.kt    # POST /api/loki/config
 │   ├── GithubConfigController.kt  # POST /api/github/token
@@ -446,6 +500,7 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-18 | Added GitLab push webhook support — automatically detected via `X-Gitlab-Event` header on the unified `/webhook/git` endpoint |
 | 2026-04-15 | Abstracted external connector integration with a shared dynamic URL resolution base for GitHub and Loki |
 | 2026-04-15 | Fixed embedded Redis startup failure on macOS ARM64 — requires `brew install openssl@3` due to dynamic link dependency in the bundled binary |
 | 2026-04-15 | Replaced `@PostConstruct` with `@EventListener(ApplicationReadyEvent::class)` in `AiModelService` to prevent Redis connection attempts before embedded Redis has fully started |
@@ -487,7 +542,7 @@ SOFTWARE.
 
 ### 프로젝트 개요
 
-**Spring AI Ops**는 Grafana Alerting webhook과 GitHub push webhook을 수신하여, OpenAI 또는 Anthropic LLM으로 오류를 분석하고 코드 리뷰를 자동 수행하는 AI 기반 운영 자동화 도구입니다. 분석 결과는 WebSocket을 통해 실시간으로 대시보드에 전달됩니다.
+**Spring AI Ops**는 Grafana Alerting webhook과 GitHub / GitLab push webhook을 수신하여, OpenAI 또는 Anthropic LLM으로 오류를 분석하고 코드 리뷰를 자동 수행하는 AI 기반 운영 자동화 도구입니다. 분석 결과는 WebSocket을 통해 실시간으로 대시보드에 전달됩니다.
 
 관계형 데이터베이스는 사용하지 않으며, Redis를 유일한 저장소로 사용합니다. 로컬 개발 환경에서는 Embedded Redis가 자동으로 기동되므로 별도 설치가 필요 없습니다.
 
@@ -500,7 +555,7 @@ SOFTWARE.
 | 기능 | 설명 |
 |---|---|
 | **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 → 근본 원인, 영향 범위, 조치 방법 |
-| **자동 코드 리뷰** | GitHub 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
+| **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
 | **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
 | **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic 전환 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
@@ -548,13 +603,38 @@ POST /webhook/grafana[/{application}]
 git push 발생
         │
         ▼  (GitHub Webhook)
-POST /webhook/github[/{application}]
+POST /webhook/git[/{application}]
         │
         ├─ owner / repo / before SHA / after SHA 추출
         │
         ├─ GitHub API로 커밋 diff 조회
         │    before == 0000... (첫 push) → GET /commits/{sha}
         │    그 외                        → GET /compare/{base}...{head}
+        │
+        ├─ LLM 코드 리뷰 요청
+        │    변경 파일별 diff
+        │    → 변경 요약 / 잠재 이슈 / 보안 / 개선 제안
+        │
+        ├─ CodeReviewRecord를 Redis에 저장 (key: commit:{application})
+        │
+        └─ WebSocket /topic/commit 으로 결과 Push
+```
+
+#### GitLab → LLM (코드 리뷰)
+
+```
+git push 발생
+        │
+        ▼  (GitLab Webhook)
+POST /webhook/git[/{application}]
+        │
+        ├─ X-Gitlab-Event 헤더 감지 → GitLab 페이로드로 파싱
+        │
+        ├─ project / before SHA / after SHA 추출
+        │
+        ├─ GitLab API로 커밋 diff 조회
+        │    before == 0000... (첫 push) → GET /projects/{id}/repository/commits/{sha}/diff
+        │    그 외                        → GET /projects/{id}/repository/compare?from={base}&to={head}
         │
         ├─ LLM 코드 리뷰 요청
         │    변경 파일별 diff
@@ -591,7 +671,7 @@ POST /webhook/github[/{application}]
 
 - JDK 21 이상
 - OpenAI 또는 Anthropic API 키 (둘 중 하나 이상)
-- 코드 리뷰 기능 사용 시 GitHub Personal Access Token
+- 코드 리뷰 기능 사용 시 GitHub 또는 GitLab Personal Access Token
 - Loki 연동 시 Loki 서버 URL
 
 #### 설정
@@ -613,6 +693,10 @@ github:
   access-token: ${GITHUB_ACCESS_TOKEN:}          # GitHub 액세스 토큰
   api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API 버전 헤더
 
+gitlab:
+  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # GitLab API URL (셀프 호스팅 시 인스턴스 주소로 변경)
+  access-token: ${GITLAB_ACCESS_TOKEN:}          # GitLab 액세스 토큰
+
 analysis:
   data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
   maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
@@ -630,6 +714,9 @@ feign:
   github:
     connect-timeout: 5000   # GitHub API 연결 타임아웃 (ms)
     read-timeout: 30000     # GitHub API 읽기 타임아웃 (ms)
+  gitlab:
+    connect-timeout: 5000   # GitLab API 연결 타임아웃 (ms)
+    read-timeout: 30000     # GitLab API 읽기 타임아웃 (ms)
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
@@ -686,11 +773,24 @@ crypto:
 #### GitHub Webhook 설정
 
 1. **Repository → Settings → Webhooks → Add webhook**
-2. Payload URL: `http://<your-host>:7079/webhook/github/{application}`
+2. Payload URL: `http://<your-host>:7079/webhook/git/{application}`
 3. Content type: `application/json`
 4. 이벤트: **Just the push event**
 
+GitHub 액세스 토큰(yml 또는 UI에서 설정)은 `repo` read 스코프(클래식 PAT) 또는 `Contents: Read` 권한(세분화된 PAT)이 필요합니다.
+
 > **참고**: GitHub Webhook **Secret**은 현재 지원하지 않습니다. Webhook 설정 시 Secret 필드는 비워두세요. Secret 기반 HMAC-SHA256 서명 검증은 추후 지원 예정입니다.
+
+#### GitLab Webhook 설정
+
+1. **Project → Settings → Webhooks → Add new webhook**
+2. URL: `http://<your-host>:7079/webhook/git/{application}`
+3. **Trigger** 항목에서 **Push events** 선택
+4. 저장
+
+GitLab 액세스 토큰(yml 또는 UI에서 설정)은 `read_api` 스코프가 필요합니다. 셀프 호스팅 GitLab 인스턴스를 사용하는 경우 `gitlab.url`을 해당 인스턴스의 API 기본 URL(예: `https://gitlab.example.com/api/v4`)로 설정하세요.
+
+> **참고**: GitLab Webhook **Secret Token**은 현재 지원하지 않습니다. Webhook 설정 시 Secret Token 필드는 비워두세요.
 
 ### API 문서 (Swagger)
 
