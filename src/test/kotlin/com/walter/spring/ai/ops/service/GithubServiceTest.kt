@@ -303,7 +303,7 @@ class GithubServiceTest {
     fun givenValidRecord_whenSaveCodeReviewRecord_thenPushesToRedisList() {
         // given
         val service = buildService()
-        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com/owner/repo/commit/abc", "feat: add feature", emptyList(), "## Review", LocalDateTime.now(), emptyList())
+        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com/owner/repo/commit/abc", "feat: add feature", emptyList(), "## Review", LocalDateTime.now(), emptyList(), null)
         given(redisTemplate.opsForZSet()).willReturn(mock())
         given(objectMapper.writeValueAsString(record)).willReturn("""{"application":"my-app"}""")
 

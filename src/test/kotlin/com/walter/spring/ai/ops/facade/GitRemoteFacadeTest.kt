@@ -87,6 +87,20 @@ class GitRemoteFacadeTest {
     }
 
     @Test
+    @DisplayName("token이 비어있으면 setToken을 호출하지 않는다 (기존 token 유지)")
+    fun givenBlankToken_whenSetConfig_thenDoesNotCallSetToken() {
+        // given
+        val request = GitRemoteConfigRequest(provider = "GITHUB", token = "", url = "")
+
+        // when
+        facade.setConfig(request, GitRemoteProvider.GITHUB)
+
+        // then
+        verify(githubService, never()).setToken(any())
+        verify(gitlabService, never()).setToken(any())
+    }
+
+    @Test
     @DisplayName("GITLAB provider + url 있으면 gitlabService에 url이 저장된다")
     fun givenGitlabProviderWithUrl_whenSetConfig_thenSavesUrlToGitlabService() {
         // given

@@ -149,6 +149,28 @@ class AiModelServiceTest {
         assertThat(aiModelService.getCurrentLlm()).isNull()
     }
 
+    // ── configure (blank apiKey — reconfigure) ────────────────────────────────
+
+    @Test
+    @DisplayName("apiKey가 blank이고 Redis에 기존 키가 있으면 기존 키로 configure됨")
+    fun configure_usesExistingKey_whenApiKeyIsBlankAndRedisHasKey() {
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn("sk-saved-key")
+
+        aiModelService.configure("openai", "")
+
+        assertThat(aiModelService.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("apiKey가 blank이고 Redis에도 키가 없으면 IllegalStateException 발생")
+    fun configure_throwsIllegalStateException_whenApiKeyIsBlankAndNoExistingKey() {
+        given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
+
+        assertThatThrownBy { aiModelService.configure("openai", "") }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("API key is not configured")
+    }
+
     // ── getChatModel ──────────────────────────────────────────────────────────
 
     @Test
