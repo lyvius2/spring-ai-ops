@@ -909,17 +909,17 @@ function buildAppDetailHtml(appName) {
     return `
         <div class="app-detail-header">${escHtml(appName)}</div>
         <div class="tab-bar">
-            <button class="tab-btn"        data-tab="exception">Incident Intelligence</button>
             <button class="tab-btn active" data-tab="codereview">Code Review</button>
-        </div>
-        <div class="tab-content" id="tab-pane-exception" style="display:none;">
-            <div id="exception-layers">${renderAnalysisLayers(appName, record)}</div>
-            ${renderFiringListSection(appName)}
+            <button class="tab-btn"        data-tab="exception">Incident Intelligence</button>
         </div>
         <div class="tab-content" id="tab-pane-codereview">
             <div id="codereview-content">
                 <div class="list-placeholder">Loading commit records...</div>
             </div>
+        </div>
+        <div class="tab-content" id="tab-pane-exception" style="display:none;">
+            <div id="exception-layers">${renderAnalysisLayers(appName, record)}</div>
+            ${renderFiringListSection(appName)}
         </div>
     `;
 }
