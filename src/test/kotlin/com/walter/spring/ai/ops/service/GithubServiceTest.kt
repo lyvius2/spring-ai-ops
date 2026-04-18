@@ -105,7 +105,7 @@ class GithubServiceTest {
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
 
         // when
-        service.setGithubToken("my-token")
+        service.setToken("my-token")
 
         // then
         verify(valueOperations).set(REDIS_KEY_GITHUB_TOKEN, "my-token")

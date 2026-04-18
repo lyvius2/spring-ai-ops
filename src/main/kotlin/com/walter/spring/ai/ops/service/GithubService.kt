@@ -28,10 +28,6 @@ class GithubService(
     override val redisTokenKey: String = REDIS_KEY_GITHUB_TOKEN
     override val redisUrlKey: String = REDIS_KEY_GITHUB_URL
 
-    fun setGithubToken(token: String) = setToken(token)
-    fun setGithubUrl(url: String) = setUrl(url)
-    fun getGithubUrl(): String = getUrl()
-
     override fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult {
         return if (inquiry.base == EMPTY_SHA) {
             githubConnector.getCommit(inquiry.owner, inquiry.repo, inquiry.head)
