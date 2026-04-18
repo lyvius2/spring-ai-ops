@@ -942,6 +942,7 @@ function switchToTab(tabName) {
 // ── Git Remote Modal ──────────────────────────────────────────────────────────
 
 let _gitRemoteStatusCache = null;
+const MASKED_TOKEN = '••••••••••••';
 
 /**
  * Determines which action to take based on the git remote configuration status.
@@ -1014,26 +1015,16 @@ function openGitRemoteModal(statusData, closeable) {
         if (current) current.checked = true;
     }
 
-    // Update URL placeholder when provider changes
+    // Update URL/token fields when provider changes
     group.querySelectorAll('input[name="git-remote-provider"]').forEach(radio => {
         radio.addEventListener('change', updateGitRemoteUrlPlaceholder);
     });
     updateGitRemoteUrlPlaceholder();
 
-    // Reset form — pre-fill URL and show masked token placeholder for reconfigure
-    const urlInput   = document.getElementById('git-remote-url-input');
-    const tokenInput = document.getElementById('git-remote-token-input');
-    if (closeable && statusData) {
-        const savedUrl = statusData.currentProvider === 'GITLAB'
-            ? statusData.gitlabUrl
-            : statusData.githubUrl;
-        urlInput.value = savedUrl || '';
-        tokenInput.value = '';
-        tokenInput.placeholder = 'Already configured — leave blank to keep current token';
-    } else {
-        urlInput.value = '';
-        tokenInput.value = '';
-    }
+    // On focus, select all so typing replaces the masked value naturally
+    document.getElementById('git-remote-token-input').onfocus = function () {
+        if (this.value === MASKED_TOKEN) this.select();
+    };
     document.getElementById('git-remote-alert-error').style.display = 'none';
     document.getElementById('git-remote-save-btn').disabled = false;
     document.getElementById('git-remote-save-btn').textContent = 'Save & Connect';
@@ -1042,31 +1033,35 @@ function openGitRemoteModal(statusData, closeable) {
 }
 
 function updateGitRemoteUrlPlaceholder() {
-    const selected = document.querySelector('input[name="git-remote-provider"]:checked');
+    const selected      = document.querySelector('input[name="git-remote-provider"]:checked');
     if (!selected) return;
-    const provider = GIT_REMOTE_PROVIDERS.find(p => p.name === selected.value);
+    const providerInfo  = GIT_REMOTE_PROVIDERS.find(p => p.name === selected.value);
+    const closeBtn      = document.getElementById('git-remote-modal-close');
+    const isReconfigure = closeBtn && closeBtn.style.display !== 'none';
+    const urlInput      = document.getElementById('git-remote-url-input');
+    const tokenInput    = document.getElementById('git-remote-token-input');
 
-    // Update URL placeholder (only when provider info is available)
-    if (provider) {
-        const urlInput = document.getElementById('git-remote-url-input');
-        let placeholder = provider.apiUrl;
-        if (_gitRemoteStatusCache) {
-            const saved = selected.value === 'GITHUB'
-                ? _gitRemoteStatusCache.githubUrl
-                : _gitRemoteStatusCache.gitlabUrl;
-            if (saved && saved !== provider.apiUrl) placeholder = saved;
-        }
-        urlInput.placeholder = placeholder;
+    // URL: show saved value for the selected provider; placeholder = default API base URL
+    if (providerInfo) urlInput.placeholder = providerInfo.apiUrl;
+    if (_gitRemoteStatusCache) {
+        const savedUrl = selected.value === 'GITHUB'
+            ? _gitRemoteStatusCache.githubUrl
+            : _gitRemoteStatusCache.gitlabUrl;
+        urlInput.value = savedUrl || '';
+    } else {
+        urlInput.value = '';
     }
 
-    // Update token placeholder based on selected provider
-    const tokenInput = document.getElementById('git-remote-token-input');
-    if (selected.value === 'GITHUB') {
-        tokenInput.placeholder = 'ghp_...';
-    } else if (selected.value === 'GITLAB') {
-        tokenInput.placeholder = 'glpat-...';
+    // Token: show masked sentinel if configured; otherwise show format hint
+    const hasToken = !!(_gitRemoteStatusCache && (selected.value === 'GITHUB'
+        ? (_gitRemoteStatusCache.githubTokenConfigured || _gitRemoteStatusCache.githubPropertyConfigured)
+        : (_gitRemoteStatusCache.gitlabTokenConfigured || _gitRemoteStatusCache.gitlabPropertyConfigured)));
+    if (isReconfigure && hasToken) {
+        tokenInput.value = MASKED_TOKEN;
+        tokenInput.placeholder = 'Leave blank or keep masked value to preserve current token';
     } else {
-        tokenInput.placeholder = '';
+        tokenInput.value = '';
+        tokenInput.placeholder = selected.value === 'GITHUB' ? 'ghp_...' : (selected.value === 'GITLAB' ? 'glpat-...' : '');
     }
 }
 
@@ -1087,7 +1082,8 @@ async function openGitRemoteModalForReconfigure() {
 async function saveGitRemoteConfig() {
     const providerEl   = document.querySelector('input[name="git-remote-provider"]:checked');
     const urlInput     = document.getElementById('git-remote-url-input');
-    const token        = document.getElementById('git-remote-token-input').value.trim();
+    const rawToken     = document.getElementById('git-remote-token-input').value.trim();
+    const token        = rawToken === MASKED_TOKEN ? '' : rawToken;
     const btn          = document.getElementById('git-remote-save-btn');
     const errEl        = document.getElementById('git-remote-alert-error');
     const isReconfigure = document.getElementById('git-remote-modal-close').style.display !== 'none';
