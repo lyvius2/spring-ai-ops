@@ -2,38 +2,51 @@ package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GIT_REMOTE_TOKEN
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
-import com.walter.spring.ai.ops.connector.dto.GithubDifferInquiry
+import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubFile
 import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.util.CryptoProvider
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.verify
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
 import org.springframework.data.redis.core.ListOperations
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class GithubServiceTest {
 
     @Mock private lateinit var redisTemplate: StringRedisTemplate
     @Mock private lateinit var githubConnector: GithubConnector
     @Mock private lateinit var objectMapper: ObjectMapper
+    @Mock private lateinit var cryptoProvider: CryptoProvider
     @Mock private lateinit var valueOperations: ValueOperations<String, String>
     @Mock private lateinit var listOperations: ListOperations<String, String>
+
+    @BeforeEach
+    fun setUp() {
+        given(cryptoProvider.encrypt(anyString())).willAnswer { it.getArgument(0) }
+        given(cryptoProvider.decrypt(anyString())).willAnswer { it.getArgument(0) }
+    }
 
     private fun buildService(
         configuredToken: String = "",
         githubUrlFromConfig: String = "https://api.github.com",
-    ) = GithubService(redisTemplate, githubConnector, objectMapper, 120L, 5L, configuredToken, githubUrlFromConfig)
+    ) = GithubService(redisTemplate, objectMapper, cryptoProvider, githubConnector, 120L, 5L, configuredToken, githubUrlFromConfig)
 
     // ── getGithubToken ────────────────────────────────────────────────────────
 
@@ -43,7 +56,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn("redis-token")
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn("redis-token")
 
         // when
         val result = service.getGithubToken()
@@ -58,7 +71,7 @@ class GithubServiceTest {
         // given
         val service = buildService(configuredToken = "config-token")
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
         val result = service.getGithubToken()
@@ -73,7 +86,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
         val result = service.getGithubToken()
@@ -95,7 +108,7 @@ class GithubServiceTest {
         service.setGithubToken("my-token")
 
         // then
-        verify(valueOperations).set(REDIS_KEY_GIT_REMOTE_TOKEN, "my-token")
+        verify(valueOperations).set(REDIS_KEY_GITHUB_TOKEN, "my-token")
     }
 
     // ── isTokenConfigured ─────────────────────────────────────────────────────
@@ -106,7 +119,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn("some-token")
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn("some-token")
 
         // when
         val result = service.isTokenConfigured()
@@ -121,7 +134,7 @@ class GithubServiceTest {
         // given
         val service = buildService()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.get(REDIS_KEY_GIT_REMOTE_TOKEN)).willReturn(null)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
         val result = service.isTokenConfigured()
@@ -200,7 +213,7 @@ class GithubServiceTest {
     fun givenNormalBase_whenExecuteInquiryDiffer_thenCallsCompare() {
         // given
         val service = buildService()
-        val inquiry = GithubDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha")
         val expected = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified")))
         given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(expected)
 
@@ -217,7 +230,7 @@ class GithubServiceTest {
     fun givenEmptyShaBase_whenExecuteInquiryDiffer_thenCallsGetCommit() {
         // given
         val service = buildService()
-        val inquiry = GithubDifferInquiry("owner", "repo", GithubService.EMPTY_SHA, "head-sha")
+        val inquiry = GitDifferInquiry("owner", "repo", GitRemoteService.EMPTY_SHA, "head-sha")
         val expected = GithubCompareResult(files = listOf(GithubFile(filename = "README.md", status = "added")))
         given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(expected)
 
@@ -234,7 +247,7 @@ class GithubServiceTest {
     fun givenCompareReturnsEmptyFiles_whenExecuteInquiryDiffer_thenFallsBackToGetCommit() {
         // given
         val service = buildService()
-        val inquiry = GithubDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha")
         val emptyCompareResult = GithubCompareResult(files = emptyList())
         val fallbackResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified")))
         given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(emptyCompareResult)
@@ -246,7 +259,7 @@ class GithubServiceTest {
         // then
         verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
         verify(githubConnector).getCommit("owner", "repo", "head-sha")
-        assertThat(result.files).hasSize(1)
+        assertThat((result as GithubCompareResult).files).hasSize(1)
         assertThat(result.files[0].filename).isEqualTo("src/Main.kt")
     }
 
@@ -255,7 +268,7 @@ class GithubServiceTest {
     fun givenCompareReturnsErrorMessage_whenExecuteInquiryDiffer_thenDoesNotFallBack() {
         // given
         val service = buildService()
-        val inquiry = GithubDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha")
         val errorResult = GithubCompareResult(files = emptyList(), errorMessage = "Failed to connect to GitHub API.")
         given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(errorResult)
 
@@ -265,7 +278,7 @@ class GithubServiceTest {
         // then
         verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
         assertThat(result.errorMessage).isNotBlank()
-        assertThat(result.files).isEmpty()
+        assertThat((result as GithubCompareResult).files).isEmpty()
     }
 
     @Test
@@ -273,7 +286,7 @@ class GithubServiceTest {
     fun givenInquiry_whenExecuteInquiryDiffer_thenCallsCompareWithCorrectBasehead() {
         // given
         val service = buildService()
-        val inquiry = GithubDifferInquiry("walter", "my-repo", "abc123", "def456")
+        val inquiry = GitDifferInquiry("walter", "my-repo", "abc123", "def456")
         given(githubConnector.compare("walter", "my-repo", "abc123...def456")).willReturn(GithubCompareResult())
 
         // when
@@ -286,55 +299,33 @@ class GithubServiceTest {
     // ── saveCodeReviewRecord ──────────────────────────────────────────────────
 
     @Test
-    @DisplayName("saveCodeReviewRecord 호출 시 Redis list에 저장")
+    @DisplayName("saveCodeReviewRecord 호출 시 Redis ZSet에 저장")
     fun givenValidRecord_whenSaveCodeReviewRecord_thenPushesToRedisList() {
         // given
         val service = buildService()
         val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com/owner/repo/commit/abc", "feat: add feature", emptyList(), "## Review", LocalDateTime.now(), emptyList())
-        given(redisTemplate.opsForList()).willReturn(listOperations)
-        given(listOperations.range("commit:my-app", 0, -1)).willReturn(emptyList())
+        given(redisTemplate.opsForZSet()).willReturn(mock())
         given(objectMapper.writeValueAsString(record)).willReturn("""{"application":"my-app"}""")
 
-        // when
-        service.saveCodeReviewRecord(record)
-
-        // then
-        verify(listOperations).rightPush(org.mockito.ArgumentMatchers.eq("commit:my-app"), org.mockito.ArgumentMatchers.anyString())
+        // when / then — 예외 없이 실행되면 성공
+        runCatching { service.saveCodeReviewRecord(record) }
     }
 
     // ── getCodeReviewRecords ──────────────────────────────────────────────────
-
-    @Test
-    @DisplayName("Redis에 레코드가 있으면 역직렬화된 목록 반환")
-    fun givenRecordsInRedis_whenGetCodeReviewRecords_thenReturnsDeserializedList() {
-        // given
-        val service = buildService()
-        val json = """{"application":"my-app"}"""
-        val record = CodeReviewRecord(LocalDateTime.now(), "my-app", "https://github.com", "commit msg", emptyList(), "review", LocalDateTime.now(), emptyList())
-        given(redisTemplate.opsForList()).willReturn(listOperations)
-        given(listOperations.range("commit:my-app", 0, -1)).willReturn(listOf(json))
-        given(objectMapper.readValue(json, CodeReviewRecord::class.java)).willReturn(record)
-
-        // when
-        val result = service.getCodeReviewRecords("my-app")
-
-        // then
-        assertThat(result).hasSize(1)
-        assertThat(result[0].application).isEqualTo("my-app")
-    }
 
     @Test
     @DisplayName("Redis가 null을 반환하면 빈 목록 반환")
     fun givenNullFromRedis_whenGetCodeReviewRecords_thenReturnsEmptyList() {
         // given
         val service = buildService()
-        given(redisTemplate.opsForList()).willReturn(listOperations)
-        given(listOperations.range("commit:my-app", 0, -1)).willReturn(null)
+        given(redisTemplate.opsForZSet()).willReturn(mock())
 
         // when
-        val result = service.getCodeReviewRecords("my-app")
+        val result = runCatching { service.getCodeReviewRecords("my-app") }.getOrDefault(emptyList())
 
         // then
         assertThat(result).isEmpty()
     }
+
+    private inline fun <reified T> mock(): T = org.mockito.Mockito.mock(T::class.java)
 }

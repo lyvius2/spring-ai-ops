@@ -1,5 +1,9 @@
 package com.walter.spring.ai.ops.controller
 
+import com.walter.spring.ai.ops.code.GitRemoteProvider
+import com.walter.spring.ai.ops.controller.dto.GitRemoteConfigRequest
+import com.walter.spring.ai.ops.controller.dto.GitRemoteConfigResponse
+import com.walter.spring.ai.ops.controller.dto.GitRemoteStatusResponse
 import com.walter.spring.ai.ops.controller.dto.GithubTokenRequest
 import com.walter.spring.ai.ops.controller.dto.GithubTokenSaveResponse
 import com.walter.spring.ai.ops.controller.dto.GithubTokenStatusResponse
@@ -7,6 +11,7 @@ import com.walter.spring.ai.ops.controller.dto.GithubUrlRequest
 import com.walter.spring.ai.ops.controller.dto.GithubUrlSaveResponse
 import com.walter.spring.ai.ops.controller.dto.GithubUrlStatusResponse
 import com.walter.spring.ai.ops.service.GithubService
+import com.walter.spring.ai.ops.service.GitlabService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.GetMapping
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/github")
 class GithubConfigController(
     private val githubService: GithubService,
+    private val gitlabService: GitlabService,
 ) {
     @Operation(summary = "Check whether a GitHub access token is configured")
     @GetMapping("/token/status")
@@ -57,5 +63,42 @@ class GithubConfigController(
         }
         githubService.setGithubUrl(request.url)
         return GithubUrlSaveResponse.success()
+    }
+
+    @Operation(summary = "Save Git Remote provider, access token and base URL")
+    @PostMapping("/config")
+    fun saveConfig(@RequestBody request: GitRemoteConfigRequest): GitRemoteConfigResponse {
+        if (request.token.isBlank()) {
+            return GitRemoteConfigResponse.failure("Token must not be blank.")
+        }
+        val provider = runCatching { GitRemoteProvider.valueOf(request.provider) }.getOrNull()
+            ?: return GitRemoteConfigResponse.failure("Unknown provider: ${request.provider}")
+
+        githubService.setGitRemoteProvider(provider)
+        when (provider) {
+            GitRemoteProvider.GITHUB -> {
+                githubService.setGithubToken(request.token)
+                if (request.url.isNotBlank()) githubService.setGithubUrl(request.url)
+            }
+            GitRemoteProvider.GITLAB -> {
+                gitlabService.setGitlabToken(request.token)
+                if (request.url.isNotBlank()) gitlabService.setGitlabUrl(request.url)
+            }
+        }
+        return GitRemoteConfigResponse.success()
+    }
+
+    @Operation(summary = "Get Git Remote configuration status for all providers")
+    @GetMapping("/config/status")
+    fun configStatus(): GitRemoteStatusResponse {
+        return GitRemoteStatusResponse(
+            githubTokenConfigured = githubService.isTokenConfigured(),
+            githubPropertyConfigured = githubService.isPropertyConfigured(),
+            gitlabTokenConfigured = gitlabService.isTokenConfigured(),
+            gitlabPropertyConfigured = gitlabService.isPropertyConfigured(),
+            currentProvider = githubService.getGitRemoteProvider()?.name,
+            githubUrl = githubService.getGithubUrl(),
+            gitlabUrl = gitlabService.getGitlabUrl(),
+        )
     }
 }

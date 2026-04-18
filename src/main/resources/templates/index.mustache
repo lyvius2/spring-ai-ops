@@ -17,6 +17,7 @@
 const LLM_CONFIGURED      = {{#configured}}true{{/configured}}{{^configured}}false{{/configured}};
 const CURRENT_LLM         = '{{currentLlm}}';
 const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectProvider}}false{{/selectProvider}};
+const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl":"{{apiUrl}}","domain":"{{domain}}"},{{/gitRemoteProviders}}];
 </script>
 
 <!-- ── Navbar ── -->
@@ -137,25 +138,33 @@ const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectP
     </div>
 </div>
 
-<!-- ══ Modal: GitHub Access Token ══ -->
-<div id="github-token-modal" class="modal-overlay" style="display:none;">
+<!-- ══ Modal: GitHub Access Token ══ (legacy — kept for direct API access) -->
+
+<!-- ══ Modal: Git Remote Configuration ══ -->
+<div id="git-remote-modal" class="modal-overlay" style="display:none;">
     <div class="modal-box">
         <div class="modal-header">
-            GitHub Access Token
-            <button class="modal-close-btn" onclick="closeGithubTokenModal()">&#10005;</button>
+            Git Remote Configuration
+            <button id="git-remote-modal-close" class="modal-close-btn" onclick="closeGitRemoteModal()" style="display:none;">&#10005;</button>
         </div>
         <div class="modal-body">
-            <p class="modal-desc">
-                Enter your GitHub Personal Access Token to enable AI Code Review.
-                The token requires <code>repo</code> scope to access repository contents.
+            <p class="modal-desc" id="git-remote-modal-desc">
+                Select your Git provider and enter credentials to enable AI Code Review.
             </p>
-            <div class="form-group">
-                <label class="form-label" for="github-token-input">Access Token</label>
-                <input type="password" id="github-token-input" class="form-input"
-                       placeholder="ghp_..." autocomplete="off" />
+            <div class="radio-group" id="git-remote-provider-group">
+                <!-- dynamically populated from GIT_REMOTE_PROVIDERS -->
             </div>
-            <button class="btn-primary" id="github-token-save-btn" onclick="saveGithubToken()">Save</button>
-            <div class="alert alert-error" id="github-token-alert-error"></div>
+            <div class="form-group">
+                <label class="form-label" for="git-remote-url-input">Base URL <span style="color:#999;font-weight:400;">(leave blank to use default)</span></label>
+                <input type="text" id="git-remote-url-input" class="form-input" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="git-remote-token-input">Access Token</label>
+                <input type="password" id="git-remote-token-input" class="form-input"
+                       placeholder="ghp_... or glpat-..." autocomplete="off" />
+            </div>
+            <button class="btn-primary" id="git-remote-save-btn" onclick="saveGitRemoteConfig()">Save &amp; Connect</button>
+            <div class="alert alert-error" id="git-remote-alert-error"></div>
         </div>
     </div>
 </div>

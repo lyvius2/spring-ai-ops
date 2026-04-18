@@ -1,14 +1,16 @@
 package com.walter.spring.ai.ops.connector.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.walter.spring.ai.ops.record.ChangedFile
+import com.walter.spring.ai.ops.record.CommitSummary
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GithubCompareResult(
     val files: List<GithubFile> = emptyList(),
     val commits: List<GithubApiCommit> = emptyList(),
-    val errorMessage: String = "",
-) {
-    fun createCodeReviewPrompt(): String {
+    override val errorMessage: String = "",
+) : GitCompareResult {
+    override fun createCodeReviewPrompt(): String {
         return buildString {
             appendLine("## Code Diff")
             appendLine()
@@ -24,4 +26,10 @@ data class GithubCompareResult(
             }
         }
     }
+
+    override fun changedFiles(): List<ChangedFile> =
+        files.map { ChangedFile(it.filename, it.status, it.additions, it.deletions, it.patch) }
+
+    override fun commitSummaries(): List<CommitSummary> =
+        commits.map { CommitSummary(it.sha, it.commit.message, it.htmlUrl, it.commit.author.date) }
 }

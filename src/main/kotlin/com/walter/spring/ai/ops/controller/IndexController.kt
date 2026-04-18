@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.controller
 
+import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.service.AiModelService
 import org.springframework.core.env.Environment
 import org.springframework.stereotype.Controller
@@ -17,6 +18,7 @@ class IndexController(
         model.addAttribute("currentLlm", aiModelService.getCurrentLlm() ?: "")
         model.addAttribute("selectProvider", aiModelService.isSelectProviderRequired())
         model.addAttribute("activeProfile", environment.activeProfiles.firstOrNull() ?: "default")
+        model.addAttribute("gitRemoteProviders", GitRemoteProvider.entries.toTypedArray())
         return "index"
     }
 }

@@ -35,6 +35,24 @@ spring:
       - org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration
       - org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
 
+feign:
+  loki:
+    connect-timeout: 5000   # Loki connect timeout (ms). Actual I/O timeout — takes effect before Resilience4j TimeLimiter.
+    read-timeout: 30000     # Loki read timeout (ms)
+  github:
+    connect-timeout: 5000   # GitHub API connect timeout (ms)
+    read-timeout: 30000     # GitHub API read timeout (ms)
+  gitlab:
+    connect-timeout: 5000   # GitLab API connect timeout (ms)
+    read-timeout: 30000     # GitLab API read timeout (ms)
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 35s  # Safety net only — Feign read-timeout (30s) fires first
+        cancel-running-future: false  # Prevent Thread.interrupt() on Virtual Threads
+
 ai:
   open-ai:
     model: gpt-4o-mini                  # Set OpenAI Model : Default is gpt-4o-mini
@@ -49,6 +67,12 @@ github:
   url: ${GITHUB_URL:https://api.github.com}     # Set your GitHub API URL (e.g., https://api.github.com)
   access-token: ${GITHUB_ACCESS_TOKEN:}         # Set your GitHub access token for authentication
   api-version: ${GITHUB_API_VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28) : Default is 2022-11-28
+gitlab:
+  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # Set your GitLab URL (e.g., https://gitlab.com/api/v4)
+  access-token: ${GITLAB_ACCESS_TOKEN:}         # Set your GitLab access token for authentication
+
+crypto:
+  secret-key: ${CRYPTO_SECRET_KEY:}  # AES-256-GCM key for encrypting Redis-stored credentials. Must be set in production.
 
 analysis:
   data-retention-hours: 120 # Set the number of hours to retain analysis data : Default is 120 (5 days)
@@ -58,7 +82,7 @@ analysis:
 app:
   async:
     virtual:
-      max-concurrency: 100  # Max in-flight async analysis tasks when using virtual threads
+      llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
 
 springdoc:
   swagger-ui:
@@ -71,6 +95,8 @@ springdoc:
   paths-to-exclude: /
 
 management:
+  server:
+    port: 7081
   endpoints:
     web:
       exposure:

@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
+import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
 import org.junit.jupiter.api.BeforeEach
@@ -34,6 +35,7 @@ class AnalyzeFacadeTest {
     @Mock private lateinit var grafanaService: GrafanaService
     @Mock private lateinit var lokiService: LokiService
     @Mock private lateinit var githubService: GithubService
+    @Mock private lateinit var gitlabService: GitlabService
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var messagingTemplate: SimpMessagingTemplate
 
@@ -43,7 +45,7 @@ class AnalyzeFacadeTest {
     fun setUp() {
         analyzeFacade = AnalyzeFacade(
             applicationService, grafanaService, lokiService,
-            githubService, aiModelService, messagingTemplate
+            githubService, gitlabService, aiModelService, messagingTemplate
         )
     }
 
