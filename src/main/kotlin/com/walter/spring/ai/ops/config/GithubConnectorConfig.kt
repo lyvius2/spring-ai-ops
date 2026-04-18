@@ -3,6 +3,7 @@ package com.walter.spring.ai.ops.config
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.config.base.DynamicConnectorConfig
+import com.walter.spring.ai.ops.util.CryptoProvider
 import feign.RequestInterceptor
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -10,6 +11,7 @@ import org.springframework.data.redis.core.StringRedisTemplate
 
 class GithubConnectorConfig(
     override val redisTemplate: StringRedisTemplate,
+    private val cryptoProvider: CryptoProvider,
     @Value("\${github.url:https://api.github.com}") override val configuredUrl: String,
     @Value("\${github.access-token:}") private val configuredToken: String,
     @Value("\${github.api-version:}") private val apiVersion: String,
@@ -27,6 +29,8 @@ class GithubConnectorConfig(
     @Bean
     fun githubAuthInterceptor(): RequestInterceptor = RequestInterceptor { template ->
         val token = redisTemplate.opsForValue().get(REDIS_KEY_GITHUB_TOKEN)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { cryptoProvider.decrypt(it) }.getOrNull() }
             ?.takeIf { it.isNotBlank() }
             ?: configuredToken.takeIf { it.isNotBlank() }
         if (!token.isNullOrBlank()) {

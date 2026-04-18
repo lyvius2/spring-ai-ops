@@ -33,12 +33,13 @@ class GitlabService(
     fun getGitlabUrl(): String = getUrl()
 
     override fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult {
+        // GitLab API requires '/' in project path to be encoded as '%2F' in path segments
+        val encodedPath = inquiry.projectPath.replace("/", "%2F")
         return if (inquiry.base == EMPTY_SHA) {
-            val commit = gitlabConnector.getCommit(inquiry.projectPath, inquiry.head)
-            GitlabCompareResult(commits = listOf(commit), errorMessage = commit.errorMessage)
+            val commit = gitlabConnector.getCommit(encodedPath, inquiry.head)
+            GitlabCompareResult(commits = listOf(commit), errorMessage = commit.errorMessage ?: "")
         } else {
-            gitlabConnector.compare(inquiry.projectPath, inquiry.base, inquiry.head)
+            gitlabConnector.compare(encodedPath, inquiry.base, inquiry.head)
         }
     }
 }
-

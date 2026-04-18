@@ -12,7 +12,5 @@ data class GitlabApiCommit(
     @JsonProperty("author_name") val authorName: String = "",
     @JsonProperty("authored_date") val authoredDate: String = "",
     @JsonProperty("web_url") val webUrl: String = "",
-    val errorMessage: String = "",
+    val errorMessage: String? = null,
 )
-
-
