@@ -130,6 +130,7 @@ class AnalyzeFacade(
             .takeIf { it.isNotEmpty() }
             ?: request.commits.map { CommitSummary(it.id, it.message, it.url, it.timestamp) }
         val latestCommitMessage = commitSummaries.lastOrNull()?.message ?: ""
-        return CodeReviewRecord(latestPushedAt, targetApplication, repoUrl, latestCommitMessage, changedFiles, analyzeResults, LocalDateTime.now(), commitSummaries)
+        val branch = request.ref.removePrefix("refs/heads/").takeIf { it.isNotBlank() }
+        return CodeReviewRecord(latestPushedAt, targetApplication, repoUrl, latestCommitMessage, changedFiles, analyzeResults, LocalDateTime.now(), commitSummaries, branch)
     }
 }

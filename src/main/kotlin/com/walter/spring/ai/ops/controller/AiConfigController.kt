@@ -24,13 +24,9 @@ class AiConfigController(
         description = "Configures the active LLM provider (openai / anthropic) and stores the API key in Redis. Returns SUCCESS if the model initialises correctly."
     )
     @PostMapping("/config")
-    fun configure(@RequestBody request: AiConfigRequest): ResponseEntity<AiConfigResponse> {
-        return try {
-            aiModelService.configure(request.llm, request.apiKey)
-            ResponseEntity.ok(AiConfigResponse.of(ConnectionStatus.SUCCESS, request.llm))
-        } catch (e: Exception) {
-            ResponseEntity.badRequest().body(AiConfigResponse.error(e.message))
-        }
+    fun configure(@RequestBody request: AiConfigRequest): AiConfigResponse {
+        aiModelService.configure(request.llm, request.apiKey)
+        return AiConfigResponse.of(ConnectionStatus.SUCCESS, request.llm)
     }
 
     @Operation(

@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.code.GitRemoteProvider
 data class GithubPushRequest(
     val before: String = "",
     val after: String = "",
+    val ref: String = "",
     val repository: GithubPushRepository = GithubPushRepository(),
     val commits: List<GithubPushCommit> = emptyList(),
     @JsonIgnore val source: GitRemoteProvider = GitRemoteProvider.GITHUB,
@@ -31,6 +32,7 @@ data class GithubPushRequest(
             return GithubPushRequest(
                 before = body["before"] as? String ?: "",
                 after = body["after"] as? String ?: "",
+                ref = body["ref"] as? String ?: "",
                 repository = GithubPushRepository(
                     name = repoMap["name"] as? String ?: "",
                     owner = GithubPushOwner(login = ownerMap["login"] as? String ?: ""),
@@ -58,6 +60,7 @@ data class GithubPushRequest(
             return GithubPushRequest(
                 before = body["before"] as? String ?: "",
                 after = body["after"] as? String ?: "",
+                ref = body["ref"] as? String ?: "",
                 repository = GithubPushRepository(
                     name = projectMap["name"] as? String ?: "",
                     owner = GithubPushOwner(login = ownerLogin),

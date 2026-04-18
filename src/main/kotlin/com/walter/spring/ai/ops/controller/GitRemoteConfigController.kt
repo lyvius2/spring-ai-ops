@@ -22,9 +22,6 @@ class GitRemoteConfigController(
     @Operation(summary = "Save Git Remote provider, access token and base URL")
     @PostMapping("/config")
     fun saveConfig(@RequestBody request: GitRemoteConfigRequest): GitRemoteConfigResponse {
-        if (request.token.isBlank()) {
-            return GitRemoteConfigResponse.failure("Token must not be blank.")
-        }
         val provider = runCatching { GitRemoteProvider.valueOf(request.provider) }.getOrNull()
             ?: return GitRemoteConfigResponse.failure("Unknown provider: ${request.provider}")
         gitRemoteFacade.setConfig(request, provider)

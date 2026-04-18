@@ -81,9 +81,12 @@ class AiModelService(
     }
 
     fun configure(llm: String, apiKey: String) {
-        chatModel = buildChatModel(llm, apiKey)
+        val effectiveApiKey = apiKey.ifBlank {
+            getCurrentApiKey() ?: throw IllegalStateException("API key is not configured. Please enter an API key.")
+        }
+        chatModel = buildChatModel(llm, effectiveApiKey)
         redisTemplate.opsForValue().set(REDIS_KEY_LLM, llm)
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, cryptoProvider.encrypt(apiKey))
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, cryptoProvider.encrypt(effectiveApiKey))
     }
 
     fun isConfigured(): Boolean {
@@ -92,6 +95,11 @@ class AiModelService(
 
     fun getCurrentLlm(): String? {
         return redisTemplate.opsForValue().get(REDIS_KEY_LLM)
+    }
+
+    private fun getCurrentApiKey(): String? {
+        return redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
+            ?.let { cryptoProvider.decrypt(it) }
     }
 
     fun getChatModel(): ChatModel {

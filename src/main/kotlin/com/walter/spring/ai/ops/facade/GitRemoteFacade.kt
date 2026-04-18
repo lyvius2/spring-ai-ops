@@ -15,7 +15,9 @@ class GitRemoteFacade(
     fun setConfig(request: GitRemoteConfigRequest, provider: GitRemoteProvider) {
         githubService.setGitRemoteProvider(provider)
         val service = resolveService(provider)
-        service.setToken(request.token)
+        if (request.token.isNotBlank()) {
+            service.setToken(request.token)
+        }
         if (request.url.isNotBlank()) {
             service.setUrl(request.url)
         }
