@@ -23,14 +23,12 @@ class GithubService(
     @Value("\${github.access-token:}") override val configuredToken: String,
     @Value("\${github.url:https://api.github.com}") override val configuredUrl: String,
 ) : GitRemoteService(redisTemplate, objectMapper, cryptoProvider, retentionHours, maximumViewCount) {
-
     private val log = LoggerFactory.getLogger(GithubService::class.java)
 
     override val redisTokenKey: String = REDIS_KEY_GITHUB_TOKEN
     override val redisUrlKey: String = REDIS_KEY_GITHUB_URL
 
     fun setGithubToken(token: String) = setToken(token)
-    fun getGithubToken(): String? = getToken()
     fun setGithubUrl(url: String) = setUrl(url)
     fun getGithubUrl(): String = getUrl()
 

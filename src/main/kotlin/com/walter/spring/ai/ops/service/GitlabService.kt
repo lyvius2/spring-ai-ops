@@ -27,11 +27,6 @@ class GitlabService(
     override val redisTokenKey: String = REDIS_KEY_GITLAB_TOKEN
     override val redisUrlKey: String = REDIS_KEY_GITLAB_URL
 
-    fun setGitlabToken(token: String) = setToken(token)
-    fun getGitlabToken(): String? = getToken()
-    fun setGitlabUrl(url: String) = setUrl(url)
-    fun getGitlabUrl(): String = getUrl()
-
     override fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult {
         // GitLab API requires '/' in project path to be encoded as '%2F' in path segments
         val encodedPath = inquiry.projectPath.replace("/", "%2F")

@@ -59,7 +59,7 @@ class GithubServiceTest {
         given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn("redis-token")
 
         // when
-        val result = service.getGithubToken()
+        val result = service.getToken()
 
         // then
         assertThat(result).isEqualTo("redis-token")
@@ -74,7 +74,7 @@ class GithubServiceTest {
         given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
-        val result = service.getGithubToken()
+        val result = service.getToken()
 
         // then
         assertThat(result).isEqualTo("config-token")
@@ -89,7 +89,7 @@ class GithubServiceTest {
         given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
 
         // when
-        val result = service.getGithubToken()
+        val result = service.getToken()
 
         // then
         assertThat(result).isNull()
@@ -154,7 +154,7 @@ class GithubServiceTest {
         given(valueOperations.get(REDIS_KEY_GITHUB_URL)).willReturn("https://github.example.com")
 
         // when
-        val result = service.getGithubUrl()
+        val result = service.getUrl()
 
         // then
         assertThat(result).isEqualTo("https://github.example.com")
@@ -169,7 +169,7 @@ class GithubServiceTest {
         given(valueOperations.get(REDIS_KEY_GITHUB_URL)).willReturn(null)
 
         // when
-        val result = service.getGithubUrl()
+        val result = service.getUrl()
 
         // then
         assertThat(result).isEqualTo("https://api.github.com")
@@ -184,7 +184,7 @@ class GithubServiceTest {
         given(valueOperations.get(REDIS_KEY_GITHUB_URL)).willReturn("https://github.enterprise.com")
 
         // when
-        val result = service.getGithubUrl()
+        val result = service.getUrl()
 
         // then
         assertThat(result).isEqualTo("https://github.enterprise.com")
@@ -200,7 +200,7 @@ class GithubServiceTest {
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
 
         // when
-        service.setGithubUrl("https://github.enterprise.com")
+        service.setUrl("https://github.enterprise.com")
 
         // then
         verify(valueOperations).set(REDIS_KEY_GITHUB_URL, "https://github.enterprise.com")

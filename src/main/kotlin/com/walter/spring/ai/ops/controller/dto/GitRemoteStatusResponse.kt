@@ -7,4 +7,18 @@ data class GitRemoteStatusResponse(
     val currentProvider: String?,
     val githubUrl: String,
     val gitlabUrl: String,
-)
+) {
+    companion object {
+        fun of(configMap: Map<String, Any?>): GitRemoteStatusResponse {
+            return GitRemoteStatusResponse(
+                githubTokenConfigured = configMap["githubTokenConfigured"] as? Boolean ?: false,
+                githubPropertyConfigured = configMap["githubPropertyConfigured"] as? Boolean ?: false,
+                gitlabTokenConfigured = configMap["gitlabTokenConfigured"] as? Boolean ?: false,
+                gitlabPropertyConfigured = configMap["gitlabPropertyConfigured"] as? Boolean ?: false,
+                currentProvider = configMap["currentProvider"] as? String,
+                githubUrl = configMap["githubUrl"] as? String ?: "",
+                gitlabUrl = configMap["gitlabUrl"] as? String ?: "",
+            )
+        }
+    }
+}
