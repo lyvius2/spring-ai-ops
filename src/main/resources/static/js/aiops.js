@@ -1313,8 +1313,20 @@ function applyHighlighting(containerEl) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
-function openLokiModal() {
+async function openLokiModal() {
     document.getElementById('loki-modal-close').style.display = '';
+    document.getElementById('loki-alert-error').style.display = 'none';
+    document.getElementById('loki-save-btn').disabled = false;
+
+    // Pre-fill existing URL if configured
+    const urlInput = document.getElementById('loki-url-input');
+    urlInput.value = '';
+    try {
+        const res  = await fetch('/api/loki/status');
+        const data = await res.json();
+        if (data.lokiUrl) urlInput.value = data.lokiUrl;
+    } catch (_) { /* proceed without pre-fill */ }
+
     document.getElementById('loki-modal').style.display = 'flex';
 }
 

@@ -912,6 +912,8 @@ body {
     border-radius: 4px;
     padding: 1px 7px;
     font-family: monospace;
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .commit-ext-icon {
