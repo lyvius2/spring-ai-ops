@@ -70,14 +70,20 @@ function updateLlmKeyInput() {
 
 function openLlmModal(isReconfigure) {
     const closeBtn = document.getElementById('llm-modal-close');
-    if (isReconfigure && CURRENT_LLM) {
-        const radio = document.querySelector(`input[name="llm-provider"][value="${CURRENT_LLM}"]`);
+    const btn      = document.getElementById('llm-save-btn');
+
+    // Always reset button state — it may be disabled/relabelled from a previous save
+    btn.disabled    = false;
+
+    if (isReconfigure && _currentLlm) {
+        const radio = document.querySelector(`input[name="llm-provider"][value="${_currentLlm}"]`);
         if (radio) radio.checked = true;
         document.getElementById('llm-modal-desc').textContent =
             'Update your LLM provider or API key.';
-        document.getElementById('llm-save-btn').textContent = 'Update & Reconnect';
+        btn.textContent = 'Update & Reconnect';
         closeBtn.style.display = 'block';
     } else {
+        btn.textContent = 'Save & Connect';
         closeBtn.style.display = 'none';
     }
 
@@ -101,7 +107,7 @@ async function saveLlmConfig() {
     const btn    = document.getElementById('llm-save-btn');
     const isReconfigure = btn.textContent.includes('Update');
 
-    if (!apiKey && !isReconfigure) {
+    if (!apiKey && !hasLlmKeyConfigured(llm)) {
         showLlmAlert('error', 'Please enter an API key.');
         return;
     }
