@@ -1,5 +1,10 @@
 const MASKED_TOKEN = '••••••••••••';
 
+// Mutable LLM state — updated after save so re-opens work without page reload
+let _llmConfigured     = !!LLM_CONFIGURED;
+let _currentLlm        = CURRENT_LLM;
+let _llmBothConfigured = !!LLM_SELECT_PROVIDER;
+
 // ── Select Provider Modal ─────────────────────────────────────────────────────
 
 function openLlmSelectProviderModal() {
@@ -45,8 +50,8 @@ async function submitSelectProvider() {
 
 function hasLlmKeyConfigured(provider) {
     if (!provider) return false;
-    if (provider === CURRENT_LLM) return true;   // active provider always has a key
-    return !!LLM_SELECT_PROVIDER;                // other provider only has key if both are configured
+    if (provider === _currentLlm) return true;
+    return _llmBothConfigured;
 }
 
 function updateLlmKeyInput() {
@@ -123,7 +128,14 @@ async function saveLlmConfig() {
 
         if (res.ok && data.status === 'SUCCESS') {
             showLlmAlert('success', '');
-            setTimeout(() => location.reload(), 1200);
+            setTimeout(async () => {
+                closeLlmModal();
+                if (isReconfigure && _currentLlm && _currentLlm !== llm) _llmBothConfigured = true;
+                _currentLlm    = llm;
+                _llmConfigured = true;
+                renderLlmStatus(llm);
+                if (!isReconfigure) await proceedAfterLlm();
+            }, 800);
         } else {
             showLlmAlert('error', data.message || 'An error occurred. Please try again.');
             btn.disabled = false;
@@ -1398,18 +1410,24 @@ function renderLokiStatus(lokiUrl) {
     }
 }
 
-async function init() {
-    // Step 1: LLM not configured → branch by state
-    if (!LLM_CONFIGURED) {
-        if (LLM_SELECT_PROVIDER) {
-            openLlmSelectProviderModal();
-        } else {
-            openLlmModal(false);
-        }
-        return;
-    }
+function renderLlmStatus(provider) {
+    const cell = document.getElementById('status-llm-provider');
+    if (!cell || !provider) return;
+    const lp = provider.toLowerCase();
+    cell.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div>
+                <img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${lp}" onerror="this.style.display='none'">
+                <span class="badge badge-up">${lp.toUpperCase()}</span>
+                <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
+            </div>
+            <button class="btn-secondary" style="margin-top:0;" onclick="openLlmModal(true)">Reconfigure</button>
+        </div>
+    `;
+}
 
-    // Step 2: LLM configured → check Loki
+async function proceedAfterLlm() {
+    // Step 2: check Loki
     try {
         const res  = await fetch('/api/loki/status');
         const data = await res.json();
@@ -1424,6 +1442,20 @@ async function init() {
 
     // Step 3: check Git Remote → show modal if needed, or render status and proceed
     await checkGitRemoteAndProceed();
+}
+
+async function init() {
+    // Step 1: LLM not configured → branch by state
+    if (!_llmConfigured) {
+        if (LLM_SELECT_PROVIDER) {
+            openLlmSelectProviderModal();
+        } else {
+            openLlmModal(false);
+        }
+        return;
+    }
+
+    await proceedAfterLlm();
 }
 
 document.addEventListener('DOMContentLoaded', init);
