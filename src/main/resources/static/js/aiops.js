@@ -204,6 +204,7 @@ async function saveLokiUrl() {
 
 function showMainSection() {
     const section = document.getElementById('main-section');
+    if (section.classList.contains('visible')) return; // prevent duplicate calls
     section.classList.add('visible');
     loadApps();
     connectWebSocket();
@@ -409,6 +410,11 @@ const appSelectedCommitIdx = {};   // { appName: number }
 let stompClient = null;
 
 function connectWebSocket() {
+    // Disconnect existing client before creating a new one to prevent duplicate subscriptions
+    if (stompClient !== null) {
+        try { stompClient.disconnect(); } catch (_) {}
+        stompClient = null;
+    }
     const socket = new SockJS('/ws');
     stompClient = Stomp.over(socket);
     stompClient.debug = null;
@@ -420,6 +426,7 @@ function connectWebSocket() {
             handleCommitRecord(JSON.parse(message.body));
         });
     }, function () {
+        stompClient = null;
         setTimeout(connectWebSocket, 5000);
     });
 }
