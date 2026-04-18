@@ -852,7 +852,7 @@ function buildCodeReviewHtml(appName) {
     const record = list[idx] || null;
     const layers = record
         ? renderCommitUrlSection(record) + renderChangedFilesSection(record) + renderCodeReviewSection(record)
-        : `<div class="info-message">Please register <code>/webhook/git/${escHtml(appName)}</code> as the Webhook URL triggered on push events in your GitHub Repository.</div>`;
+        : `<div class="info-message">Please register <code>/webhook/git/${escHtml(appName)}</code> as the Webhook URL triggered on push events in your GitHub/GitLab Repository.</div>`;
     return layers + renderCommitListSection(appName);
 }
 
