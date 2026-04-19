@@ -12,6 +12,16 @@ data class GithubCompareResult(
 ) : GitCompareResult {
     override fun createCodeReviewPrompt(): String {
         return buildString {
+            if (commits.isNotEmpty()) {
+                appendLine("## Commits (${commits.size})")
+                appendLine()
+                commits.forEach { commit ->
+                    val shortSha = commit.sha.take(7)
+                    val firstLine = commit.commit.message.lines().firstOrNull()?.trim() ?: ""
+                    appendLine("- $shortSha: $firstLine")
+                }
+                appendLine()
+            }
             appendLine("## Code Diff")
             appendLine()
             files.forEach { file ->

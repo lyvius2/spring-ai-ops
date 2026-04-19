@@ -12,6 +12,15 @@ data class GitlabCompareResult(
 ) : GitCompareResult {
     override fun createCodeReviewPrompt(): String {
         return buildString {
+            if (commits.isNotEmpty()) {
+                appendLine("## Commits (${commits.size})")
+                appendLine()
+                commits.forEach { commit ->
+                    val firstLine = commit.title.ifBlank { commit.message.lines().firstOrNull()?.trim() ?: "" }
+                    appendLine("- ${commit.shortId}: $firstLine")
+                }
+                appendLine()
+            }
             appendLine("## Code Diff")
             appendLine()
             diffs.forEach { diff ->
