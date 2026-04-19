@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_CODE_RISK_PREFIX
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.eclipse.jgit.api.Git
@@ -8,14 +9,23 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.Mock
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
+import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ZSetOperations
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
 
+@ExtendWith(MockitoExtension::class)
 class RepositoryServiceTest {
+
+    @Mock private lateinit var redisTemplate: StringRedisTemplate
+    @Mock private lateinit var zSetOps: ZSetOperations<String, String>
 
     private lateinit var service: RepositoryService
 
@@ -28,7 +38,7 @@ class RepositoryServiceTest {
     @BeforeEach
     fun setUp() {
         service = RepositoryService(
-            redisTemplate = mock(StringRedisTemplate::class.java),
+            redisTemplate = redisTemplate,
             objectMapper = ObjectMapper(),
             retentionHours = 120L,
             maximumViewCount = 5L,
@@ -362,5 +372,88 @@ class RepositoryServiceTest {
         assertThatThrownBy {
             service.scanAllAtOnce("test-app", invalidUrl)
         }.isInstanceOf(Exception::class.java)
+    }
+
+    // ── saveAnalyzedResult ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("saveAnalyzedResult는 CodeRiskRecord를 반환하고 Redis에 저장한다")
+    fun givenValidParams_whenSaveAnalyzedResult_thenReturnsRecordAndSavesToRedis() {
+        // given
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)
+
+        // when
+        val record = service.saveAnalyzedResult("my-app", "https://github.com/owner/repo.git", "main", "## Analysis\nNo issues found.")
+
+        // then
+        assertThat(record.application()).isEqualTo("my-app")
+        assertThat(record.githubUrl()).isEqualTo("https://github.com/owner/repo.git")
+        assertThat(record.branch()).isEqualTo("main")
+        assertThat(record.analyzedResult()).isEqualTo("## Analysis\nNo issues found.")
+        assertThat(record.analyzedAt()).isNotNull()
+    }
+
+    // ── getCodeRiskRecords ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Redis에 레코드가 있으면 getCodeRiskRecords는 목록을 반환한다")
+    fun givenRecordsInRedis_whenGetCodeRiskRecords_thenReturnsList() {
+        // given
+        val objectMapper = ObjectMapper().findAndRegisterModules()
+        val innerService = RepositoryService(redisTemplate, objectMapper, 120L, 5L)
+        val json = """{"analyzedAt":"2026-04-20T10:00:00","application":"my-app","githubUrl":"https://github.com/owner/repo.git","branch":"main","analyzedResult":"ok"}"""
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)
+        `when`(zSetOps.reverseRange("${REDIS_KEY_CODE_RISK_PREFIX}my-app", 0, -1)).thenReturn(linkedSetOf(json))
+
+        // when
+        val result = innerService.getCodeRiskRecords("my-app")
+
+        // then
+        assertThat(result).hasSize(1)
+        assertThat(result.first().application()).isEqualTo("my-app")
+    }
+
+    @Test
+    @DisplayName("Redis에 레코드가 없으면 getCodeRiskRecords는 빈 목록을 반환한다")
+    fun givenNoRecordsInRedis_whenGetCodeRiskRecords_thenReturnsEmptyList() {
+        // given
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)
+        `when`(zSetOps.reverseRange("${REDIS_KEY_CODE_RISK_PREFIX}my-app", 0, -1)).thenReturn(emptySet())
+
+        // when
+        val result = service.getCodeRiskRecords("my-app")
+
+        // then
+        assertThat(result).isEmpty()
+    }
+
+    // ── hasCodeRiskRecords ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Redis에 레코드가 있으면 hasCodeRiskRecords는 true를 반환한다")
+    fun givenRecordsInRedis_whenHasCodeRiskRecords_thenReturnsTrue() {
+        // given
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)
+        `when`(zSetOps.zCard("${REDIS_KEY_CODE_RISK_PREFIX}my-app")).thenReturn(3L)
+
+        // when
+        val result = service.hasCodeRiskRecords("my-app")
+
+        // then
+        assertThat(result).isTrue()
+    }
+
+    @Test
+    @DisplayName("Redis에 레코드가 없으면 hasCodeRiskRecords는 false를 반환한다")
+    fun givenNoRecordsInRedis_whenHasCodeRiskRecords_thenReturnsFalse() {
+        // given
+        `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)
+        `when`(zSetOps.zCard("${REDIS_KEY_CODE_RISK_PREFIX}my-app")).thenReturn(0L)
+
+        // when
+        val result = service.hasCodeRiskRecords("my-app")
+
+        // then
+        assertThat(result).isFalse()
     }
 }

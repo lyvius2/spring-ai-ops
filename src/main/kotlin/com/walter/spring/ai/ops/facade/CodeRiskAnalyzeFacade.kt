@@ -44,10 +44,7 @@ class CodeRiskAnalyzeFacade(
         return repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, result)
     }
 
-    fun analyzeAtOnce(appName: String, repositoryUrl: String, branch: String): String {
-        val sourceBundle = repositoryService.scanAllAtOnce(appName, repositoryUrl, branch)
-        return aiModelService.executeAnalyzeCodeRisk(sourceBundle)
-    }
+    fun getRecords(appName: String) = repositoryService.getCodeRiskRecords(appName)
 
     private fun executeMapPhase(chunks: List<CodeChunk>): List<String> {
         val futures = chunks.map { chunk ->

@@ -5,6 +5,7 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_CODE_
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.util.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.zSetRangeAllDesc
 import org.eclipse.jgit.api.Git
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -93,9 +94,21 @@ class RepositoryService(
     }
 
     fun saveAnalyzedResult(appName: String, gitUrl: String, branch: String, result: String): CodeRiskRecord {
-        val key = "${REDIS_KEY_CODE_RISK_PREFIX}${appName}"
+        val key = "$REDIS_KEY_CODE_RISK_PREFIX$appName"
         val record = CodeRiskRecord(LocalDateTime.now(), appName, gitUrl, branch, result)
         redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
         return record
+    }
+
+    fun getCodeRiskRecords(application: String): List<CodeRiskRecord> {
+        val key = "$REDIS_KEY_CODE_RISK_PREFIX$application"
+        return redisTemplate.zSetRangeAllDesc(key)
+            .mapNotNull { runCatching { objectMapper.readValue(it, CodeRiskRecord::class.java) }.getOrNull() }
+            .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
+    }
+
+    fun hasCodeRiskRecords(application: String): Boolean {
+        val key = "$REDIS_KEY_CODE_RISK_PREFIX$application"
+        return (redisTemplate.opsForZSet().zCard(key) ?: 0L) > 0L
     }
 }
