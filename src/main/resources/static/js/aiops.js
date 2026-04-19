@@ -224,17 +224,27 @@ async function loadApps() {
     }
 }
 
+const ICON_GEAR = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`;
+const ICON_TRASH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+
 function createAppItem(name) {
     const item = document.createElement('div');
     item.className = 'app-item';
     item.dataset.app = name;
     item.innerHTML = `
         <span class="app-item-name">${escHtml(name)}</span>
-        <button class="app-item-delete" title="Delete">&#10005;</button>
+        <div class="app-item-actions">
+            <button class="app-item-edit" title="Edit">${ICON_GEAR}</button>
+            <button class="app-item-delete" title="Delete">${ICON_TRASH}</button>
+        </div>
     `;
     item.addEventListener('click', async function (e) {
         if (e.target.closest('.app-item-delete')) {
             openConfirmDeleteModal(name);
+            return;
+        }
+        if (e.target.closest('.app-item-edit')) {
+            openEditAppModal(name);
             return;
         }
         document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
@@ -259,6 +269,7 @@ function renderAppList(apps) {
 
 function openAddAppModal() {
     document.getElementById('add-app-input').value = '';
+    document.getElementById('add-app-git-input').value = '';
     document.getElementById('add-app-alert-success').style.display = 'none';
     document.getElementById('add-app-alert-error').style.display   = 'none';
     document.getElementById('add-app-save-btn').disabled = false;
@@ -277,6 +288,8 @@ document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
     if (document.getElementById('add-app-modal').style.display === 'flex') {
         saveApp();
+    } else if (document.getElementById('edit-app-modal').style.display === 'flex') {
+        saveEditApp();
     } else if (document.getElementById('llm-modal').style.display === 'flex') {
         saveLlmConfig();
     } else if (document.getElementById('git-remote-modal').style.display === 'flex') {
@@ -289,10 +302,11 @@ document.addEventListener('keydown', function (e) {
 });
 
 async function saveApp() {
-    const name  = document.getElementById('add-app-input').value.trim();
-    const btn   = document.getElementById('add-app-save-btn');
-    const errEl = document.getElementById('add-app-alert-error');
-    const sucEl = document.getElementById('add-app-alert-success');
+    const name   = document.getElementById('add-app-input').value.trim();
+    const gitUrl = document.getElementById('add-app-git-input').value.trim() || null;
+    const btn    = document.getElementById('add-app-save-btn');
+    const errEl  = document.getElementById('add-app-alert-error');
+    const sucEl  = document.getElementById('add-app-alert-success');
 
     if (!name) {
         errEl.textContent = 'Please enter an application name.';
@@ -310,7 +324,7 @@ async function saveApp() {
         const res  = await fetch('/api/apps', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
+            body: JSON.stringify({ name, gitUrl }),
         });
         const data = await res.json();
 
@@ -396,6 +410,107 @@ async function confirmDeleteApp() {
         }
     } catch (e) {
         // silent fail — list will be consistent on next reload
+    }
+}
+
+// ── Edit Application Modal ───────────────────────────────────────────────────
+
+let appToEdit = null;
+
+async function openEditAppModal(name) {
+    appToEdit = name;
+    document.getElementById('edit-app-name-input').value = name;
+    document.getElementById('edit-app-git-input').value = '';
+    document.getElementById('edit-app-alert-success').style.display = 'none';
+    document.getElementById('edit-app-alert-error').style.display   = 'none';
+    document.getElementById('edit-app-save-btn').disabled = false;
+    document.getElementById('edit-app-save-btn').textContent = 'Save';
+    document.getElementById('edit-app-modal').style.display = 'flex';
+
+    try {
+        const res  = await fetch(`/api/apps/${encodeURIComponent(name)}`);
+        const data = await res.json();
+        document.getElementById('edit-app-git-input').value = data.gitUrl || '';
+    } catch (_) {
+        // Proceed with empty git URL if fetch fails
+    }
+
+    setTimeout(() => document.getElementById('edit-app-name-input').focus(), 50);
+}
+
+function closeEditAppModal() {
+    const modal = document.getElementById('edit-app-modal');
+    modal.classList.remove('fading-out');
+    modal.style.display = 'none';
+    appToEdit = null;
+}
+
+async function saveEditApp() {
+    if (!appToEdit) return;
+    const originalName = appToEdit;
+    const name   = document.getElementById('edit-app-name-input').value.trim();
+    const gitUrl = document.getElementById('edit-app-git-input').value.trim() || null;
+    const btn    = document.getElementById('edit-app-save-btn');
+    const errEl  = document.getElementById('edit-app-alert-error');
+    const sucEl  = document.getElementById('edit-app-alert-success');
+
+    if (!name) {
+        errEl.textContent = 'Please enter an application name.';
+        errEl.style.display = 'block';
+        sucEl.style.display = 'none';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    errEl.style.display = 'none';
+    sucEl.style.display = 'none';
+
+    try {
+        const res  = await fetch(`/api/apps/${encodeURIComponent(originalName)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, gitUrl }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            sucEl.style.display = 'block';
+            setTimeout(() => {
+                const modal = document.getElementById('edit-app-modal');
+                modal.classList.add('fading-out');
+                modal.addEventListener('transitionend', () => {
+                    modal.style.display = 'none';
+                    modal.classList.remove('fading-out');
+                    appToEdit = null;
+
+                    // Update DOM: rename the app item in place
+                    const container = document.getElementById('app-list-container');
+                    const item = Array.from(container.querySelectorAll('.app-item'))
+                        .find(el => el.dataset.app === originalName);
+                    if (item) {
+                        item.dataset.app = name;
+                        item.querySelector('.app-item-name').textContent = name;
+                        // Re-bind click with updated name
+                        item.replaceWith(createAppItem(name));
+                    }
+
+                    if (selectedApp === originalName) {
+                        selectedApp = name;
+                    }
+                }, { once: true });
+            }, 800);
+        } else {
+            errEl.textContent = data.message || 'Failed to update application.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Save';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Save';
     }
 }
 

@@ -117,9 +117,39 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
                 <input type="text" id="add-app-input" class="form-input"
                        placeholder="my-application" autocomplete="off" />
             </div>
+            <div class="form-group">
+                <label class="form-label" for="add-app-git-input">Git Repository URL <span style="color:#999;font-weight:400;">(optional, HTTP/HTTPS only)</span></label>
+                <input type="text" id="add-app-git-input" class="form-input"
+                       placeholder="https://github.com/owner/repo.git" autocomplete="off" />
+            </div>
             <button class="btn-primary" id="add-app-save-btn" onclick="saveApp()">Add</button>
             <div class="alert alert-success" id="add-app-alert-success">Application registered successfully.</div>
             <div class="alert alert-error"   id="add-app-alert-error"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Edit Application ══ -->
+<div id="edit-app-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            Edit Application
+            <button class="modal-close-btn" onclick="closeEditAppModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label" for="edit-app-name-input">Application Name</label>
+                <input type="text" id="edit-app-name-input" class="form-input"
+                       placeholder="my-application" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="edit-app-git-input">Git Repository URL <span style="color:#999;font-weight:400;">(optional, HTTP/HTTPS only)</span></label>
+                <input type="text" id="edit-app-git-input" class="form-input"
+                       placeholder="https://github.com/owner/repo.git" autocomplete="off" />
+            </div>
+            <button class="btn-primary" id="edit-app-save-btn" onclick="saveEditApp()">Save</button>
+            <div class="alert alert-success" id="edit-app-alert-success">Application updated successfully.</div>
+            <div class="alert alert-error"   id="edit-app-alert-error"></div>
         </div>
     </div>
 </div>
