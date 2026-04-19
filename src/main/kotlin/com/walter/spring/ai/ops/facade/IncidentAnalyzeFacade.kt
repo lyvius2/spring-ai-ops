@@ -24,7 +24,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 import java.time.LocalDateTime
 
 @Facade
-class AnalyzeFacade(
+class IncidentAnalyzeFacade(
     private val applicationService: ApplicationService,
     private val grafanaService: GrafanaService,
     private val lokiService: LokiService,
@@ -33,7 +33,7 @@ class AnalyzeFacade(
     private val aiModelService: AiModelService,
     private val messagingTemplate: SimpMessagingTemplate,
 ) {
-    private val log = LoggerFactory.getLogger(AnalyzeFacade::class.java)
+    private val log = LoggerFactory.getLogger(IncidentAnalyzeFacade::class.java)
 
     private fun resolveGitServiceBySource(source: GitRemoteProvider): GitRemoteService = when (source) {
         GitRemoteProvider.GITHUB -> githubService

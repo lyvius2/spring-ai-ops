@@ -6,7 +6,7 @@ import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushResponse
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingResponse
-import com.walter.spring.ai.ops.facade.AnalyzeFacade
+import com.walter.spring.ai.ops.facade.IncidentAnalyzeFacade
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -24,7 +24,7 @@ import java.util.concurrent.Executor
 @RestController
 @RequestMapping("/webhook")
 class WebhookController(
-    private val analyzeFacade: AnalyzeFacade,
+    private val incidentAnalyzeFacade: IncidentAnalyzeFacade,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
     @Operation(
@@ -46,7 +46,7 @@ class WebhookController(
         if (request.isResolved()) {
             return GrafanaAlertingResponse.of(AlertingStatus.RESOLVED)
         }
-        CompletableFuture.runAsync({ analyzeFacade.analyzeFiring(request, application) }, executor)
+        CompletableFuture.runAsync({ incidentAnalyzeFacade.analyzeFiring(request, application) }, executor)
         return GrafanaAlertingResponse.of(AlertingStatus.ACCEPTED)
     }
 
@@ -72,7 +72,7 @@ class WebhookController(
                 githubEvent != null -> GithubPushRequest.fromGithubBody(body).copy(source = GitRemoteProvider.GITHUB)
                 gitlabEvent != null -> GithubPushRequest.fromGitlabBody(body).copy(source = GitRemoteProvider.GITLAB)
                 else -> throw IllegalArgumentException("Unsupported event type: missing X-GitHub-Event or X-Gitlab-Event header") }
-            analyzeFacade.analyzeCodeDiffer(request, application) }, executor)
+            incidentAnalyzeFacade.analyzeCodeDiffer(request, application) }, executor)
         return GithubPushResponse.accepted()
     }
 }

@@ -29,7 +29,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 private fun <T> anyObject(): T = Mockito.any() as T
 
 @ExtendWith(MockitoExtension::class)
-class AnalyzeFacadeTest {
+class IncidentAnalyzeFacadeTest {
 
     @Mock private lateinit var applicationService: ApplicationService
     @Mock private lateinit var grafanaService: GrafanaService
@@ -39,11 +39,11 @@ class AnalyzeFacadeTest {
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var messagingTemplate: SimpMessagingTemplate
 
-    private lateinit var analyzeFacade: AnalyzeFacade
+    private lateinit var incidentAnalyzeFacade: IncidentAnalyzeFacade
 
     @BeforeEach
     fun setUp() {
-        analyzeFacade = AnalyzeFacade(
+        incidentAnalyzeFacade = IncidentAnalyzeFacade(
             applicationService, grafanaService, lokiService,
             githubService, gitlabService, aiModelService, messagingTemplate
         )
@@ -111,7 +111,7 @@ class AnalyzeFacadeTest {
         val request = createRequest(status = "resolved")
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verifyNoInteractions(applicationService, grafanaService, lokiService, aiModelService, messagingTemplate)
@@ -125,7 +125,7 @@ class AnalyzeFacadeTest {
         stubHappyPath(request)
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verify(applicationService).addApp("my-app")
@@ -139,7 +139,7 @@ class AnalyzeFacadeTest {
         stubHappyPath(request)
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verify(lokiService).executeLogQuery(anyObject())
@@ -153,7 +153,7 @@ class AnalyzeFacadeTest {
         stubHappyPath(request)
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject())
@@ -167,7 +167,7 @@ class AnalyzeFacadeTest {
         stubHappyPath(request)
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verify(grafanaService).saveAnalyzeFiringRecord(anyObject())
@@ -181,7 +181,7 @@ class AnalyzeFacadeTest {
         stubHappyPath(request)
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verify(messagingTemplate).convertAndSend(eq("/topic/firing"), anyObject<AnalyzeFiringRecord>())
@@ -194,7 +194,7 @@ class AnalyzeFacadeTest {
         val request = createRequest(status = "resolved")
 
         // when
-        analyzeFacade.analyzeFiring(request, "my-app")
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
         verify(grafanaService, never()).saveAnalyzeFiringRecord(anyObject())
