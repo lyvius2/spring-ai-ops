@@ -1,0 +1,40 @@
+package com.walter.spring.ai.ops.controller
+
+import com.walter.spring.ai.ops.controller.dto.CodeRiskRequest
+import com.walter.spring.ai.ops.controller.dto.CodeRiskResponse
+import com.walter.spring.ai.ops.facade.CodeRiskAnalyzeFacade
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+
+@Tag(name = "Code Risk", description = "Analyzes security and quality risks in a Git repository by cloning the source code and running an AI-powered review.")
+@RestController
+@RequestMapping("/api")
+class CodeRiskController(
+    private val codeRiskAnalyzeFacade: CodeRiskAnalyzeFacade
+) {
+    @Operation(
+        summary = "Analyze code risk for a registered application",
+        description = """
+            Clones the Git repository associated with the given application name,
+            scans all source files, and returns an AI-generated risk assessment covering:
+            - Security vulnerabilities
+            - Code quality issues
+            - Dependency concerns
+            - Actionable recommendations
+
+            Specify an optional `branch` to analyze a specific branch (defaults to the repository's default branch).
+        """
+    )
+    @PostMapping("/code-risk")
+    fun analyzeCodeRisk(@RequestBody request: CodeRiskRequest): CodeRiskResponse {
+        return try {
+            CodeRiskResponse.success(codeRiskAnalyzeFacade.analyze(request.appName, request.branch))
+        } catch (e: Exception) {
+            CodeRiskResponse.failure(e)
+        }
+    }
+}

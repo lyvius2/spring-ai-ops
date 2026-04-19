@@ -42,6 +42,11 @@ class ApplicationService(
         return redisTemplate.opsForValue().get("$REDIS_KEY_APP_GIT$name")
     }
 
+    fun getGitRepoByAppName(appName: String): String {
+        return getGitUrl(appName)
+            ?: throw IllegalStateException("Git repository URL is not configured for application '$appName'")
+    }
+
     fun saveGitUrl(name: String, gitUrl: String?) {
         val key = "$REDIS_KEY_APP_GIT$name"
         if (gitUrl.isNullOrBlank()) {

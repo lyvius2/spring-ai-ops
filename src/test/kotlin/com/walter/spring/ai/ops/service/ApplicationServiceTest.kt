@@ -207,6 +207,37 @@ class ApplicationServiceTest {
         assertThat(result).isNull()
     }
 
+    // ── getGitRepositoryByAppName ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Redis에 git URL이 있는 경우 해당 URL 반환")
+    fun getGitRepositoryByAppName_returnsUrl_whenRedisHasValue() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn("http://github.com/owner/repo.git")
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        val result = applicationService.getGitRepoByAppName("app1")
+
+        // then
+        assertThat(result).isEqualTo("http://github.com/owner/repo.git")
+    }
+
+    @Test
+    @DisplayName("Redis에 git URL이 없는 경우 IllegalStateException 발생")
+    fun getGitRepositoryByAppName_throwsIllegalStateException_whenRedisHasNoValue() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(null)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when & then
+        assertThrows<IllegalStateException> {
+            applicationService.getGitRepoByAppName("app1")
+        }
+    }
+
     // ── updateApp ─────────────────────────────────────────────────────────────
 
     @Test

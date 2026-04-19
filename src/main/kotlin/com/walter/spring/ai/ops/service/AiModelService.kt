@@ -125,6 +125,87 @@ class AiModelService(
         }
     }
 
+    fun estimateTokenCount(bundle: String): Int {
+        var asciiCount = 0
+        var nonAsciiCount = 0
+        for (ch in bundle) {
+            if (ch.code < 128) asciiCount++ else nonAsciiCount++
+        }
+        return (asciiCount / 4) + nonAsciiCount
+    }
+
+    fun executeAnalyzeCodeRisk(bundle: String): String {
+        val model = chatModel ?: return ""
+        val systemMessage = SystemMessage(
+            "You are an expert static code analyzer specializing in security and reliability. " +
+                    "Analyze the provided source code and identify concrete issues in the following categories: " +
+                    "1. Security vulnerabilities, " +
+                    "2. Bug risks, " +
+                    "3. Null/exception handling issues, " +
+                    "4. Concurrency issues, " +
+                    "5. Resource leaks, " +
+                    "6. Performance inefficiencies, " +
+                    "7. Maintainability problems that can lead to defects. " +
+                    "Reference file names where possible. Express uncertain findings as possibilities, not certainties. " +
+                    "Do not state unverifiable facts as certainties; express them as possibilities."
+        )
+        val userMessage = UserMessage(
+            buildString {
+                append(bundle)
+                appendLine()
+                appendLine("Based on the above source code, provide a code risk analysis in markdown format.")
+                appendLine("For each issue found, include: severity (High/Medium/Low), location, description, and recommendation.")
+                appendLine("Group findings by the 7 categories listed above.")
+                if (resultLanguage != "en") {
+                    appendLine(languageOptions)
+                }
+            }
+        )
+        llmRateLimiter.acquire()
+        return try {
+            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
+            response.result.output.text ?: ""
+        } finally {
+            llmRateLimiter.release()
+        }
+    }
+
+    fun executeFinalAnalyzeCode(issues: List<String>): String {
+        val model = chatModel ?: return ""
+        if (issues.isEmpty()) return ""
+        val systemMessage = SystemMessage(
+            "You are an expert code analyst. " +
+                    "You will receive multiple partial code risk analysis reports from different parts of the same codebase. " +
+                    "Your task is to deduplicate overlapping issues, consolidate related findings, " +
+                    "and produce a single comprehensive final report in markdown format."
+        )
+        val combined = issues.mapIndexed { index, report ->
+            "## Analysis Part ${index + 1}\n$report"
+        }.joinToString("\n\n---\n\n")
+        val userMessage = UserMessage(
+            buildString {
+                appendLine(combined)
+                appendLine()
+                appendLine("Synthesize the above partial analyses into a final comprehensive code risk report with:")
+                appendLine("1. Executive summary")
+                appendLine("2. High severity issues (deduplicated and consolidated)")
+                appendLine("3. Medium severity issues (deduplicated and consolidated)")
+                appendLine("4. Low severity issues (deduplicated and consolidated)")
+                appendLine("5. Overall recommendations")
+                if (resultLanguage != "en") {
+                    appendLine(languageOptions)
+                }
+            }
+        )
+        llmRateLimiter.acquire()
+        return try {
+            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
+            response.result.output.text ?: ""
+        } finally {
+            llmRateLimiter.release()
+        }
+    }
+
     fun executeAnalyzeFiring(alertSection: String, logSection: String): String {
         val model = chatModel ?: return ""
         val systemMessage = SystemMessage(

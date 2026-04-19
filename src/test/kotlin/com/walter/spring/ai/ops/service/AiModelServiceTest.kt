@@ -353,6 +353,150 @@ class AiModelServiceTest {
             .hasMessageContaining("not configured in application.yml")
     }
 
+    // ── executeAnalyzeCodeRisk ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("ChatModel이 null이면 executeAnalyzeCodeRisk는 빈 문자열 반환")
+    fun executeAnalyzeCodeRisk_returnsEmpty_whenChatModelIsNull() {
+        // given
+        val bundle = "## File: Service.kt\n```\nclass Service\n```"
+
+        // when
+        val result = aiModelService.executeAnalyzeCodeRisk(bundle)
+
+        // then
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    @DisplayName("ChatModel이 구성된 경우 코드 리스크 분석 결과 문자열 반환")
+    fun executeAnalyzeCodeRisk_returnsAnalysisResult_whenChatModelIsConfigured() {
+        // given
+        injectChatModel(mockChatModel)
+        val response = mockChatResponse("## Security vulnerabilities\nNo issues found.")
+        given(mockChatModel.call(any(Prompt::class.java))).willReturn(response)
+
+        // when
+        val result = aiModelService.executeAnalyzeCodeRisk("## File: Service.kt\n```\nclass Service\n```")
+
+        // then
+        assertThat(result).isEqualTo("## Security vulnerabilities\nNo issues found.")
+    }
+
+    // ── executeFinalAnalyzeCode ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("ChatModel이 null이면 executeFinalAnalyzeCode는 빈 문자열 반환")
+    fun executeFinalAnalyzeCode_returnsEmpty_whenChatModelIsNull() {
+        // given
+        val issues = listOf("## Security vulnerabilities\nSQL injection in UserRepo")
+
+        // when
+        val result = aiModelService.executeFinalAnalyzeCode(issues)
+
+        // then
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    @DisplayName("issues 목록이 비어있으면 executeFinalAnalyzeCode는 빈 문자열 반환")
+    fun executeFinalAnalyzeCode_returnsEmpty_whenIssuesIsEmpty() {
+        // given
+        injectChatModel(mockChatModel)
+
+        // when
+        val result = aiModelService.executeFinalAnalyzeCode(emptyList())
+
+        // then
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    @DisplayName("ChatModel이 구성된 경우 최종 종합 보고서 문자열 반환")
+    fun executeFinalAnalyzeCode_returnsFinalReport_whenChatModelIsConfigured() {
+        // given
+        injectChatModel(mockChatModel)
+        val response = mockChatResponse("## Executive summary\nOverall risk is medium.")
+        given(mockChatModel.call(any(Prompt::class.java))).willReturn(response)
+        val issues = listOf("issue from service chunk", "issue from controller chunk")
+
+        // when
+        val result = aiModelService.executeFinalAnalyzeCode(issues)
+
+        // then
+        assertThat(result).isEqualTo("## Executive summary\nOverall risk is medium.")
+    }
+
+    @Test
+    @DisplayName("모든 청크 이슈가 하나의 프롬프트에 합산되어 LLM에 전달됨")
+    fun executeFinalAnalyzeCode_combinesAllIssuesIntoSinglePrompt() {
+        // given
+        injectChatModel(mockChatModel)
+        val response = mockChatResponse("final report")
+        given(mockChatModel.call(any(Prompt::class.java))).willReturn(response)
+        val issues = listOf("Analysis Part 1 content", "Analysis Part 2 content")
+
+        // when
+        aiModelService.executeFinalAnalyzeCode(issues)
+
+        // then
+        verify(mockChatModel).call(any(Prompt::class.java))
+    }
+
+    // ── estimateTokenCount ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("빈 문자열이면 estimateTokenCount는 0 반환")
+    fun estimateTokenCount_returnsZero_whenBundleIsEmpty() {
+        // given
+        val bundle = ""
+
+        // when
+        val result = aiModelService.estimateTokenCount(bundle)
+
+        // then
+        assertThat(result).isEqualTo(0)
+    }
+
+    @Test
+    @DisplayName("ASCII 문자만 있으면 estimateTokenCount는 length / 4 반환")
+    fun estimateTokenCount_returnsLengthDividedByFour_whenAllAscii() {
+        // given
+        val bundle = "a".repeat(100)
+
+        // when
+        val result = aiModelService.estimateTokenCount(bundle)
+
+        // then
+        assertThat(result).isEqualTo(25)
+    }
+
+    @Test
+    @DisplayName("비ASCII 문자(한글 등)는 1자당 1토큰으로 계산됨")
+    fun estimateTokenCount_countsNonAsciiAsOneTokenEach() {
+        // given
+        val bundle = "가".repeat(50)
+
+        // when
+        val result = aiModelService.estimateTokenCount(bundle)
+
+        // then
+        assertThat(result).isEqualTo(50)
+    }
+
+    @Test
+    @DisplayName("ASCII와 비ASCII가 혼합된 경우 각각의 규칙이 합산됨")
+    fun estimateTokenCount_sumsBothRules_whenMixedContent() {
+        // given
+        val bundle = "a".repeat(80) + "가".repeat(10) // 80/4 + 10 = 30
+
+        // when
+        val result = aiModelService.estimateTokenCount(bundle)
+
+        // then
+        assertThat(result).isEqualTo(30)
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private fun injectChatModel(chatModel: ChatModel) {
