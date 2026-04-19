@@ -41,20 +41,15 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
                 Select your LLM provider and enter an API key to get started.
             </p>
             <div class="radio-group">
+                {{#llmProviders}}
                 <div class="radio-option">
-                    <input type="radio" name="llm-provider" id="llm-openai" value="openai" checked>
-                    <label for="llm-openai">
-                        <img src="/images/openai.svg" class="provider-logo" alt="OpenAI">
-                        OpenAI
+                    <input type="radio" name="llm-provider" id="llm-{{key}}" value="{{key}}">
+                    <label for="llm-{{key}}">
+                        <img src="/images/{{key}}.svg" class="provider-logo" alt="{{product}}">
+                        <span style="text-transform:uppercase;">{{key}}</span>
                     </label>
                 </div>
-                <div class="radio-option">
-                    <input type="radio" name="llm-provider" id="llm-anthropic" value="anthropic">
-                    <label for="llm-anthropic">
-                        <img src="/images/anthropic.svg" class="provider-logo" alt="Anthropic">
-                        Anthropic
-                    </label>
-                </div>
+                {{/llmProviders}}
             </div>
             <div class="form-group">
                 <label class="form-label" for="llm-api-key">API Key</label>
@@ -83,20 +78,15 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
                 Please select the LLM provider you want to use.
             </p>
             <div class="radio-group">
+                {{#llmProviders}}
                 <div class="radio-option">
-                    <input type="radio" name="select-provider" id="select-openai" value="openai" checked>
-                    <label for="select-openai">
-                        <img src="/images/openai.svg" class="provider-logo" alt="OpenAI">
-                        OpenAI
+                    <input type="radio" name="select-provider" id="select-{{key}}" value="{{key}}">
+                    <label for="select-{{key}}">
+                        <img src="/images/{{key}}.svg" class="provider-logo" alt="{{product}}">
+                        <span style="text-transform:uppercase;">{{key}}</span>
                     </label>
                 </div>
-                <div class="radio-option">
-                    <input type="radio" name="select-provider" id="select-anthropic" value="anthropic">
-                    <label for="select-anthropic">
-                        <img src="/images/anthropic.svg" class="provider-logo" alt="Anthropic">
-                        Anthropic
-                    </label>
-                </div>
+                {{/llmProviders}}
             </div>
             <button class="btn-primary" id="select-provider-btn" onclick="submitSelectProvider()">Select</button>
             <div class="alert alert-error" id="select-provider-alert-error"></div>

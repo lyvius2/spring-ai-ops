@@ -9,6 +9,8 @@ function openLlmSelectProviderModal() {
     document.getElementById('select-provider-alert-error').style.display = 'none';
     document.getElementById('select-provider-btn').disabled = false;
     document.getElementById('select-provider-btn').textContent = 'Select';
+    const firstRadio = document.querySelector('input[name="select-provider"]');
+    if (firstRadio) firstRadio.checked = true;
     document.getElementById('select-provider-modal').style.display = 'flex';
 }
 
@@ -83,6 +85,8 @@ function openLlmModal(isReconfigure) {
         btn.textContent = 'Update & Reconnect';
         closeBtn.style.display = 'block';
     } else {
+        const firstRadio = document.querySelector('input[name="llm-provider"]');
+        if (firstRadio) firstRadio.checked = true;
         btn.textContent = 'Save & Connect';
         closeBtn.style.display = 'none';
     }
