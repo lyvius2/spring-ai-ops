@@ -56,20 +56,20 @@ resilience4j:
 ai:
   open-ai:
     model: gpt-4o-mini                  # Set OpenAI Model : Default is gpt-4o-mini
-    api-key: ${AI_OPENAI_API_KEY:}      # Set your OpenAI API key for authentication
+    api-key: ${AI_OPEN-AI_API-KEY:}      # Set your OpenAI API key for authentication
   anthropic:
     model: claude-sonnet-4-6            # Set Anthropic Model : Default is claude-sonnet-4-6
-    api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
+    api-key: ${AI_ANTHROPIC_API-KEY:}   # Set your Anthropic API key for authentication
 
 loki:
   url: ${LOKI_URL:}                     # Set your Loki URL (e.g., http://localhost:3100) : Default is empty
 github:
   url: ${GITHUB_URL:https://api.github.com}     # Set your GitHub API URL (e.g., https://api.github.com)
-  access-token: ${GITHUB_ACCESS_TOKEN:}         # Set your GitHub access token for authentication
-  api-version: ${GITHUB_API_VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28) : Default is 2022-11-28
+  access-token: ${GITHUB_ACCESS-TOKEN:}         # Set your GitHub access token for authentication
+  api-version: ${GITHUB_API-VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28) : Default is 2022-11-28
 gitlab:
   url: ${GITLAB_URL:https://gitlab.com/api/v4}  # Set your GitLab URL (e.g., https://gitlab.com/api/v4)
-  access-token: ${GITLAB_ACCESS_TOKEN:}         # Set your GitLab access token for authentication
+  access-token: ${GITLAB_ACCESS-TOKEN:}         # Set your GitLab access token for authentication
 
 crypto:
   secret-key: ${CRYPTO_SECRET_KEY:}  # AES-256-GCM key for encrypting Redis-stored credentials. Must be set in production.
