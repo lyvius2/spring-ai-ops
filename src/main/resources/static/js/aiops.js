@@ -1036,9 +1036,9 @@ function buildAppDetailHtml(appName) {
             <button class="btn-run-analysis" onclick="openRunAnalysisModal()">Run Static Analysis</button>
         </div>
         <div class="tab-bar">
+            <button class="tab-btn" data-tab="coderisk" id="tab-btn-coderisk" style="${hasRisk ? '' : 'display:none;'}">Code Risk</button>
             <button class="tab-btn active" data-tab="codereview">Code Review</button>
             <button class="tab-btn"        data-tab="exception">Incident Intelligence</button>
-            <button class="tab-btn" data-tab="coderisk" id="tab-btn-coderisk" style="${hasRisk ? '' : 'display:none;'}">Code Risk</button>
         </div>
         <div class="tab-content" id="tab-pane-codereview">
             <div id="codereview-content">
