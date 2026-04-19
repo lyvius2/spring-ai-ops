@@ -1,7 +1,5 @@
 package com.walter.spring.ai.ops.controller
 
-import com.walter.spring.ai.ops.controller.dto.AppAddRequest
-import com.walter.spring.ai.ops.controller.dto.AppAddResponse
 import com.walter.spring.ai.ops.controller.dto.AppGitResponse
 import com.walter.spring.ai.ops.controller.dto.AppRemoveResponse
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
@@ -42,12 +40,12 @@ class ApplicationController(
         description = "Adds the application name to the registry. Idempotent — re-registering an existing name is silently ignored."
     )
     @PostMapping
-    fun addApp(@RequestBody request: AppAddRequest): AppAddResponse {
+    fun addApp(@RequestBody request: AppUpdateRequest): AppUpdateResponse {
         return try {
             applicationService.addApp(request.name, request.gitUrl)
-            AppAddResponse.success()
+            AppUpdateResponse.success()
         } catch (e: Exception) {
-            AppAddResponse.failure(e)
+            AppUpdateResponse.failure(e)
         }
     }
 
