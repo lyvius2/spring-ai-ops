@@ -587,6 +587,17 @@ body {
     text-transform: uppercase;
     color: #34302d;
     letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.layer-header-disclaimer {
+    font-size: 0.7rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #c0392b;
 }
 
 .json-block {
