@@ -37,7 +37,7 @@ Spring AI Ops bridges your monitoring and version-control toolchain with large l
 
 No relational database is used. Redis serves as the sole persistence layer — storing LLM configuration, application registry, alert analysis records, and code review records.
 
-> **Live Demo**: [http://ai-ops.duckdns.org](http://ai-ops.duckdns.org)
+> **Live Demo**: [https://ai-ops.duckdns.org](https://ai-ops.duckdns.org)
 
 ---
 
@@ -546,7 +546,7 @@ SOFTWARE.
 
 관계형 데이터베이스는 사용하지 않으며, Redis를 유일한 저장소로 사용합니다. 로컬 개발 환경에서는 Embedded Redis가 자동으로 기동되므로 별도 설치가 필요 없습니다.
 
-> **데모 사이트**: [http://ai-ops.duckdns.org](http://ai-ops.duckdns.org)
+> **데모 사이트**: [https://ai-ops.duckdns.org](https://ai-ops.duckdns.org)
 
 ---
 
