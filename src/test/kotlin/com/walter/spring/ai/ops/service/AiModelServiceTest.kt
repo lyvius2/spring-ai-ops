@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.LlmProvider
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
@@ -90,7 +91,7 @@ class AiModelServiceTest {
     @Test
     @DisplayName("openai provider로 configure하면 ChatModel이 생성되고 Redis에 저장됨")
     fun configure_createsChatModel_andSavesToRedis_whenOpenAi() {
-        aiModelService.configure("openai", "sk-fake-key")
+        aiModelService.configure(LlmProvider.OPEN_AI, "sk-fake-key")
 
         assertThat(aiModelService.isConfigured()).isTrue()
         verify(valueOps).set(REDIS_KEY_LLM, "openai")
@@ -100,19 +101,11 @@ class AiModelServiceTest {
     @Test
     @DisplayName("anthropic provider로 configure하면 ChatModel이 생성되고 Redis에 저장됨")
     fun configure_createsChatModel_andSavesToRedis_whenAnthropic() {
-        aiModelService.configure("anthropic", "sk-ant-fake-key")
+        aiModelService.configure(LlmProvider.ANTHROPIC, "sk-ant-fake-key")
 
         assertThat(aiModelService.isConfigured()).isTrue()
         verify(valueOps).set(REDIS_KEY_LLM, "anthropic")
         verify(valueOps).set(REDIS_KEY_LLM_API_KEY, "sk-ant-fake-key")
-    }
-
-    @Test
-    @DisplayName("알 수 없는 provider로 configure하면 IllegalArgumentException 발생")
-    fun configure_throwsIllegalArgumentException_whenUnknownProvider() {
-        assertThatThrownBy { aiModelService.configure("unknown-llm", "fake-key") }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("Unknown LLM provider")
     }
 
     // ── isConfigured ──────────────────────────────────────────────────────────
@@ -126,7 +119,7 @@ class AiModelServiceTest {
     @Test
     @DisplayName("configure 후 isConfigured는 true")
     fun isConfigured_returnsTrue_afterConfigure() {
-        aiModelService.configure("openai", "sk-fake-key")
+        aiModelService.configure(LlmProvider.OPEN_AI, "sk-fake-key")
 
         assertThat(aiModelService.isConfigured()).isTrue()
     }
@@ -156,7 +149,7 @@ class AiModelServiceTest {
     fun configure_usesExistingKey_whenApiKeyIsBlankAndRedisHasKey() {
         given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn("sk-saved-key")
 
-        aiModelService.configure("openai", "")
+        aiModelService.configure(LlmProvider.OPEN_AI, "")
 
         assertThat(aiModelService.isConfigured()).isTrue()
     }
@@ -166,7 +159,7 @@ class AiModelServiceTest {
     fun configure_throwsIllegalStateException_whenApiKeyIsBlankAndNoExistingKey() {
         given(valueOps.get(REDIS_KEY_LLM_API_KEY)).willReturn(null)
 
-        assertThatThrownBy { aiModelService.configure("openai", "") }
+        assertThatThrownBy { aiModelService.configure(LlmProvider.OPEN_AI, "") }
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("API key is not configured")
     }
@@ -183,7 +176,7 @@ class AiModelServiceTest {
     @Test
     @DisplayName("configure 후 getChatModel은 ChatModel 인스턴스 반환")
     fun getChatModel_returnsChatModel_afterConfigure() {
-        aiModelService.configure("openai", "sk-fake-key")
+        aiModelService.configure(LlmProvider.OPEN_AI, "sk-fake-key")
 
         assertThat(aiModelService.getChatModel()).isNotNull()
     }
@@ -323,7 +316,7 @@ class AiModelServiceTest {
     @DisplayName("두 yml 키 모두 있어도 ChatModel이 이미 설정되면 isSelectProviderRequired는 false")
     fun isSelectProviderRequired_returnsFalse_whenAlreadyConfigured() {
         val service = buildService(openAiApiKey = "sk-openai", anthropicApiKey = "sk-ant")
-        service.configure("openai", "sk-openai")
+        service.configure(LlmProvider.OPEN_AI, "sk-openai")
 
         assertThat(service.isSelectProviderRequired()).isFalse()
     }
@@ -331,21 +324,21 @@ class AiModelServiceTest {
     // ── configureFromYml ──────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("configureFromYml(openai) 호출 시 yml의 OpenAI 키로 ChatModel이 설정됨")
+    @DisplayName("configureFromYml(OPEN_AI) 호출 시 yml의 OpenAI 키로 ChatModel이 설정됨")
     fun configureFromYml_configuresOpenAi_whenOpenAiProviderSelected() {
         val service = buildService(openAiApiKey = "sk-yml-openai", anthropicApiKey = "sk-yml-ant")
 
-        service.configureFromYml("openai")
+        service.configureFromYml(LlmProvider.OPEN_AI)
 
         assertThat(service.isConfigured()).isTrue()
     }
 
     @Test
-    @DisplayName("configureFromYml(anthropic) 호출 시 yml의 Anthropic 키로 ChatModel이 설정됨")
+    @DisplayName("configureFromYml(ANTHROPIC) 호출 시 yml의 Anthropic 키로 ChatModel이 설정됨")
     fun configureFromYml_configuresAnthropic_whenAnthropicProviderSelected() {
         val service = buildService(openAiApiKey = "sk-yml-openai", anthropicApiKey = "sk-yml-ant")
 
-        service.configureFromYml("anthropic")
+        service.configureFromYml(LlmProvider.ANTHROPIC)
 
         assertThat(service.isConfigured()).isTrue()
     }
@@ -355,19 +348,9 @@ class AiModelServiceTest {
     fun configureFromYml_throwsIllegalStateException_whenYmlKeyIsBlank() {
         val service = buildService(openAiApiKey = "")
 
-        assertThatThrownBy { service.configureFromYml("openai") }
+        assertThatThrownBy { service.configureFromYml(LlmProvider.OPEN_AI) }
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("not configured in application.yml")
-    }
-
-    @Test
-    @DisplayName("configureFromYml 시 알 수 없는 provider이면 IllegalArgumentException 발생")
-    fun configureFromYml_throwsIllegalArgumentException_whenUnknownProvider() {
-        val service = buildService(openAiApiKey = "sk-key")
-
-        assertThatThrownBy { service.configureFromYml("unknown") }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("Unknown LLM provider")
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

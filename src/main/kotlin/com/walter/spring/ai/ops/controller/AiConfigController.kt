@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.controller
 
 import com.walter.spring.ai.ops.code.ConnectionStatus
+import com.walter.spring.ai.ops.code.LlmProvider
 import com.walter.spring.ai.ops.controller.dto.AiConfigRequest
 import com.walter.spring.ai.ops.controller.dto.AiConfigResponse
 import com.walter.spring.ai.ops.controller.dto.SelectProviderRequest
@@ -25,7 +26,8 @@ class AiConfigController(
     )
     @PostMapping("/config")
     fun configure(@RequestBody request: AiConfigRequest): AiConfigResponse {
-        aiModelService.configure(request.llm, request.apiKey)
+        val provider = LlmProvider.fromKey(request.llm)
+        aiModelService.configure(provider, request.apiKey)
         return AiConfigResponse.of(ConnectionStatus.SUCCESS, request.llm)
     }
 
@@ -36,7 +38,8 @@ class AiConfigController(
     @PostMapping("/select-provider")
     fun selectProvider(@RequestBody request: SelectProviderRequest): AiConfigResponse {
         return try {
-            aiModelService.configureFromYml(request.llm)
+            val provider = LlmProvider.fromKey(request.llm)
+            aiModelService.configureFromYml(provider)
             AiConfigResponse.of(ConnectionStatus.SUCCESS, request.llm)
         } catch (e: Exception) {
             AiConfigResponse.error(e.message)

@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
+import com.walter.spring.ai.ops.code.LlmProvider
 import com.walter.spring.ai.ops.util.CryptoProvider
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
@@ -48,7 +49,7 @@ class AiModelService(
         val apiKey = redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
             ?.let { cryptoProvider.decrypt(it) }
         if (!llm.isNullOrBlank() && !apiKey.isNullOrBlank()) {
-            runCatching { chatModel = buildChatModel(llm, apiKey) }
+            runCatching { chatModel = buildChatModel(LlmProvider.fromKey(llm), apiKey) }
                 .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
             return
         }
@@ -56,10 +57,10 @@ class AiModelService(
         val hasOpenAi = openAiApiKey.isNotBlank()
         val hasAnthropic = anthropicApiKey.isNotBlank()
         if (hasOpenAi && !hasAnthropic) {
-            runCatching { configure("openai", openAiApiKey) }
+            runCatching { configure(LlmProvider.OPEN_AI, openAiApiKey) }
                 .onFailure { log.warn("Failed to auto-configure OpenAI from yml: {}", it.message) }
         } else if (hasAnthropic && !hasOpenAi) {
-            runCatching { configure("anthropic", anthropicApiKey) }
+            runCatching { configure(LlmProvider.ANTHROPIC, anthropicApiKey) }
                 .onFailure { log.warn("Failed to auto-configure Anthropic from yml: {}", it.message) }
         }
     }
@@ -68,24 +69,23 @@ class AiModelService(
         return openAiApiKey.isNotBlank() && anthropicApiKey.isNotBlank() && chatModel == null
     }
 
-    fun configureFromYml(llm: String) {
-        val apiKey = when (llm) {
-            "openai" -> openAiApiKey
-            "anthropic" -> anthropicApiKey
-            else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
+    fun configureFromYml(provider: LlmProvider) {
+        val apiKey = when (provider) {
+            LlmProvider.OPEN_AI -> openAiApiKey
+            LlmProvider.ANTHROPIC -> anthropicApiKey
         }
         if (apiKey.isBlank()) {
-            throw IllegalStateException("API key for '$llm' is not configured in application.yml")
+            throw IllegalStateException("API key for '${provider.key}' is not configured in application.yml")
         }
-        configure(llm, apiKey)
+        configure(provider, apiKey)
     }
 
-    fun configure(llm: String, apiKey: String) {
+    fun configure(provider: LlmProvider, apiKey: String) {
         val effectiveApiKey = apiKey.ifBlank {
             getCurrentApiKey() ?: throw IllegalStateException("API key is not configured. Please enter an API key.")
         }
-        chatModel = buildChatModel(llm, effectiveApiKey)
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM, llm)
+        chatModel = buildChatModel(provider, effectiveApiKey)
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM, provider.key)
         redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, cryptoProvider.encrypt(effectiveApiKey))
     }
 
@@ -106,23 +106,22 @@ class AiModelService(
         return chatModel ?: error("ChatModel is not configured")
     }
 
-    private fun buildChatModel(llm: String, apiKey: String): ChatModel {
+    private fun buildChatModel(provider: LlmProvider, apiKey: String): ChatModel {
         val toolCallingManager = ToolCallingManager.builder().build()
         val retryTemplate = RetryUtils.DEFAULT_RETRY_TEMPLATE
         val observationRegistry = ObservationRegistry.NOOP
 
-        return when (llm) {
-            "openai" -> {
+        return when (provider) {
+            LlmProvider.OPEN_AI -> {
                 val api = OpenAiApi.builder().apiKey(apiKey).build()
                 val options = OpenAiChatOptions.builder().model(openAiModel).build()
                 OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
-            "anthropic" -> {
+            LlmProvider.ANTHROPIC -> {
                 val api = AnthropicApi.builder().apiKey(apiKey).build()
                 val options = AnthropicChatOptions.builder().model(anthropicModel).maxTokens(1024).build()
                 AnthropicChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
-            else -> throw IllegalArgumentException("Unknown LLM provider: $llm")
         }
     }
 
