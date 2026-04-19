@@ -302,6 +302,8 @@ document.addEventListener('keydown', function (e) {
         saveLokiUrl();
     } else if (document.getElementById('select-provider-modal').style.display === 'flex') {
         submitSelectProvider();
+    } else if (document.getElementById('run-analysis-modal').style.display === 'flex') {
+        submitRunAnalysis();
     }
 });
 
@@ -524,6 +526,8 @@ const appFiringLists       = {};   // { appName: AnalyzeFiringRecord[] }  newest
 const appSelectedFiringIdx = {};   // { appName: number }
 const appCommitLists       = {};   // { appName: CodeReviewRecord[] }    newest-first
 const appSelectedCommitIdx = {};   // { appName: number }
+const appCodeRiskLists     = {};   // { appName: CodeRiskRecord[] }       newest-first
+const appSelectedRiskIdx   = {};   // { appName: number }
 let stompClient = null;
 
 function connectWebSocket() {
@@ -1025,11 +1029,16 @@ function showCommitNotification(appName) {
 function buildAppDetailHtml(appName) {
     const list   = appFiringLists[appName] || [];
     const record = list[appSelectedFiringIdx[appName] ?? 0] || null;
+    const hasRisk = (appCodeRiskLists[appName] || []).length > 0;
     return `
-        <div class="app-detail-header">${escHtml(appName)}</div>
+        <div class="app-detail-header-row">
+            <span class="app-detail-title">${escHtml(appName)}</span>
+            <button class="btn-run-analysis" onclick="openRunAnalysisModal()">Run Static Analysis</button>
+        </div>
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="codereview">Code Review</button>
             <button class="tab-btn"        data-tab="exception">Incident Intelligence</button>
+            <button class="tab-btn" data-tab="coderisk" id="tab-btn-coderisk" style="${hasRisk ? '' : 'display:none;'}">Code Risk</button>
         </div>
         <div class="tab-content" id="tab-pane-codereview">
             <div id="codereview-content">
@@ -1039,6 +1048,11 @@ function buildAppDetailHtml(appName) {
         <div class="tab-content" id="tab-pane-exception" style="display:none;">
             <div id="exception-layers">${renderAnalysisLayers(appName, record)}</div>
             ${renderFiringListSection(appName)}
+        </div>
+        <div class="tab-content" id="tab-pane-coderisk" style="display:none;">
+            <div id="coderisk-content">
+                <div class="list-placeholder">Loading...</div>
+            </div>
         </div>
     `;
 }
@@ -1055,8 +1069,12 @@ function showPanelLoading(elementId) {
 
 async function renderAppDetail(appName) {
     showPanelLoading('app-detail-panel');
-    await loadFiringList(appName);
+    await Promise.all([
+        loadFiringList(appName),
+        loadCodeRiskList(appName),
+    ]);
     appSelectedFiringIdx[appName] = 0;
+    appSelectedRiskIdx[appName] = appSelectedRiskIdx[appName] ?? 0;
     const panel = document.getElementById('app-detail-panel');
     panel.innerHTML = buildAppDetailHtml(appName);
     applyHighlighting(panel);
@@ -1081,6 +1099,11 @@ document.addEventListener('click', async function (e) {
             await loadAndRenderCodeReview(selectedApp);
             return;
         }
+        if (tabName === 'coderisk') {
+            switchToTab(tabName);
+            renderCodeRiskContent(selectedApp);
+            return;
+        }
         switchToTab(tabName);
         return;
     }
@@ -1096,6 +1119,13 @@ document.addEventListener('click', async function (e) {
     const commitRow = e.target.closest('.commit-table tbody tr[data-idx]');
     if (commitRow && selectedApp) {
         selectCommitRecord(selectedApp, parseInt(commitRow.dataset.idx, 10));
+        return;
+    }
+
+    // Code Risk history row selection
+    const riskRow = e.target.closest('.code-risk-history-table tbody tr[data-idx]');
+    if (riskRow && selectedApp) {
+        selectCodeRiskRecord(selectedApp, parseInt(riskRow.dataset.idx, 10));
     }
 });
 
@@ -1103,10 +1133,175 @@ function switchToTab(tabName) {
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === tabName);
     });
-    ['exception', 'codereview'].forEach(t => {
+    ['exception', 'codereview', 'coderisk'].forEach(t => {
         const pane = document.getElementById('tab-pane-' + t);
         if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
     });
+}
+
+// ── Code Risk ─────────────────────────────────────────────────────────────────
+
+async function loadCodeRiskList(appName) {
+    try {
+        const res  = await fetch(`/api/code-risk/${encodeURIComponent(appName)}/list`);
+        const data = await res.json();
+        appCodeRiskLists[appName] = data.records || [];
+    } catch (_) {
+        appCodeRiskLists[appName] = appCodeRiskLists[appName] || [];
+    }
+}
+
+function countIssues(text) {
+    if (!text) return '—';
+    const n = (text.match(/\bseverity\b/gi) || []).length;
+    if (n > 0) return n;
+    const m = (text.match(/\*\*(high|medium|low)\*\*/gi) || []).length;
+    return m > 0 ? m : '—';
+}
+
+function renderCodeRiskHistoryRows(appName) {
+    const list        = appCodeRiskLists[appName] || [];
+    const selectedIdx = appSelectedRiskIdx[appName] ?? 0;
+    if (list.length === 0) {
+        return `<tr><td colspan="4" style="padding:14px;color:#999;text-align:center;">No analysis records yet.</td></tr>`;
+    }
+    return list.map((rec, idx) =>
+        `<tr class="${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}">
+            <td>${idx + 1}</td>
+            <td>${escHtml(rec.branch || 'default')}</td>
+            <td>${countIssues(rec.analyzedResult)}</td>
+            <td>${formatOccupiedAt(rec.analyzedAt)}</td>
+        </tr>`
+    ).join('');
+}
+
+function renderCodeRiskContent(appName) {
+    const content = document.getElementById('coderisk-content');
+    if (!content) return;
+    const list = appCodeRiskLists[appName] || [];
+    const idx  = appSelectedRiskIdx[appName] ?? 0;
+    const rec  = list[idx] || null;
+
+    if (!rec) {
+        content.innerHTML = `<div class="info-message">No static analysis has been performed for this application.</div>`;
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="analysis-layer">
+            <div class="layer-header">Git Repository</div>
+            <div style="padding:10px 14px; font-size:0.88rem; word-break:break-all;">
+                <a href="${escHtml(rec.githubUrl || '')}" target="_blank" rel="noopener noreferrer">${escHtml(rec.githubUrl || '—')}</a>
+            </div>
+        </div>
+        <div class="analysis-layer">
+            <div class="layer-header">Branch</div>
+            <div style="padding:10px 14px; font-size:0.88rem;">
+                ${escHtml(rec.branch || 'default')}
+                <span style="color:#999; margin-left:8px;">(${formatOccupiedAt(rec.analyzedAt)})</span>
+            </div>
+        </div>
+        <div class="analysis-layer">
+            <div class="layer-header">AI Analysis Result<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
+            <div class="analysis-text markdown-body" style="padding:14px;">${renderMarkdown(rec.analyzedResult || '')}</div>
+        </div>
+        <div class="analysis-layer">
+            <div class="layer-header">Analysis History</div>
+            <table class="code-risk-history-table">
+                <thead><tr><th>#</th><th>Branch</th><th>Issues</th><th>Analyzed At</th></tr></thead>
+                <tbody id="code-risk-history-body">${renderCodeRiskHistoryRows(appName)}</tbody>
+            </table>
+        </div>
+    `;
+    applyHighlighting(content);
+}
+
+function selectCodeRiskRecord(appName, idx) {
+    appSelectedRiskIdx[appName] = idx;
+    renderCodeRiskContent(appName);
+}
+
+// ── Run Static Analysis Modal ─────────────────────────────────────────────────
+
+async function openRunAnalysisModal() {
+    if (!selectedApp) return;
+    document.getElementById('run-analysis-branch').value = '';
+    document.getElementById('run-analysis-alert-error').style.display = 'none';
+    document.getElementById('run-analysis-no-git').style.display = 'none';
+    document.getElementById('run-analysis-form').style.display = 'block';
+    document.getElementById('run-analysis-loading').style.display = 'none';
+    const btn = document.getElementById('run-analysis-submit-btn');
+    btn.disabled = false;
+    btn.textContent = 'Run Analysis';
+
+    // Check if git URL is configured
+    try {
+        const res  = await fetch(`/api/apps/${encodeURIComponent(selectedApp)}`);
+        const data = await res.json();
+        if (!data.gitUrl) {
+            document.getElementById('run-analysis-form').style.display = 'none';
+            document.getElementById('run-analysis-no-git').style.display = 'block';
+        }
+    } catch (_) {
+        document.getElementById('run-analysis-form').style.display = 'none';
+        document.getElementById('run-analysis-no-git').style.display = 'block';
+    }
+
+    document.getElementById('run-analysis-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('run-analysis-branch').focus(), 50);
+}
+
+function closeRunAnalysisModal() {
+    document.getElementById('run-analysis-modal').style.display = 'none';
+}
+
+async function submitRunAnalysis() {
+    if (!selectedApp) return;
+    const branch = document.getElementById('run-analysis-branch').value.trim();
+    const btn    = document.getElementById('run-analysis-submit-btn');
+    const errEl  = document.getElementById('run-analysis-alert-error');
+
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+    errEl.style.display = 'none';
+    document.getElementById('run-analysis-form').style.display = 'none';
+    document.getElementById('run-analysis-loading').style.display = 'block';
+
+    try {
+        const res  = await fetch('/api/code-risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appName: selectedApp, branch }),
+        });
+        const data = await res.json();
+
+        closeRunAnalysisModal();
+
+        if (data.success && data.data) {
+            // Prepend to local list and re-render
+            if (!appCodeRiskLists[selectedApp]) appCodeRiskLists[selectedApp] = [];
+            appCodeRiskLists[selectedApp].unshift(data.data);
+            if (appCodeRiskLists[selectedApp].length > 5) appCodeRiskLists[selectedApp].length = 5;
+            appSelectedRiskIdx[selectedApp] = 0;
+
+            // Show the Code Risk tab
+            const tabBtn = document.getElementById('tab-btn-coderisk');
+            if (tabBtn) tabBtn.style.display = '';
+            switchToTab('coderisk');
+            renderCodeRiskContent(selectedApp);
+        } else {
+            // Show error inline
+            document.getElementById('run-analysis-loading').style.display = 'none';
+            document.getElementById('run-analysis-form').style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Run Analysis';
+            errEl.textContent = data.message || 'Analysis failed. Please try again.';
+            errEl.style.display = 'block';
+            document.getElementById('run-analysis-modal').style.display = 'flex';
+        }
+    } catch (e) {
+        closeRunAnalysisModal();
+    }
 }
 
 // ── Git Remote Modal ──────────────────────────────────────────────────────────

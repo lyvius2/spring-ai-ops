@@ -239,6 +239,107 @@ body {
 .btn-primary:hover    { background: #5a9632; }
 .btn-primary:disabled { background: #b5d98a; border-color: #b5d98a; cursor: not-allowed; }
 
+/* ── Danger button (static analysis) ── */
+.btn-danger {
+    padding: 7px 20px;
+    background: #c0392b;
+    color: #fff;
+    border: 1px solid #a93226;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.btn-danger:hover    { background: #a93226; }
+.btn-danger:disabled { background: #e8a89e; border-color: #e8a89e; cursor: not-allowed; }
+
+/* ── Static Analysis trigger button ── */
+.btn-run-analysis {
+    padding: 4px 12px;
+    background: #c0392b;
+    color: #fff;
+    border: 1px solid #a93226;
+    border-radius: 3px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.btn-run-analysis:hover { background: #a93226; }
+
+/* ── App detail header with action button ── */
+.app-detail-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    flex-shrink: 0;
+}
+
+.app-detail-header-row .app-detail-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #34302d;
+}
+
+/* ── Code Risk tab content ── */
+.code-risk-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.code-risk-meta-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 0.88rem;
+}
+
+.code-risk-meta-label {
+    font-weight: 600;
+    color: #555;
+    width: 110px;
+    flex-shrink: 0;
+}
+
+.code-risk-meta-value {
+    color: #333;
+    word-break: break-all;
+}
+
+.code-risk-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.code-risk-history-table th,
+.code-risk-history-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    text-align: left;
+}
+
+.code-risk-history-table th {
+    background: #fafafa;
+    font-weight: 600;
+    color: #555;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.code-risk-history-table tbody tr:hover { background: #f9f9f9; }
+.code-risk-history-table tbody tr.active { background: #f1f8e9; font-weight: 600; }
+.code-risk-history-table tbody tr:last-child td { border-bottom: none; }
+
 /* ── Alerts ── */
 .alert {
     margin-top: 14px;

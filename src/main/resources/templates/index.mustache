@@ -189,6 +189,40 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
     </div>
 </div>
 
+<!-- ══ Modal: Run Static Analysis ══ -->
+<div id="run-analysis-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            Run Static Analysis
+            <button class="modal-close-btn" onclick="closeRunAnalysisModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="run-analysis-no-git" style="display:none;">
+                <div class="alert alert-warning" style="display:block; margin-top:0;">
+                    &#9888; Git Repository URL is not configured for this application.<br>
+                    Please set the Git URL in the application settings first.
+                </div>
+                <button class="btn-secondary" style="margin-top:12px;" onclick="closeRunAnalysisModal()">Close</button>
+            </div>
+            <div id="run-analysis-form">
+                <div class="form-group">
+                    <label class="form-label" for="run-analysis-branch">Branch</label>
+                    <input type="text" id="run-analysis-branch" class="form-input"
+                           placeholder="Leave blank to analyze the default branch" autocomplete="off" />
+                </div>
+                <button class="btn-danger" id="run-analysis-submit-btn" onclick="submitRunAnalysis()">Run Analysis</button>
+                <div class="alert alert-error" id="run-analysis-alert-error"></div>
+            </div>
+            <div id="run-analysis-loading" style="display:none;">
+                <div class="loading-overlay" style="padding:20px 0;">
+                    <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
+                    <span>Static analysis in progress. This may take a few minutes...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ══ Modal 2: Loki Setup ══ -->
 <div id="loki-modal" class="modal-overlay" style="display:none;">
     <div class="modal-box">
