@@ -1,6 +1,6 @@
 package com.walter.spring.ai.ops.controller.dto
 
-data class AppAddRequest(
+data class AppGitResponse(
     val name: String,
-    val gitUrl: String? = null
+    val gitUrl: String?
 )

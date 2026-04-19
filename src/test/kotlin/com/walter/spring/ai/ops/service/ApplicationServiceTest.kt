@@ -1,16 +1,21 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.redis.core.SetOperations
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 
 @ExtendWith(MockitoExtension::class)
 class ApplicationServiceTest {
@@ -20,6 +25,9 @@ class ApplicationServiceTest {
 
     @Mock
     private lateinit var setOperations: SetOperations<String, String>
+
+    @Mock
+    private lateinit var valueOperations: ValueOperations<String, String>
 
     // ── getApps ───────────────────────────────────────────────────────────────
 
@@ -56,7 +64,7 @@ class ApplicationServiceTest {
     // ── addApp ────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("처음 등록되는 앱 이름인 경우 Redis에 추가")
+    @DisplayName("처음 등록되는 앱 이름인 경우 Redis에 추가 (gitUrl 없음)")
     fun addApp_addsToRedis_whenListIsEmpty() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
@@ -70,7 +78,7 @@ class ApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("중복되지 않은 앱 이름인 경우 Redis에 추가")
+    @DisplayName("중복되지 않은 앱 이름인 경우 Redis에 추가 (gitUrl 없음)")
     fun addApp_addsToRedis_whenAppIsNew() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
@@ -108,11 +116,53 @@ class ApplicationServiceTest {
         verify(setOperations).add(REDIS_KEY_APPLICATIONS, "app1")
     }
 
+    @Test
+    @DisplayName("gitUrl이 있는 경우 Redis Value에 저장")
+    fun addApp_savesGitUrl_whenGitUrlProvided() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        applicationService.addApp("app1", "http://github.com/owner/repo.git")
+
+        // then
+        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", "http://github.com/owner/repo.git")
+    }
+
+    @Test
+    @DisplayName("gitUrl이 SSH 프로토콜인 경우 예외 발생")
+    fun addApp_throwsException_whenGitUrlIsNotHttp() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when & then
+        assertThrows<IllegalArgumentException> {
+            applicationService.addApp("app1", "git@github.com:owner/repo.git")
+        }
+    }
+
+    @Test
+    @DisplayName("gitUrl이 null인 경우 git 키 삭제 (opsForValue 호출 없음)")
+    fun addApp_deletesGitKey_whenGitUrlIsNull() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        applicationService.addApp("app1", null)
+
+        // then
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+    }
+
     // ── removeApp ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("앱 이름으로 Redis에서 삭제")
-    fun removeApp_removesFromRedis() {
+    @DisplayName("앱 이름으로 Redis에서 삭제하고 git 키도 함께 삭제")
+    fun removeApp_removesFromRedisAndDeletesGitKey() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         val applicationService = ApplicationService(redisTemplate)
@@ -122,5 +172,84 @@ class ApplicationServiceTest {
 
         // then
         verify(setOperations).remove(REDIS_KEY_APPLICATIONS, "app1")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+    }
+
+    // ── getGitUrl ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Redis에 git URL이 있는 경우 반환")
+    fun getGitUrl_returnsUrl_whenRedisHasValue() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn("http://github.com/owner/repo.git")
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        val result = applicationService.getGitUrl("app1")
+
+        // then
+        assertThat(result).isEqualTo("http://github.com/owner/repo.git")
+    }
+
+    @Test
+    @DisplayName("Redis에 git URL이 없는 경우 null 반환")
+    fun getGitUrl_returnsNull_whenRedisHasNoValue() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(null)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        val result = applicationService.getGitUrl("app1")
+
+        // then
+        assertThat(result).isNull()
+    }
+
+    // ── updateApp ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("앱 이름이 변경되는 경우 기존 이름 삭제 후 새 이름으로 추가 (gitUrl null)")
+    fun updateApp_renamesApp_whenNameChanged() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        applicationService.updateApp("oldApp", "newApp", null)
+
+        // then
+        verify(setOperations).remove(REDIS_KEY_APPLICATIONS, "oldApp")
+        verify(setOperations).add(REDIS_KEY_APPLICATIONS, "newApp")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
+    }
+
+    @Test
+    @DisplayName("앱 이름이 동일한 경우 Set 변경 없이 git URL만 업데이트")
+    fun updateApp_updatesGitUrlOnly_whenNameUnchanged() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        applicationService.updateApp("app1", "app1", "http://github.com/owner/repo.git")
+
+        // then
+        verify(redisTemplate, never()).opsForSet()
+        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", "http://github.com/owner/repo.git")
+    }
+
+    @Test
+    @DisplayName("updateApp에서 SSH gitUrl인 경우 예외 발생")
+    fun updateApp_throwsException_whenGitUrlIsNotHttp() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when & then
+        assertThrows<IllegalArgumentException> {
+            applicationService.updateApp("oldApp", "newApp", "git@github.com:owner/repo.git")
+        }
     }
 }

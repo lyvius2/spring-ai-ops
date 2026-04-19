@@ -3,6 +3,7 @@ package com.walter.spring.ai.ops.code
 class RedisKeyConstants {
     companion object {
         const val REDIS_KEY_APPLICATIONS = "apps"
+        const val REDIS_KEY_APP_GIT = "git:"
         const val REDIS_KEY_LLM = "llm"
         const val REDIS_KEY_LLM_API_KEY = "llmKey"
         const val REDIS_KEY_LOKI_URL = "lokiUrl"

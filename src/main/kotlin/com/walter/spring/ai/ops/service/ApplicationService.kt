@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.service
 
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -21,7 +22,7 @@ class ApplicationService(
         }
     }
 
-    fun addApp(name: String) {
+    fun addApp(name: String, gitUrl: String? = null) {
         runCatching {
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
         }.getOrElse { e ->
@@ -29,9 +30,40 @@ class ApplicationService(
             redisTemplate.delete(REDIS_KEY_APPLICATIONS)
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
         }
+        saveGitUrl(name, gitUrl)
     }
 
     fun removeApp(name: String) {
         redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, name)
+        redisTemplate.delete("$REDIS_KEY_APP_GIT$name")
+    }
+
+    fun getGitUrl(name: String): String? {
+        return redisTemplate.opsForValue().get("$REDIS_KEY_APP_GIT$name")
+    }
+
+    fun saveGitUrl(name: String, gitUrl: String?) {
+        val key = "$REDIS_KEY_APP_GIT$name"
+        if (gitUrl.isNullOrBlank()) {
+            redisTemplate.delete(key)
+        } else {
+            validateGitUrl(gitUrl)
+            redisTemplate.opsForValue().set(key, gitUrl)
+        }
+    }
+
+    private fun validateGitUrl(gitUrl: String) {
+        require(gitUrl.startsWith("http://") || gitUrl.startsWith("https://")) {
+            "Git URL must use HTTP or HTTPS protocol."
+        }
+    }
+
+    fun updateApp(oldName: String, newName: String, gitUrl: String?) {
+        if (oldName != newName) {
+            redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, oldName)
+            redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, newName)
+            redisTemplate.delete("$REDIS_KEY_APP_GIT$oldName")
+        }
+        saveGitUrl(newName, gitUrl)
     }
 }
