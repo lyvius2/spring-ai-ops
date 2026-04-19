@@ -107,6 +107,17 @@ loki:
   url: ""   # Loki base URL (e.g. http://loki:3100)
 ```
 
+## Validation Rules
+
+- All input validation must be performed **server-side** (Service layer). Do not add client-side validation in JavaScript.
+
+## Code Style
+
+- Controller method parameter definitions must not be line-broken — keep `@Parameter`, `@PathVariable`, `@RequestBody`, etc. on a single line with the parameter. Example:
+  ```kotlin
+  fun getApp(@Parameter(description = "Application name", required = true) @PathVariable name: String): AppGitResponse
+  ```
+
 ## Layer Responsibilities
 
 ### Controller
