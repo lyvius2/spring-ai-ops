@@ -39,6 +39,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     implementation("com.github.loki4j:loki-logback-appender:1.5.2")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.6.0.202603022253-r")
 
     implementation("org.springframework.ai:spring-ai-starter-model-openai")
     implementation("org.springframework.ai:spring-ai-starter-model-anthropic")
