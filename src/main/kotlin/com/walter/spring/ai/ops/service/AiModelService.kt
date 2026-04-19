@@ -131,7 +131,8 @@ class AiModelService(
         val systemMessage = SystemMessage(
             "You are an expert in analyzing application errors and logs. " +
                     "Analyze the provided Grafana alert context and application logs, " +
-                    "identify the root cause, and give clear, actionable recommendations."
+                    "identify the root cause, and give clear, actionable recommendations. " +
+                    "Do not state unverifiable facts as certainties; express them as possibilities."
         )
         val userMessage = UserMessage(
             buildString {
@@ -162,7 +163,8 @@ class AiModelService(
         val systemMessage = SystemMessage(
             "You are an expert code reviewer. " +
                     "Analyze the provided code diff and give a thorough code review. " +
-                    "Focus on correctness, potential bugs, performance, security, and code quality."
+                    "Focus on correctness, potential bugs, performance, security, and code quality. " +
+                    "Do not state unverifiable facts as certainties; express them as possibilities."
         )
         val userMessage = UserMessage(
             buildString {

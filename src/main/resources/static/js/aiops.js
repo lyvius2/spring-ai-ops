@@ -718,7 +718,7 @@ function renderAnalysisLayers(appName, record) {
             ${renderLokiLog(record.log)}
         </div>
         <div class="analysis-layer">
-            <div class="layer-header">AI Analysis</div>
+            <div class="layer-header">AI Analysis<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
             <div class="analysis-text markdown-body">${renderMarkdown(record.analyzeResults)}</div>
         </div>`;
 }
@@ -923,13 +923,13 @@ function renderCodeReviewSection(record) {
         const msg = escHtml(reviewResult.replace('[CREDENTIAL_ERROR]', '').trim());
         return `
         <div class="analysis-layer">
-            <div class="layer-header">AI Code Review</div>
+            <div class="layer-header">AI Code Review<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
             <div class="credential-error-msg">&#9888; ${msg}</div>
         </div>`;
     }
     return `
         <div class="analysis-layer">
-            <div class="layer-header">AI Code Review</div>
+            <div class="layer-header">AI Code Review<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
             <div class="analysis-text markdown-body">${renderMarkdown(reviewResult)}</div>
         </div>`;
 }
