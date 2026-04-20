@@ -1,6 +1,6 @@
 # Spring AI Ops
 
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI or Anthropic) to analyze errors, review code, and perform static code risk analysis in real time — with results delivered to a live dashboard via WebSocket.
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic, or Groq) to analyze errors, review code, and perform static code risk analysis in real time — with results delivered to a live dashboard via WebSocket.
 
 ---
 
@@ -50,7 +50,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
 | **LLM-Powered Error Analysis** | Grafana alert context + Loki logs → root cause, affected components, and recommended actions |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
-| **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
+| **Dynamic LLM Configuration** | Switch between OpenAI, Anthropic, and Groq at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
 | **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 20 concurrent) |
@@ -291,7 +291,7 @@ POST /webhook/grafana[/{application}]
 |---|---|
 | Language | Kotlin 2.2 / Java 21 |
 | Framework | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), Groq (`qwen/qwen3-32b`) |
 | Persistence | Redis (primary store, no RDBMS) |
 | Dev Redis | Embedded Redis (auto-start, no install needed) |
 | HTTP Client | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
@@ -323,7 +323,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 
 - JDK 21+
 - (Optional) A running Loki instance if you want log queries
-- An API key for at least one LLM provider (OpenAI or Anthropic)
+- An API key for at least one LLM provider (OpenAI, Anthropic, or Groq)
 - A GitHub or GitLab personal access token if you want code review
 
 ### Configuration
@@ -338,6 +338,9 @@ ai:
   anthropic:
     model: claude-sonnet-4-6             # Anthropic model name
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Or set env var AI_ANTHROPIC_API_KEY
+  groq:
+    model: llama-3.3-70b-versatile       # Groq model name (options: llama-3.3-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768)
+    api-key: ${AI_GROQ_API_KEY:}         # Or set env var AI_GROQ_API_KEY (get key at https://console.groq.com/keys)
 
 loki:
   url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
@@ -409,7 +412,7 @@ crypto:
 | Situation | Result |
 |---|---|
 | Only one provider key present in yml | That provider is selected automatically on startup — no UI prompt |
-| Both provider keys present in yml | A provider-selection modal appears in the UI once |
+| Multiple provider keys present in yml | A provider-selection modal appears in the UI once |
 | No keys in yml | The full API key entry modal appears in the UI |
 | Key saved via UI before | Redis value is restored on restart — no prompt |
 
@@ -575,6 +578,7 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-20 | Added Groq as a supported LLM provider — uses the OpenAI-compatible API (`https://api.groq.com/openai`); free tier available at [console.groq.com](https://console.groq.com/keys) |
 | 2026-04-20 | Added Static Code Risk Analysis — clone a Git repository and run AI-powered full-codebase review with single-call or map-reduce strategy; results include per-issue severity, affected file, and code snippet |
 | 2026-04-18 | Added GitLab push webhook support — automatically detected via `X-Gitlab-Event` header on the unified `/webhook/git` endpoint |
 | 2026-04-15 | Abstracted external connector integration with a shared dynamic URL resolution base for GitHub and Loki |
@@ -634,7 +638,7 @@ SOFTWARE.
 | **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
 | **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 → 근본 원인, 영향 범위, 조치 방법 |
 | **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
-| **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic 전환 |
+| **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic ↔ Groq 전환 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
 | **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
 | **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 20) |
@@ -773,7 +777,7 @@ POST /webhook/grafana[/{application}]
 |---|---|
 | 언어 | Kotlin 2.2 / Java 21 |
 | 프레임워크 | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), Groq (`llama-3.3-70b-versatile`) |
 | 저장소 | Redis (유일한 데이터 저장소, RDB 미사용) |
 | 개발용 Redis | Embedded Redis (자동 기동, 별도 설치 불필요) |
 | HTTP 클라이언트 | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
@@ -801,46 +805,51 @@ POST /webhook/grafana[/{application}]
 ```yaml
 ai:
   open-ai:
-    api-key: ${AI_OPENAI_API_KEY:}       # OpenAI API 키
+    model: gpt-4o-mini                   # OpenAI model name
+    api-key: ${AI_OPENAI_API_KEY:}       # Or set env var AI_OPENAI_API_KEY
   anthropic:
-    api-key: ${AI_ANTHROPIC_API_KEY:}    # Anthropic API 키
+    model: claude-sonnet-4-6             # Anthropic model name
+    api-key: ${AI_ANTHROPIC_API_KEY:}    # Or set env var AI_ANTHROPIC_API_KEY
+  groq:
+    model: llama-3.3-70b-versatile       # Groq model name (options: llama-3.3-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768)
+    api-key: ${AI_GROQ_API_KEY:}         # Or set env var AI_GROQ_API_KEY (get key at https://console.groq.com/keys)
 
 loki:
-  url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100) — 인증 미지원
+  url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
 
 github:
-  url: ${GITHUB_URL:https://api.github.com}      # GitHub API URL
-  access-token: ${GITHUB_ACCESS_TOKEN:}          # GitHub 액세스 토큰
-  api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API 버전 헤더
+  url: ${GITHUB_URL:https://api.github.com}
+  access-token: ${GITHUB_ACCESS_TOKEN:}  # GitHub personal access token
+  api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API version header
 
 gitlab:
-  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # GitLab API URL (셀프 호스팅 시 인스턴스 주소로 변경)
-  access-token: ${GITLAB_ACCESS_TOKEN:}          # GitLab 액세스 토큰
+  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # GitLab API base URL (use your self-hosted URL if applicable)
+  access-token: ${GITLAB_ACCESS_TOKEN:}          # GitLab personal access token
 
 analysis:
-  data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
-  maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
-  result-language: en        # LLM 분석 결과 언어 (ko, en, ja 등)
+  data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
+  maximum-view-count: 5      # Max records shown per application (0 = unlimited)
+  result-language: en        # Language of LLM analysis output (e.g. ko, ja, en)
   code-risk:
-    token-threshold: 27000        # 단일 호출 분석의 최대 토큰 수; 초과 시 맵-리듀스로 전환 (기본: 27000)
-    map-reduce-concurrency: 3     # 맵 단계 병렬 청크 분석 최대 동시 수 (기본: 3)
-    map-reduce-delay-ms: 1000     # 맵 단계 청크 호출 후 지연 시간 ms (기본: 1000)
+    token-threshold: 27000        # Max tokens for single-call analysis; larger bundles switch to map-reduce (default: 27000)
+    map-reduce-concurrency: 3     # Max parallel chunk analysis calls in map phase (default: 3)
+    map-reduce-delay-ms: 1000     # Delay (ms) after each chunk call in map phase (default: 1000)
 
 app:
   async:
     virtual:
-      llm-max-concurrency: 10  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
+      llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
 
 feign:
   loki:
-    connect-timeout: 5000   # Loki 연결 타임아웃 (ms)
-    read-timeout: 30000     # Loki 읽기 타임아웃 (ms)
+    connect-timeout: 5000   # Loki connect timeout (ms)
+    read-timeout: 30000     # Loki read timeout (ms)
   github:
-    connect-timeout: 5000   # GitHub API 연결 타임아웃 (ms)
-    read-timeout: 30000     # GitHub API 읽기 타임아웃 (ms)
+    connect-timeout: 5000   # GitHub API connect timeout (ms)
+    read-timeout: 30000     # GitHub API read timeout (ms)
   gitlab:
-    connect-timeout: 5000   # GitLab API 연결 타임아웃 (ms)
-    read-timeout: 30000     # GitLab API 읽기 타임아웃 (ms)
+    connect-timeout: 5000   # GitLab API connect timeout (ms)
+    read-timeout: 30000     # GitLab API read timeout (ms)
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
@@ -900,6 +909,7 @@ crypto:
 2. Payload URL: `http://<your-host>:7079/webhook/git/{application}`
 3. Content type: `application/json`
 4. 이벤트: **Just the push event**
+5. 저장
 
 GitHub 액세스 토큰(yml 또는 UI에서 설정)은 `repo` read 스코프(클래식 PAT) 또는 `Contents: Read` 권한(세분화된 PAT)이 필요합니다.
 
