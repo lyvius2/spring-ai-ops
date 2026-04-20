@@ -549,6 +549,9 @@ function connectWebSocket() {
         stompClient.subscribe('/topic/analysis/status', function (message) {
             showAnalysisStatus(message.body);
         });
+        stompClient.subscribe('/topic/analysis/result', function (message) {
+            showAnalysisNotification(message.body);
+        });
     }, function () {
         stompClient = null;
         setTimeout(connectWebSocket, 5000);
@@ -1048,6 +1051,21 @@ function showNotification(appName) {
     setTimeout(() => notif.remove(), 4500);
 }
 
+function showAnalysisNotification(text) {
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+    }
+    const notif = document.createElement('div');
+    notif.className = 'notification notification-analysis';
+    notif.textContent = text;
+    container.appendChild(notif);
+    setTimeout(() => notif.remove(), 4500);
+}
+
 function showCommitNotification(appName) {
     let container = document.getElementById('notification-container');
     if (!container) {
@@ -1317,7 +1335,7 @@ function renderRiskIssuesSection(issues) {
 
     return `
         <div class="analysis-layer">
-            <div class="layer-header">Issues by File (${issues.length} total)<span class="layer-header-severity-counts">🔴 HIGH : ${highCount} | 🟠 MEDIUM : ${mediumCount} | 🟡 LOW : ${lowCount}</span></div>
+            <div class="layer-header">Issues by File (${issues.length} total)<span class="layer-header-severity-counts">🔴 HIGH : ${highCount} 🟠 MEDIUM : ${mediumCount} 🟡 LOW : ${lowCount}</span></div>
             <div style="padding:10px 12px;">${fileRows}</div>
         </div>`;
 }

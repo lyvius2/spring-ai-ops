@@ -587,6 +587,14 @@ body {
     padding: 24px;
 }
 
+.modal-header-sm {
+    padding: 12px 20px;
+}
+
+.modal-body-sm {
+    padding: 22px 24px;
+}
+
 .modal-desc {
     margin-bottom: 18px;
     color: #555;
@@ -1348,4 +1356,5 @@ body {
     animation-delay: 4s;
 }
 
-.notification-commit { border-left-color: #1a56c4; }
+.notification-commit    { border-left-color: #1a56c4; }
+.notification-analysis  { border-left-color: #27ae60; }
