@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.facade
 
+import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.record.CodeRiskIssue
@@ -31,6 +32,10 @@ class CodeRiskAnalyzeFacade(
     @Value("\${analysis.code-risk.map-reduce-delay-ms:1000}") private val mapReduceDelayMs: Long,
 ) {
     private val log = LoggerFactory.getLogger(CodeRiskAnalyzeFacade::class.java)
+    private val lenientMapper: ObjectMapper = objectMapper.copy().apply {
+        configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true)
+        configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true)
+    }
 
     companion object {
         private const val ISSUES_START = "---ISSUES_JSON_START---"
@@ -85,7 +90,7 @@ class CodeRiskAnalyzeFacade(
         val jsonText = (if (endIdx == -1) afterStart else afterStart.substring(0, endIdx)).trim()
 
         val issues = runCatching {
-            objectMapper.readValue(jsonText, Array<CodeRiskIssue>::class.java).toList()
+            lenientMapper.readValue(jsonText, Array<CodeRiskIssue>::class.java).toList()
         }.getOrElse {
             log.warn("Failed to parse issues JSON: {}", it.message)
             emptyList()
