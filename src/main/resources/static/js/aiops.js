@@ -66,7 +66,13 @@ function updateLlmKeyInput() {
         apiKeyInput.placeholder = 'API key already saved — leave blank to keep the existing key';
     } else {
         apiKeyInput.value = '';
-        apiKeyInput.placeholder = selected.value === 'anthropic' ? 'sk-ant-...' : 'sk-...';
+        if (selected.value === 'anthropic') {
+            apiKeyInput.placeholder = 'sk-ant-...';
+        } else if (selected.value === 'groq') {
+            apiKeyInput.placeholder = 'gsk_...';
+        } else {
+            apiKeyInput.placeholder = 'sk-...';
+        }
     }
 }
 

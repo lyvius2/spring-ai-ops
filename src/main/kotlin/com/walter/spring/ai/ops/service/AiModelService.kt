@@ -40,6 +40,9 @@ class AiModelService(
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
     @Value("\${ai.anthropic.api-key:}") private val anthropicApiKey: String,
     @Value("\${ai.anthropic.max-tokens:8192}") private val anthropicMaxTokens: Int,
+    @Value("\${ai.groq.model:qwen/qwen3-32b}") private val groqModel: String,
+    @Value("\${ai.groq.api-key:}") private val groqApiKey: String,
+    @Value("\${ai.groq.base-url:https://api.groq.com/openai}") private val groqBaseUrl: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
@@ -61,23 +64,29 @@ class AiModelService(
 
         val hasOpenAi = openAiApiKey.isNotBlank()
         val hasAnthropic = anthropicApiKey.isNotBlank()
-        if (hasOpenAi && !hasAnthropic) {
-            runCatching { configure(LlmProvider.OPEN_AI, openAiApiKey) }
-                .onFailure { log.warn("Failed to auto-configure OpenAI from yml: {}", it.message) }
-        } else if (hasAnthropic && !hasOpenAi) {
-            runCatching { configure(LlmProvider.ANTHROPIC, anthropicApiKey) }
-                .onFailure { log.warn("Failed to auto-configure Anthropic from yml: {}", it.message) }
+        val hasGroq = groqApiKey.isNotBlank()
+        val configuredCount = listOf(hasOpenAi, hasAnthropic, hasGroq).count { it }
+        if (configuredCount == 1) {
+            val (provider, key) = when {
+                hasOpenAi    -> LlmProvider.OPEN_AI   to openAiApiKey
+                hasAnthropic -> LlmProvider.ANTHROPIC to anthropicApiKey
+                else         -> LlmProvider.GROQ      to groqApiKey
+            }
+            runCatching { configure(provider, key) }
+                .onFailure { log.warn("Failed to auto-configure {} from yml: {}", provider.key, it.message) }
         }
     }
 
     fun isSelectProviderRequired(): Boolean {
-        return openAiApiKey.isNotBlank() && anthropicApiKey.isNotBlank() && chatModel == null
+        val configuredCount = listOf(openAiApiKey, anthropicApiKey, groqApiKey).count { it.isNotBlank() }
+        return configuredCount > 1 && chatModel == null
     }
 
     fun configureFromYml(provider: LlmProvider) {
         val apiKey = when (provider) {
-            LlmProvider.OPEN_AI -> openAiApiKey
+            LlmProvider.OPEN_AI   -> openAiApiKey
             LlmProvider.ANTHROPIC -> anthropicApiKey
+            LlmProvider.GROQ      -> groqApiKey
         }
         if (apiKey.isBlank()) {
             throw IllegalStateException("API key for '${provider.key}' is not configured in application.yml")
@@ -144,6 +153,15 @@ class AiModelService(
                 val api = AnthropicApi.builder().apiKey(apiKey).build()
                 val options = AnthropicChatOptions.builder().model(anthropicModel).maxTokens(anthropicMaxTokens).build()
                 AnthropicChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
+            }
+            LlmProvider.GROQ -> {
+                // Groq provides an OpenAI-compatible API endpoint
+                val api = OpenAiApi.builder()
+                    .baseUrl(groqBaseUrl)
+                    .apiKey(apiKey)
+                    .build()
+                val options = OpenAiChatOptions.builder().model(groqModel).build()
+                OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
         }
     }

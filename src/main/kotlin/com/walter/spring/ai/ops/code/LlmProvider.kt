@@ -5,7 +5,8 @@ enum class LlmProvider(
     val key: String,
 ) {
     OPEN_AI("ChatGPT", "openai"),
-    ANTHROPIC("Claude", "anthropic");
+    ANTHROPIC("Claude", "anthropic"),
+    GROQ("Groq", "groq");
 
     companion object {
         fun fromKey(key: String): LlmProvider =
