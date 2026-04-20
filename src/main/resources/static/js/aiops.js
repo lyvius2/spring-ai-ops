@@ -606,30 +606,38 @@ async function handleCommitRecord(record) {
     const existing = Array.from(container.querySelectorAll('.app-item'))
         .find(el => el.dataset.app === appName);
 
+    const defaultTab = (appName) =>
+        (appCodeRiskLists[appName]?.length > 0) ? 'coderisk' : 'codereview';
+
+    const switchToDefaultTab = (appName) => {
+        const tab = defaultTab(appName);
+        switchToTab(tab);
+        if (tab === 'coderisk') {
+            renderCodeRiskContent(appName);
+        } else {
+            const content = document.getElementById('codereview-content');
+            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
+        }
+    };
+
     if (existing) {
         if (selectedApp === appName) {
-            // 이미 선택된 앱: Code Review 탭으로 전환 후 in-place 업데이트
-            switchToTab('codereview');
-            const content = document.getElementById('codereview-content');
-            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
+            // 이미 선택된 앱: 기본 탭으로 전환 후 in-place 업데이트
+            switchToDefaultTab(appName);
         } else {
-            // 다른 앱이 선택 중: 렌더링 완료 후 Code Review 탭으로 전환 및 앱 활성화
+            // 다른 앱이 선택 중: 렌더링 완료 후 기본 탭으로 전환 및 앱 활성화
             renderAppDetailFromLocal(appName);
-            switchToTab('codereview');
-            const content = document.getElementById('codereview-content');
-            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
+            switchToDefaultTab(appName);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             existing.classList.add('active');
             selectedApp = appName;
         }
     } else {
-        // 신규 앱: 추가 후 깜빡임이 끝나면 렌더링 완료 후 Code Review 탭으로 전환 및 활성화
+        // 신규 앱: 추가 후 깜빡임이 끝나면 렌더링 완료 후 기본 탭으로 전환 및 활성화
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
-            switchToTab('codereview');
-            const content = document.getElementById('codereview-content');
-            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
+            switchToDefaultTab(appName);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
@@ -1078,8 +1086,12 @@ async function renderAppDetail(appName) {
     const panel = document.getElementById('app-detail-panel');
     panel.innerHTML = buildAppDetailHtml(appName);
     applyHighlighting(panel);
-    // Code Review is the default active tab — load its content immediately
-    await loadAndRenderCodeReview(appName);
+    if ((appCodeRiskLists[appName] || []).length > 0) {
+        switchToTab('coderisk');
+        renderCodeRiskContent(appName);
+    } else {
+        await loadAndRenderCodeReview(appName);
+    }
 }
 
 // WebSocket 수신 시: 로컬 상태로 즉시 렌더링 (API 호출 없음)

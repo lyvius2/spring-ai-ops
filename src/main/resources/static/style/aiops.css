@@ -346,7 +346,7 @@ body {
     flex-direction: column;
     gap: 3px;
     flex-shrink: 0;
-    width: 80px;
+    width: 96px;
     align-items: flex-start;
 }
 
