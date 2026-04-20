@@ -546,10 +546,39 @@ function connectWebSocket() {
         stompClient.subscribe('/topic/commit', function (message) {
             handleCommitRecord(JSON.parse(message.body));
         });
+        stompClient.subscribe('/topic/analysis/status', function (message) {
+            showAnalysisStatus(message.body);
+        });
     }, function () {
         stompClient = null;
         setTimeout(connectWebSocket, 5000);
     });
+}
+
+function showAnalysisStatus(text) {
+    const modal = document.getElementById('run-analysis-modal');
+    if (!modal || modal.style.display === 'none') return;
+    const el = document.getElementById('analysis-status-msg');
+    if (!el) return;
+
+    const isWarning = text.startsWith('⚠') || text.startsWith('⏳');
+
+    if (el.textContent) {
+        // Slide existing message upward and fade out, then replace
+        el.classList.add('analysis-status-exit');
+        el.addEventListener('animationend', () => {
+            el.classList.remove('analysis-status-exit');
+            el.textContent = text;
+            el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
+            el.classList.add('analysis-status-enter');
+            el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
+        }, { once: true });
+    } else {
+        el.textContent = text;
+        el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
+        el.classList.add('analysis-status-enter');
+        el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
+    }
 }
 
 async function handleFiringRecord(record) {
@@ -1368,6 +1397,8 @@ async function openRunAnalysisModal() {
 
 function closeRunAnalysisModal() {
     document.getElementById('run-analysis-modal').style.display = 'none';
+    const el = document.getElementById('analysis-status-msg');
+    if (el) { el.textContent = ''; el.className = 'analysis-status-msg'; }
 }
 
 async function submitRunAnalysis() {
