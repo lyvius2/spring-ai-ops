@@ -1175,6 +1175,68 @@ function renderCodeRiskHistoryRows(appName) {
     ).join('');
 }
 
+function severityClass(severity) {
+    if (!severity) return 'low';
+    const s = severity.toLowerCase();
+    if (s === 'high')   return 'high';
+    if (s === 'medium') return 'medium';
+    return 'low';
+}
+
+function toggleRiskFile(headerEl) {
+    const row  = headerEl.closest('.risk-file-row');
+    const list = row.querySelector('.risk-issue-list');
+    const arrow = headerEl.querySelector('.risk-file-expand');
+    const open = list.classList.toggle('expanded');
+    arrow.textContent = open ? '▼' : '▶';
+}
+
+function renderRiskIssuesSection(issues) {
+    if (!issues || issues.length === 0) return '';
+
+    // Group by file
+    const byFile = {};
+    for (const issue of issues) {
+        const key = issue.file || '(unknown)';
+        if (!byFile[key]) byFile[key] = [];
+        byFile[key].push(issue);
+    }
+
+    const fileRows = Object.entries(byFile).map(([file, fileIssues]) => {
+        const items = fileIssues.map(issue => {
+            const sev = severityClass(issue.severity);
+            const lineText = issue.line ? `Line ${escHtml(issue.line)}` : '';
+            return `
+                <div class="risk-issue-item">
+                    <div class="risk-issue-meta">
+                        <span class="risk-severity-badge risk-severity-${sev}">${escHtml(issue.severity || 'Low')}</span>
+                        ${lineText ? `<span class="risk-issue-line">${lineText}</span>` : ''}
+                    </div>
+                    <div class="risk-issue-body">
+                        <div class="risk-issue-description markdown-body">${renderMarkdown(issue.description || '')}</div>
+                        ${issue.recommendation ? `<div class="risk-issue-recommendation markdown-body">${renderMarkdown(issue.recommendation)}</div>` : ''}
+                    </div>
+                </div>`;
+        }).join('');
+
+        return `
+            <div class="risk-file-row">
+                <div class="risk-file-header" onclick="toggleRiskFile(this)">
+                    <span class="risk-file-expand">▶</span>
+                    <span class="risk-file-name">${escHtml(file)}</span>
+                    <span class="risk-file-count">${fileIssues.length} issue${fileIssues.length > 1 ? 's' : ''}</span>
+                </div>
+                <div class="risk-issue-list">${items}</div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="analysis-layer">
+            <div class="layer-header">Issues by File (${issues.length} total)</div>
+            <div style="padding:10px 12px;">${fileRows}</div>
+        </div>`;
+}
+
 function renderCodeRiskContent(appName) {
     const content = document.getElementById('coderisk-content');
     if (!content) return;
@@ -1201,6 +1263,7 @@ function renderCodeRiskContent(appName) {
                 <span style="color:#999; margin-left:8px;">(${formatOccupiedAt(rec.analyzedAt)})</span>
             </div>
         </div>
+        ${renderRiskIssuesSection(rec.issues)}
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis Result<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
             <div class="analysis-text markdown-body" style="padding:14px;">${renderMarkdown(rec.analyzedResult || '')}</div>
