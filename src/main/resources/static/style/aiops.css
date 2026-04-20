@@ -382,6 +382,37 @@ body {
     border-left: 2px solid #e0e0e0;
 }
 
+/* ── Show Source button & snippet ── */
+.risk-show-source-btn {
+    margin-top: 8px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    color: #555;
+    background: #f0f0f0;
+    border: 1px solid #d8d8d8;
+    border-radius: 3px;
+    cursor: pointer;
+    display: inline-block;
+}
+.risk-show-source-btn:hover { background: #e4e4e4; }
+
+.risk-code-snippet {
+    display: none;
+    margin-top: 8px;
+    border-radius: 5px;
+    overflow: hidden;
+    font-size: 0.78rem;
+}
+.risk-code-snippet.expanded { display: block; }
+
+.risk-snippet-pre {
+    margin: 0;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-size: 0.78rem;
+    line-height: 1.55;
+}
+
 /* ── Code Risk tab content ── */
 .code-risk-meta {
     display: flex;

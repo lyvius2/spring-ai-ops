@@ -1203,6 +1203,40 @@ function toggleRiskFile(headerEl) {
     arrow.textContent = open ? '▼' : '▶';
 }
 
+function toggleRiskSnippet(btn) {
+    const snippet = btn.closest('.risk-issue-body').querySelector('.risk-code-snippet');
+    if (!snippet) return;
+    const open = snippet.classList.toggle('expanded');
+    btn.textContent = open ? 'Hide source' : 'Show source';
+    if (open) {
+        const codeEl = snippet.querySelector('code');
+        if (codeEl && !codeEl.dataset.highlighted) {
+            hljs.highlightElement(codeEl);
+        }
+    }
+}
+
+function snippetLanguage(file) {
+    if (!file) return '';
+    const ext = (file.split('.').pop() || '').toLowerCase();
+    const map = {
+        kt: 'kotlin', kts: 'kotlin', java: 'java',
+        js: 'javascript', ts: 'typescript', tsx: 'typescript', jsx: 'javascript',
+        py: 'python', go: 'go', rb: 'ruby', cs: 'csharp', php: 'php',
+        sql: 'sql', yml: 'yaml', yaml: 'yaml', xml: 'xml', json: 'json',
+    };
+    return map[ext] || '';
+}
+
+function buildSnippetHtml(issue) {
+    if (!issue.codeSnippet) return '';
+    const lang = snippetLanguage(issue.file);
+    return `
+        <div class="risk-code-snippet">
+            <pre class="risk-snippet-pre"><code class="${lang ? 'language-' + lang : ''}">${escHtml(issue.codeSnippet)}</code></pre>
+        </div>`;
+}
+
 function renderRiskIssuesSection(issues) {
     if (!issues || issues.length === 0) return '';
 
@@ -1218,6 +1252,10 @@ function renderRiskIssuesSection(issues) {
         const items = fileIssues.map(issue => {
             const sev = severityClass(issue.severity);
             const lineText = issue.line ? `Line ${escHtml(issue.line)}` : '';
+            const snippetHtml = buildSnippetHtml(issue);
+            const showSourceBtn = snippetHtml
+                ? `<button class="risk-show-source-btn" onclick="toggleRiskSnippet(this)">Show source</button>`
+                : '';
             return `
                 <div class="risk-issue-item">
                     <div class="risk-issue-meta">
@@ -1227,6 +1265,8 @@ function renderRiskIssuesSection(issues) {
                     <div class="risk-issue-body">
                         <div class="risk-issue-description markdown-body">${renderMarkdown(issue.description || '')}</div>
                         ${issue.recommendation ? `<div class="risk-issue-recommendation markdown-body">${renderMarkdown(issue.recommendation)}</div>` : ''}
+                        ${showSourceBtn}
+                        ${snippetHtml}
                     </div>
                 </div>`;
         }).join('');
