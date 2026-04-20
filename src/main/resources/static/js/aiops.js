@@ -1151,14 +1151,6 @@ async function loadCodeRiskList(appName) {
     }
 }
 
-function countIssues(text) {
-    if (!text) return '—';
-    const n = (text.match(/\bseverity\b/gi) || []).length;
-    if (n > 0) return n;
-    const m = (text.match(/\*\*(high|medium|low)\*\*/gi) || []).length;
-    return m > 0 ? m : '—';
-}
-
 function renderCodeRiskHistoryRows(appName) {
     const list        = appCodeRiskLists[appName] || [];
     const selectedIdx = appSelectedRiskIdx[appName] ?? 0;
@@ -1169,7 +1161,7 @@ function renderCodeRiskHistoryRows(appName) {
         `<tr class="${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}">
             <td>${idx + 1}</td>
             <td>${escHtml(rec.branch || 'default')}</td>
-            <td>${countIssues(rec.analyzedResult)}</td>
+            <td>${rec.issues?.length ?? '—'}</td>
             <td>${formatOccupiedAt(rec.analyzedAt)}</td>
         </tr>`
     ).join('');
@@ -1181,6 +1173,14 @@ function severityClass(severity) {
     if (s === 'high')   return 'high';
     if (s === 'medium') return 'medium';
     return 'low';
+}
+
+function severityIcon(severity) {
+    if (!severity) return '🟡';
+    const s = severity.toLowerCase();
+    if (s === 'high')   return '🔴';
+    if (s === 'medium') return '🟠';
+    return '🟡';
 }
 
 function toggleRiskFile(headerEl) {
@@ -1209,7 +1209,7 @@ function renderRiskIssuesSection(issues) {
             return `
                 <div class="risk-issue-item">
                     <div class="risk-issue-meta">
-                        <span class="risk-severity-badge risk-severity-${sev}">${escHtml(issue.severity || 'Low')}</span>
+                        <span class="risk-severity-badge risk-severity-${sev}">${severityIcon(issue.severity)} ${escHtml(issue.severity || 'Low')}</span>
                         ${lineText ? `<span class="risk-issue-line">${lineText}</span>` : ''}
                     </div>
                     <div class="risk-issue-body">
