@@ -1311,9 +1311,13 @@ function renderRiskIssuesSection(issues) {
             </div>`;
     }).join('');
 
+    const highCount   = issues.filter(i => i.severity?.toLowerCase() === 'high').length;
+    const mediumCount = issues.filter(i => i.severity?.toLowerCase() === 'medium').length;
+    const lowCount    = issues.filter(i => i.severity?.toLowerCase() === 'low').length;
+
     return `
         <div class="analysis-layer">
-            <div class="layer-header">Issues by File (${issues.length} total)</div>
+            <div class="layer-header">Issues by File (${issues.length} total)<span class="layer-header-severity-counts">🔴 HIGH : ${highCount} | 🟠 MEDIUM : ${mediumCount} | 🟡 LOW : ${lowCount}</span></div>
             <div style="padding:10px 12px;">${fileRows}</div>
         </div>`;
 }
@@ -1334,7 +1338,7 @@ function renderCodeRiskContent(appName) {
         <div class="analysis-layer">
             <div class="layer-header">Git Repository</div>
             <div style="padding:10px 14px; font-size:0.88rem; word-break:break-all;">
-                <a href="${escHtml(rec.githubUrl || '')}" target="_blank" rel="noopener noreferrer">${escHtml(rec.githubUrl || '—')}</a>
+                <a href="${escHtml(rec.githubUrl || '')}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(rec.githubUrl || '—')}</a>
             </div>
         </div>
         <div class="analysis-layer">
@@ -1346,7 +1350,7 @@ function renderCodeRiskContent(appName) {
         </div>
         ${renderRiskIssuesSection(rec.issues)}
         <div class="analysis-layer">
-            <div class="layer-header">AI Analysis Result<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
+            <div class="layer-header">AI Analysis Result<span class="layer-header-disclaimer">* AI-generated results may not always be accurate. Results may vary between analyses.</span></div>
             <div class="analysis-text markdown-body" style="padding:14px;">${renderMarkdown(rec.analyzedResult || '')}</div>
         </div>
         <div class="analysis-layer">

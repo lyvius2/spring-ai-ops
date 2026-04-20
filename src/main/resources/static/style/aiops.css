@@ -249,6 +249,10 @@ body {
     justify-content: center;
 }
 
+.analysis-status-msg:empty {
+    display: none;
+}
+
 .analysis-status-msg {
     font-size: 0.82rem;
     font-weight: 600;
@@ -877,6 +881,15 @@ body {
     text-transform: none;
     letter-spacing: 0;
     color: #c0392b;
+}
+
+.layer-header-severity-counts {
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #ccc;
 }
 
 .json-block {
