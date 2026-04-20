@@ -8,7 +8,6 @@ import com.walter.spring.ai.ops.controller.dto.SelectProviderRequest
 import com.walter.spring.ai.ops.service.AiModelService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -22,7 +21,7 @@ class AiConfigController(
 ) {
     @Operation(
         summary = "Save LLM provider and API key",
-        description = "Configures the active LLM provider (openai / anthropic) and stores the API key in Redis. Returns SUCCESS if the model initialises correctly."
+        description = "Configures the active LLM provider (openai / anthropic / groq) and stores the API key in Redis. Returns SUCCESS if the model initialises correctly."
     )
     @PostMapping("/config")
     fun configure(@RequestBody request: AiConfigRequest): AiConfigResponse {
@@ -33,7 +32,7 @@ class AiConfigController(
 
     @Operation(
         summary = "Select provider from pre-configured yml keys",
-        description = "When both OpenAI and Anthropic API keys are present in application.yml, selects which provider to activate without re-entering the key."
+        description = "When multiple LLM API keys (OpenAI / Anthropic / Groq) are present in application.yml, selects which provider to activate without re-entering the key."
     )
     @PostMapping("/select-provider")
     fun selectProvider(@RequestBody request: SelectProviderRequest): AiConfigResponse {

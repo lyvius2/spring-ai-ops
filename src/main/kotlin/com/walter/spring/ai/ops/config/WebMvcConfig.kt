@@ -1,0 +1,17 @@
+package com.walter.spring.ai.ops.config
+
+import org.springframework.context.annotation.Configuration
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
+
+@Configuration
+class WebMvcConfig(
+    private val csrfTokenInterceptor: CsrfTokenInterceptor,
+) : WebMvcConfigurer {
+
+    override fun addInterceptors(registry: InterceptorRegistry) {
+        registry.addInterceptor(csrfTokenInterceptor)
+            .addPathPatterns("/api/code-risk/**")
+    }
+}
+

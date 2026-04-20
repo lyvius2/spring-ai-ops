@@ -34,7 +34,15 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 
 ## Overview
 
-Spring AI Ops bridges your monitoring and version-control toolchain with large language models. When Grafana fires an alert, the application automatically queries the corresponding Loki logs, feeds the alert context and log lines to an LLM, and streams a root-cause analysis to the dashboard. When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review. All results are pushed to connected browsers in real time via STOMP WebSocket.
+Spring AI Ops bridges your monitoring and version-control toolchain with large language models. It covers three distinct AI-powered workflows:
+
+1. **Static Code Risk Analysis** — On demand, Spring AI Ops clones a registered Git repository, scans the entire source tree, and sends the bundled code to an LLM for a full security and quality review. For large codebases the analysis is split into chunks and processed in parallel (map-reduce), then consolidated into a single final report. Results include a markdown report and a structured JSON issue list (severity, file, line, recommendation).
+
+2. **Automated Code Review** — When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review covering correctness, security, performance, and code quality.
+
+3. **Incident Intelligence** — When Grafana fires an alert, the application automatically queries the corresponding Loki logs, feeds the alert context and log lines to an LLM, and streams a root-cause analysis to the dashboard.
+
+All results are pushed to connected browsers in real time via STOMP WebSocket.
 
 No relational database is used. Redis serves as the sole persistence layer — storing LLM configuration, application registry, alert analysis records, and code review records.
 
@@ -622,7 +630,15 @@ SOFTWARE.
 
 ### 프로젝트 개요
 
-**Spring AI Ops**는 Grafana Alerting webhook과 GitHub / GitLab push webhook을 수신하여, OpenAI 또는 Anthropic LLM으로 오류를 분석하고 코드 리뷰를 자동 수행하는 AI 기반 운영 자동화 도구입니다. 분석 결과는 WebSocket을 통해 실시간으로 대시보드에 전달됩니다.
+**Spring AI Ops**는 모니터링 및 형상관리 도구체인을 LLM과 연결하는 AI 기반 운영 자동화 도구입니다. 세 가지 AI 워크플로우를 제공합니다.
+
+1. **정적 코드 위험 분석** — 요청 시 등록된 Git 저장소를 클론하고 전체 소스 트리를 스캔하여 LLM에게 보안·품질 종합 리뷰를 요청합니다. 대용량 코드베이스는 청크로 분할하여 병렬 분석(맵-리듀스)한 뒤 단일 최종 보고서로 통합합니다. 결과에는 마크다운 보고서와 구조화된 JSON 이슈 목록(심각도, 파일, 라인, 권고사항)이 포함됩니다.
+
+2. **자동 코드 리뷰** — GitHub 또는 GitLab push webhook이 수신되면 커밋 diff를 가져와 LLM에게 정확성·보안·성능·코드 품질 관점의 자동 코드 리뷰를 수행합니다.
+
+3. **인시던트 인텔리전스** — Grafana 알림이 발생하면 해당 Loki 로그를 자동으로 조회하고, 알림 컨텍스트와 로그를 LLM에 전달하여 근본 원인 분석 결과를 대시보드에 스트리밍합니다.
+
+모든 분석 결과는 STOMP WebSocket을 통해 실시간으로 브라우저에 전달됩니다.
 
 관계형 데이터베이스는 사용하지 않으며, Redis를 유일한 저장소로 사용합니다. 로컬 개발 환경에서는 Embedded Redis가 자동으로 기동되므로 별도 설치가 필요 없습니다.
 
