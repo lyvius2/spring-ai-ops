@@ -78,6 +78,10 @@ analysis:
   data-retention-hours: 120 # Set the number of hours to retain analysis data : Default is 120 (5 days)
   maximum-view-count: 5     # Set the maximum number of views to retain per analysis (0 means unlimited) : Default is 5
   result-language: ${ANALYSIS_RESULT_LANGUAGE:en}   # Set the language for analysis results (e.g., en for English) : Default is en
+  code-risk:
+    token-threshold: 27000          # Max tokens for single-call analysis; larger bundles use map-reduce : Default is 27000
+    map-reduce-concurrency: 3       # Max simultaneous chunk analysis calls in map phase : Default is 3
+    map-reduce-delay-ms: 1000       # Delay (ms) after each chunk call before releasing the concurrency slot : Default is 1000
 
 app:
   async:

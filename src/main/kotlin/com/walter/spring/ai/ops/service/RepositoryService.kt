@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_CODE_RISK_PREFIX
+import com.walter.spring.ai.ops.record.CodeRiskIssue
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.util.zSetPushWithTtl
@@ -93,9 +94,9 @@ class RepositoryService(
         return tempDir
     }
 
-    fun saveAnalyzedResult(appName: String, gitUrl: String, branch: String, result: String): CodeRiskRecord {
+    fun saveAnalyzedResult(appName: String, gitUrl: String, branch: String, result: String, issues: List<CodeRiskIssue> = emptyList()): CodeRiskRecord {
         val key = "$REDIS_KEY_CODE_RISK_PREFIX$appName"
-        val record = CodeRiskRecord(LocalDateTime.now(), appName, gitUrl, branch, result)
+        val record = CodeRiskRecord(LocalDateTime.now(), appName, gitUrl, branch, result, issues.ifEmpty { null })
         redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
         return record
     }

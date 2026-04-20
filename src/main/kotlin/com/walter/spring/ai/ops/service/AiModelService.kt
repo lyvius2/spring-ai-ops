@@ -17,6 +17,7 @@ import org.springframework.ai.model.tool.ToolCallingManager
 import org.springframework.ai.openai.OpenAiChatModel
 import org.springframework.ai.openai.OpenAiChatOptions
 import org.springframework.ai.openai.api.OpenAiApi
+import org.springframework.ai.retry.NonTransientAiException
 import org.springframework.ai.retry.RetryUtils
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationStartedEvent
@@ -106,6 +107,23 @@ class AiModelService(
         return chatModel ?: error("ChatModel is not configured")
     }
 
+    private fun callWithRateLimitRetry(model: ChatModel, prompt: Prompt, maxRetries: Int = 3): String {
+        repeat(maxRetries) { attempt ->
+            try {
+                return model.call(prompt).result.output.text ?: ""
+            } catch (e: NonTransientAiException) {
+                val isRateLimit = e.message?.contains("rate_limit_error") == true || e.message?.contains("429") == true
+                if (isRateLimit && attempt < maxRetries - 1) {
+                    log.warn("Rate limit hit (attempt {}/{}), waiting 61s before retry...", attempt + 1, maxRetries)
+                    Thread.sleep(61_000)
+                } else {
+                    throw e
+                }
+            }
+        }
+        error("Unreachable")
+    }
+
     private fun buildChatModel(provider: LlmProvider, apiKey: String): ChatModel {
         val toolCallingManager = ToolCallingManager.builder().build()
         val retryTemplate = RetryUtils.DEFAULT_RETRY_TEMPLATE
@@ -153,18 +171,31 @@ class AiModelService(
             buildString {
                 append(bundle)
                 appendLine()
-                appendLine("Based on the above source code, provide a code risk analysis in markdown format.")
-                appendLine("For each issue found, include: severity (High/Medium/Low), location, description, and recommendation.")
+                appendLine("Based on the above source code, provide a code risk analysis in the following format:")
+                appendLine()
+                appendLine("First, write a comprehensive markdown analysis report.")
                 appendLine("Group findings by the 7 categories listed above.")
                 if (resultLanguage != "en") {
                     appendLine(languageOptions)
                 }
+                appendLine()
+                appendLine("Then, after the markdown report, append the exact delimiter and a JSON array of all identified issues:")
+                appendLine("---ISSUES_JSON_START---")
+                appendLine("""[{"file":"relative/path/to/File.kt","line":"42","severity":"High","description":"**markdown** description of the issue","recommendation":"How to fix it, may include `code` snippets"}]""")
+                appendLine("---ISSUES_JSON_END---")
+                appendLine()
+                appendLine("Rules for the JSON section:")
+                appendLine("- 'file': use the relative path shown in '## File:' headers of the source bundle.")
+                appendLine("- 'line': best-guess line number as a string, or null if unknown.")
+                appendLine("- 'severity': exactly one of 'High', 'Medium', or 'Low'.")
+                appendLine("- 'description' and 'recommendation': markdown-formatted strings (bold, inline code, lists are allowed).")
+                appendLine("- If no issues are found, use an empty array [].")
+                appendLine("- Output valid JSON only between the delimiters — no trailing commas, no comments.")
             }
         )
         llmRateLimiter.acquire()
         return try {
-            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
-            response.result.output.text ?: ""
+            callWithRateLimitRetry(model, Prompt(listOf(systemMessage, userMessage)))
         } finally {
             llmRateLimiter.release()
         }
@@ -199,8 +230,7 @@ class AiModelService(
         )
         llmRateLimiter.acquire()
         return try {
-            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
-            response.result.output.text ?: ""
+            callWithRateLimitRetry(model, Prompt(listOf(systemMessage, userMessage)))
         } finally {
             llmRateLimiter.release()
         }
@@ -231,8 +261,7 @@ class AiModelService(
         )
         llmRateLimiter.acquire()
         return try {
-            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
-            response.result.output.text ?: ""
+            callWithRateLimitRetry(model, Prompt(listOf(systemMessage, userMessage)))
         } finally {
             llmRateLimiter.release()
         }
@@ -262,8 +291,7 @@ class AiModelService(
         )
         llmRateLimiter.acquire()
         return try {
-            val response = model.call(Prompt(listOf(systemMessage, userMessage)))
-            response.result.output.text ?: ""
+            callWithRateLimitRetry(model, Prompt(listOf(systemMessage, userMessage)))
         } finally {
             llmRateLimiter.release()
         }
