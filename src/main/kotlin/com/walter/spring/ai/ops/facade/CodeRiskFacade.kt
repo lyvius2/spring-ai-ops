@@ -42,6 +42,9 @@ class CodeRiskFacade(
     companion object {
         private const val ISSUES_START = "---ISSUES_JSON_START---"
         private const val ISSUES_END   = "---ISSUES_JSON_END---"
+        // Fallback patterns for LLMs that omit leading/trailing dashes
+        private const val ISSUES_START_BARE = "ISSUES_JSON_START"
+        private const val ISSUES_END_BARE   = "ISSUES_JSON_END"
     }
 
     fun analyze(appName: String, branch: String): CodeRiskRecord {
@@ -90,13 +93,18 @@ class CodeRiskFacade(
     }
 
     private fun parseResponse(raw: String): Pair<String, List<CodeRiskIssue>> {
-        val startIdx = raw.indexOf(ISSUES_START)
-        if (startIdx == -1) return Pair(raw.trim(), emptyList())
+        val startIdx = raw.indexOf(ISSUES_START).takeIf { it != -1 }
+            ?: raw.indexOf(ISSUES_START_BARE).takeIf { it != -1 }
+        if (startIdx == null) return Pair(raw.trim(), emptyList())
 
+        val startMarkerLen = if (raw.indexOf(ISSUES_START) == startIdx) ISSUES_START.length else ISSUES_START_BARE.length
         val markdown = raw.substring(0, startIdx).trim()
-        val afterStart = raw.substring(startIdx + ISSUES_START.length)
-        val endIdx = afterStart.indexOf(ISSUES_END)
-        val jsonText = (if (endIdx == -1) afterStart else afterStart.substring(0, endIdx)).trim()
+        val afterStart = raw.substring(startIdx + startMarkerLen)
+
+        val endIdx = afterStart.indexOf(ISSUES_END).takeIf { it != -1 }
+            ?: afterStart.indexOf(ISSUES_END_BARE).takeIf { it != -1 }
+        val jsonText = (if (endIdx == null) afterStart else afterStart.substring(0, endIdx)).trim()
+            .replace(Regex("---[A-Z_]*$"), "").trim()
 
         val issues = runCatching {
             lenientMapper.readValue(jsonText, Array<CodeRiskIssue>::class.java).toList()

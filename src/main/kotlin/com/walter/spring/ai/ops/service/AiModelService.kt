@@ -123,7 +123,8 @@ class AiModelService(
     private fun callWithRateLimitRetry(model: ChatModel, prompt: Prompt, maxRetries: Int = 3): String {
         repeat(maxRetries) { attempt ->
             try {
-                return model.call(prompt).result.output.text ?: ""
+                val raw = model.call(prompt).result.output.text ?: ""
+                return stripThinkingBlock(raw)
             } catch (e: NonTransientAiException) {
                 val isRateLimit = e.message?.contains("rate_limit_error") == true || e.message?.contains("429") == true
                 if (isRateLimit && attempt < maxRetries - 1) {
@@ -321,4 +322,7 @@ class AiModelService(
             llmRateLimiter.release()
         }
     }
+
+    private fun stripThinkingBlock(text: String): String =
+        text.replace(Regex("<think>[\\s\\S]*?</think>", RegexOption.IGNORE_CASE), "").trim()
 }
