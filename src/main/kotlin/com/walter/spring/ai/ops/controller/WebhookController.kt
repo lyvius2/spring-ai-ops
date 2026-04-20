@@ -6,7 +6,7 @@ import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushResponse
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingResponse
-import com.walter.spring.ai.ops.facade.IncidentAnalyzeFacade
+import com.walter.spring.ai.ops.facade.ObservabilityFacade
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -24,7 +24,7 @@ import java.util.concurrent.Executor
 @RestController
 @RequestMapping("/webhook")
 class WebhookController(
-    private val incidentAnalyzeFacade: IncidentAnalyzeFacade,
+    private val incidentAnalyzeFacade: ObservabilityFacade,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
     @Operation(

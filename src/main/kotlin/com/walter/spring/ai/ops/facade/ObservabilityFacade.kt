@@ -18,22 +18,22 @@ import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GitRemoteService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
+import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.util.toISO8601
 import org.slf4j.LoggerFactory
-import org.springframework.messaging.simp.SimpMessagingTemplate
 import java.time.LocalDateTime
 
 @Facade
-class IncidentAnalyzeFacade(
+class ObservabilityFacade(
     private val applicationService: ApplicationService,
     private val grafanaService: GrafanaService,
     private val lokiService: LokiService,
     private val githubService: GithubService,
     private val gitlabService: GitlabService,
     private val aiModelService: AiModelService,
-    private val messagingTemplate: SimpMessagingTemplate,
+    private val messageService: MessageService,
 ) {
-    private val log = LoggerFactory.getLogger(IncidentAnalyzeFacade::class.java)
+    private val log = LoggerFactory.getLogger(ObservabilityFacade::class.java)
 
     private fun resolveGitServiceBySource(source: GitRemoteProvider): GitRemoteService = when (source) {
         GitRemoteProvider.GITHUB -> githubService
@@ -53,7 +53,7 @@ class IncidentAnalyzeFacade(
             val analyzeResults = aiModelService.executeAnalyzeFiring(request.createAlertSectionPrompt(), logResults.createLogSectionPrompt())
             val record = createAnalyzeFiringRecord(request, targetApplication, logResults, analyzeResults)
             grafanaService.saveAnalyzeFiringRecord(record)
-            pushAnalyzeFiring(record)
+            messageService.pushFiring(record)
         }.onFailure { log.error("Failed to analyze Firing : {}", it.message, it) }
     }
 
@@ -75,14 +75,6 @@ class IncidentAnalyzeFacade(
         )
     }
 
-    private fun pushAnalyzeFiring(record: AnalyzeFiringRecord) {
-        messagingTemplate.convertAndSend("/topic/firing", record)
-    }
-
-    private fun pushCodeReview(record: CodeReviewRecord) {
-        messagingTemplate.convertAndSend("/topic/commit", record)
-    }
-
     fun analyzeCodeDiffer(request: GithubPushRequest, application: String?) {
         if (request.commits.isEmpty()) {
             log.warn("Git push webhook skipped — no commits (ping or empty push)")
@@ -102,7 +94,7 @@ class IncidentAnalyzeFacade(
                     request.source.alertMessage,
                 )
                 gitService.saveCodeReviewRecord(errorRecord)
-                pushCodeReview(errorRecord)
+                messageService.pushCodeReview(errorRecord)
                 return@runCatching
             }
 
@@ -111,7 +103,7 @@ class IncidentAnalyzeFacade(
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
             val record = createCodeReviewRecord(request, targetApplication, compareResult, reviewResult)
             gitService.saveCodeReviewRecord(record)
-            pushCodeReview(record)
+            messageService.pushCodeReview(record)
         }.onFailure { log.error("Failed to analyze code review record : {}", it.message, it) }
     }
 

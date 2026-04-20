@@ -3,6 +3,7 @@ package com.walter.spring.ai.ops.service
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
 import com.walter.spring.ai.ops.code.LlmProvider
+import com.walter.spring.ai.ops.event.RateLimitHitEvent
 import com.walter.spring.ai.ops.util.CryptoProvider
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
@@ -21,6 +22,7 @@ import org.springframework.ai.retry.NonTransientAiException
 import org.springframework.ai.retry.RetryUtils
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationStartedEvent
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.beans.factory.annotation.Qualifier
@@ -32,6 +34,7 @@ class AiModelService(
     private val redisTemplate: StringRedisTemplate,
     private val cryptoProvider: CryptoProvider,
     @Qualifier("llmRateLimiter") private val llmRateLimiter: Semaphore,
+    private val eventPublisher: ApplicationEventPublisher,
     @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
     @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
@@ -116,6 +119,7 @@ class AiModelService(
                 val isRateLimit = e.message?.contains("rate_limit_error") == true || e.message?.contains("429") == true
                 if (isRateLimit && attempt < maxRetries - 1) {
                     log.warn("Rate limit hit (attempt {}/{}), waiting 61s before retry...", attempt + 1, maxRetries)
+                    eventPublisher.publishEvent(RateLimitHitEvent(this, attempt + 1, maxRetries))
                     Thread.sleep(61_000)
                 } else {
                     throw e

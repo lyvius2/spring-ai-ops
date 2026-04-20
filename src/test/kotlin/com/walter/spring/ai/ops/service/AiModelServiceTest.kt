@@ -26,6 +26,7 @@ import org.springframework.ai.chat.model.ChatModel
 import org.springframework.ai.chat.model.ChatResponse
 import org.springframework.ai.chat.model.Generation
 import org.springframework.ai.chat.prompt.Prompt
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.util.concurrent.Semaphore
@@ -38,6 +39,7 @@ class AiModelServiceTest {
     @Mock private lateinit var cryptoProvider: CryptoProvider
     @Mock private lateinit var valueOps: ValueOperations<String, String>
     @Mock private lateinit var mockChatModel: ChatModel
+    @Mock private lateinit var eventPublisher: ApplicationEventPublisher
 
     private lateinit var aiModelService: AiModelService
 
@@ -50,7 +52,7 @@ class AiModelServiceTest {
     }
 
     private fun buildService(openAiApiKey: String = "", anthropicApiKey: String = "") =
-        AiModelService(redisTemplate, cryptoProvider, Semaphore(10), "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, "en")
+        AiModelService(redisTemplate, cryptoProvider, Semaphore(10), eventPublisher, "gpt-4o-mini", openAiApiKey, "claude-3-5-sonnet-20241022", anthropicApiKey, 4096, "en")
 
     // ── initialize ────────────────────────────────────────────────────────────
 

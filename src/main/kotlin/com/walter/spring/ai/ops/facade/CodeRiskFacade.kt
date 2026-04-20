@@ -6,6 +6,7 @@ import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.record.CodeRiskIssue
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
+import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
@@ -19,19 +20,20 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Semaphore
 
 @Facade
-class CodeRiskAnalyzeFacade(
+class CodeRiskFacade(
     private val repositoryService: RepositoryService,
     private val aiModelService: AiModelService,
     private val applicationService: ApplicationService,
     private val githubService: GithubService,
     private val gitlabService: GitlabService,
+    private val messageService: MessageService,
     private val objectMapper: ObjectMapper,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
     @Value("\${analysis.code-risk.token-threshold:27000}") private val tokenThreshold: Int,
     @Value("\${analysis.code-risk.map-reduce-concurrency:3}") private val mapReduceConcurrency: Int,
     @Value("\${analysis.code-risk.map-reduce-delay-ms:1000}") private val mapReduceDelayMs: Long,
 ) {
-    private val log = LoggerFactory.getLogger(CodeRiskAnalyzeFacade::class.java)
+    private val log = LoggerFactory.getLogger(CodeRiskFacade::class.java)
     private val lenientMapper: ObjectMapper = objectMapper.copy().apply {
         configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true)
         configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true)
@@ -53,19 +55,23 @@ class CodeRiskAnalyzeFacade(
 
         val (markdown, issues) = if (tokenCount <= tokenThreshold) {
             log.info("Strategy: single-call analysis")
+            messageService.pushAnalysisStatus("Running single-call analysis (est. ${tokenCount} tokens)...")
             val raw = aiModelService.executeAnalyzeCodeRisk(bundle)
             parseResponse(raw)
         } else {
             log.info("Strategy: map-reduce analysis")
+            messageService.pushAnalysisStatus("Large codebase detected — using map-reduce strategy (${files.size} files)...")
             val chunks = repositoryService.createChunks(sourcePath, files)
             val rawResults = executeMapPhase(chunks)
             val parsedChunks = rawResults.map { parseResponse(it) }
             val markdownParts = parsedChunks.map { it.first }
             val allIssues = parsedChunks.flatMap { it.second }
+            messageService.pushAnalysisStatus("Consolidating results from ${chunks.size} chunks...")
             val finalMarkdown = aiModelService.executeFinalAnalyzeCode(markdownParts)
             Pair(finalMarkdown, allIssues)
         }
 
+        messageService.pushAnalysisStatus("Analysis complete. Saving results...")
         return repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
     }
 
@@ -93,6 +99,7 @@ class CodeRiskAnalyzeFacade(
             lenientMapper.readValue(jsonText, Array<CodeRiskIssue>::class.java).toList()
         }.getOrElse {
             log.warn("Failed to parse issues JSON: {}", it.message)
+            messageService.pushAnalysisStatus("⚠ Some issue data could not be parsed — continuing with partial results.")
             emptyList()
         }
         return Pair(markdown, issues)
@@ -100,11 +107,12 @@ class CodeRiskAnalyzeFacade(
 
     private fun executeMapPhase(chunks: List<CodeChunk>): List<String> {
         val semaphore = Semaphore(mapReduceConcurrency)
-        val futures = chunks.map { chunk ->
+        val futures = chunks.mapIndexed { idx, chunk ->
             CompletableFuture.supplyAsync({
                 semaphore.acquire()
                 try {
-                    log.info("analyzing chunk: {}", chunk.label)
+                    log.info("Analyzing chunk: {}", chunk.label)
+                    messageService.pushAnalysisStatus("Analyzing chunk ${idx + 1}/${chunks.size}: ${chunk.label}")
                     val result = aiModelService.executeAnalyzeCodeRisk(chunk.bundle)
                     Thread.sleep(mapReduceDelayMs)
                     result

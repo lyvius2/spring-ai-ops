@@ -3,7 +3,7 @@ package com.walter.spring.ai.ops.controller
 import com.walter.spring.ai.ops.controller.dto.CodeRiskListResponse
 import com.walter.spring.ai.ops.controller.dto.CodeRiskRequest
 import com.walter.spring.ai.ops.controller.dto.CodeRiskResponse
-import com.walter.spring.ai.ops.facade.CodeRiskAnalyzeFacade
+import com.walter.spring.ai.ops.facade.CodeRiskFacade
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/code-risk")
 class CodeRiskController(
-    private val codeRiskAnalyzeFacade: CodeRiskAnalyzeFacade,
+    private val codeRiskFacade: CodeRiskFacade,
 ) {
     @Operation(
         summary = "Analyze code risk for a registered application",
@@ -36,7 +36,7 @@ class CodeRiskController(
     @PostMapping
     fun analyzeCodeRisk(@RequestBody request: CodeRiskRequest): CodeRiskResponse {
         return try {
-            CodeRiskResponse.success(codeRiskAnalyzeFacade.analyze(request.appName, request.branch))
+            CodeRiskResponse.success(codeRiskFacade.analyze(request.appName, request.branch))
         } catch (e: Exception) {
             CodeRiskResponse.failure(e)
         }
@@ -45,6 +45,6 @@ class CodeRiskController(
     @Operation(summary = "List code risk analysis records for an application")
     @GetMapping("/{application}/list")
     fun list(@Parameter(description = "Registered application name", required = true) @PathVariable application: String): CodeRiskListResponse {
-        return CodeRiskListResponse(codeRiskAnalyzeFacade.getRecords(application))
+        return CodeRiskListResponse(codeRiskFacade.getRecords(application))
     }
 }

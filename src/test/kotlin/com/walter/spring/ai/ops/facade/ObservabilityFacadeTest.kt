@@ -29,7 +29,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 private fun <T> anyObject(): T = Mockito.any() as T
 
 @ExtendWith(MockitoExtension::class)
-class IncidentAnalyzeFacadeTest {
+class ObservabilityFacadeTest {
 
     @Mock private lateinit var applicationService: ApplicationService
     @Mock private lateinit var grafanaService: GrafanaService
@@ -39,11 +39,11 @@ class IncidentAnalyzeFacadeTest {
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var messagingTemplate: SimpMessagingTemplate
 
-    private lateinit var incidentAnalyzeFacade: IncidentAnalyzeFacade
+    private lateinit var incidentAnalyzeFacade: ObservabilityFacade
 
     @BeforeEach
     fun setUp() {
-        incidentAnalyzeFacade = IncidentAnalyzeFacade(
+        incidentAnalyzeFacade = ObservabilityFacade(
             applicationService, grafanaService, lokiService,
             githubService, gitlabService, aiModelService, messagingTemplate
         )
