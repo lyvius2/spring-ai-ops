@@ -3,6 +3,9 @@ let _llmConfigured     = !!LLM_CONFIGURED;
 let _currentLlm        = CURRENT_LLM;
 let _llmBothConfigured = !!LLM_SELECT_PROVIDER;
 
+// CSRF token embedded by the server at page load time
+const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
 // ── Select Provider Modal ─────────────────────────────────────────────────────
 
 function openLlmSelectProviderModal() {
@@ -1202,7 +1205,9 @@ function switchToTab(tabName) {
 
 async function loadCodeRiskList(appName) {
     try {
-        const res  = await fetch(`/api/code-risk/${encodeURIComponent(appName)}/list`);
+        const res  = await fetch(`/api/code-risk/${encodeURIComponent(appName)}/list`, {
+            headers: { 'X-CSRF-Token': CSRF_TOKEN },
+        });
         const data = await res.json();
         appCodeRiskLists[appName] = data.records || [];
     } catch (_) {
@@ -1438,7 +1443,7 @@ async function submitRunAnalysis() {
     try {
         const res  = await fetch('/api/code-risk', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
             body: JSON.stringify({ appName: selectedApp, branch }),
         });
         const data = await res.json();

@@ -3,13 +3,20 @@ package com.walter.spring.ai.ops.controller.dto
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.walter.spring.ai.ops.code.GitRemoteProvider
+import io.swagger.v3.oas.annotations.media.Schema
 
+@Schema(description = "Normalised push event payload received from GitHub or GitLab webhook")
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GithubPushRequest(
+    @Schema(description = "SHA of the commit before the push", example = "abc1234")
     val before: String = "",
+    @Schema(description = "SHA of the commit after the push (HEAD)", example = "def5678")
     val after: String = "",
+    @Schema(description = "Full ref name of the pushed branch", example = "refs/heads/main")
     val ref: String = "",
+    @Schema(description = "Repository information")
     val repository: GithubPushRepository = GithubPushRepository(),
+    @Schema(description = "List of commits included in the push")
     val commits: List<GithubPushCommit> = emptyList(),
     @JsonIgnore val source: GitRemoteProvider = GitRemoteProvider.GITHUB,
 ) {
