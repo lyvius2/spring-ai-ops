@@ -107,6 +107,11 @@ loki:
   url: ""   # Loki base URL (e.g. http://loki:3100)
 ```
 
+## Language
+
+- The default language of this project is **English**.
+- All comments, descriptions, and documentation (except test code and `README.md`) must be written in English.
+
 ## Validation Rules
 
 - All input validation must be performed **server-side** (Service layer). Do not add client-side validation in JavaScript.
@@ -128,6 +133,7 @@ loki:
 ### Service
 - Owns a single, well-scoped area of business logic or external API integration. Adhere to the Single Responsibility Principle.
 - Implements the detailed business logic for a specific domain (e.g., token management, LLM invocation, record persistence).
+- Must not inject other Service beans at the same layer. Cross-service orchestration belongs exclusively in the Facade layer.
 - Every new Service and every new public method added to an existing Service must have a corresponding test. All public methods must be covered.
 
 ### Facade
