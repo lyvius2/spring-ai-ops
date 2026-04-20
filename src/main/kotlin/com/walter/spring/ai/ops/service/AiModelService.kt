@@ -36,6 +36,7 @@ class AiModelService(
     @Value("\${ai.open-ai.api-key:}") private val openAiApiKey: String,
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
     @Value("\${ai.anthropic.api-key:}") private val anthropicApiKey: String,
+    @Value("\${ai.anthropic.max-tokens:8192}") private val anthropicMaxTokens: Int,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
@@ -137,7 +138,7 @@ class AiModelService(
             }
             LlmProvider.ANTHROPIC -> {
                 val api = AnthropicApi.builder().apiKey(apiKey).build()
-                val options = AnthropicChatOptions.builder().model(anthropicModel).maxTokens(1024).build()
+                val options = AnthropicChatOptions.builder().model(anthropicModel).maxTokens(anthropicMaxTokens).build()
                 AnthropicChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
         }
