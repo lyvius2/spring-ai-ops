@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.util.zSetPushWithTtl
 import com.walter.spring.ai.ops.util.zSetRangeAllDesc
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
@@ -81,13 +82,18 @@ class RepositoryService(
         }
     }
 
-    fun cloneRepository(appName: String, gitUrl: String, branch: String = ""): Path {
+    fun cloneRepository(appName: String, gitUrl: String, branch: String = "", accessToken: String? = null): Path {
         val tempDir = Files.createTempDirectory("repository-scan-$appName")
         Git.cloneRepository()
             .setURI(gitUrl)
             .setDirectory(tempDir.toFile())
             .setCloneAllBranches(false)
             .apply { if (branch.isNotEmpty()) setBranch(branch) }
+            .apply {
+                if (!accessToken.isNullOrBlank()) {
+                    setCredentialsProvider(UsernamePasswordCredentialsProvider("oauth2", accessToken))
+                }
+            }
             .setDepth(1)
             .call()
             .use { /* Cloned successfully, tempDir contains the repository */ }

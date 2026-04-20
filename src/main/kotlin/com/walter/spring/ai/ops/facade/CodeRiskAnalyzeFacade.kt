@@ -6,6 +6,8 @@ import com.walter.spring.ai.ops.record.CodeRiskIssue
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
+import com.walter.spring.ai.ops.service.GithubService
+import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.service.RepositoryService
 import org.slf4j.LoggerFactory
@@ -20,6 +22,8 @@ class CodeRiskAnalyzeFacade(
     private val repositoryService: RepositoryService,
     private val aiModelService: AiModelService,
     private val applicationService: ApplicationService,
+    private val githubService: GithubService,
+    private val gitlabService: GitlabService,
     private val objectMapper: ObjectMapper,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
     @Value("\${analysis.code-risk.token-threshold:27000}") private val tokenThreshold: Int,
@@ -35,7 +39,8 @@ class CodeRiskAnalyzeFacade(
 
     fun analyze(appName: String, branch: String): CodeRiskRecord {
         val gitRepoUrl = applicationService.getGitRepoByAppName(appName)
-        val sourcePath = repositoryService.cloneRepository(appName, gitRepoUrl, branch)
+        val accessToken = resolveAccessToken(gitRepoUrl)
+        val sourcePath = repositoryService.cloneRepository(appName, gitRepoUrl, branch, accessToken)
         val files = repositoryService.collectSourceFiles(sourcePath)
         val bundle = repositoryService.buildBundle(sourcePath, files)
         val tokenCount = aiModelService.estimateTokenCount(bundle)
@@ -60,6 +65,15 @@ class CodeRiskAnalyzeFacade(
     }
 
     fun getRecords(appName: String) = repositoryService.getCodeRiskRecords(appName)
+
+    private fun resolveAccessToken(gitUrl: String): String? {
+        val lower = gitUrl.lowercase()
+        return when {
+            lower.contains("github") -> githubService.getToken()
+            lower.contains("gitlab") -> gitlabService.getToken()
+            else -> null
+        }
+    }
 
     private fun parseResponse(raw: String): Pair<String, List<CodeRiskIssue>> {
         val startIdx = raw.indexOf(ISSUES_START)
