@@ -1,6 +1,6 @@
 # Spring AI Ops
 
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI or Anthropic) to analyze errors and review code in real time — with results delivered to a live dashboard via WebSocket.
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI or Anthropic) to analyze errors, review code, and perform static code risk analysis in real time — with results delivered to a live dashboard via WebSocket.
 
 ---
 
@@ -10,9 +10,10 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 - [Key Features](#key-features)
 - [Architecture](#architecture)
 - [Interface Flows](#interface-flows)
-  - [Grafana → Loki → LLM](#grafana--loki--llm-error-analysis)
+  - [Static Code Risk Analysis](#static-code-risk-analysis)
   - [GitHub → LLM](#github--llm-code-review)
   - [GitLab → LLM](#gitlab--llm-code-review)
+  - [Grafana → Loki → LLM](#grafana--loki--llm-error-analysis)
 - [Screenshots](#screenshots)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
@@ -45,13 +46,14 @@ No relational database is used. Redis serves as the sole persistence layer — s
 
 | Feature | Description |
 |---|---|
-| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs → root cause, affected components, and recommended actions |
+| **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
+| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs → root cause, affected components, and recommended actions |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
-| **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 10 concurrent) |
+| **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 20 concurrent) |
 
 ---
 
@@ -96,41 +98,50 @@ No relational database is used. Redis serves as the sole persistence layer — s
 
 ## Interface Flows
 
-### Grafana → Loki → LLM (Error Analysis)
+### Static Code Risk Analysis
 
 ```
-Grafana Alert fires
+User clicks "Run Static Analysis" in the dashboard
         │
         ▼
-POST /webhook/grafana[/{application}]
+POST /api/code-risk
         │
-        ├─ status == "resolved"? → skip (return RESOLVED)
+        ├─ Look up registered Git repository URL for the application
         │
-        ├─ Extract Loki stream selector from alert labels
-        │    e.g. {job="my-app", namespace="prod", pod="api-xyz"}
+        ├─ Resolve access token (GitHub or GitLab token from Redis)
         │
-        ├─ Calculate time range
-        │    start = alert.startsAt − 5 min buffer
-        │    end   = alert.endsAt  (current time if zero-value)
+        ├─ Clone repository via JGit (with token auth if available)
+        │    specified branch, or default branch if blank
         │
-        ├─ Query Loki
-        │    GET {loki.url}/loki/api/v1/query_range
-        │    ?query={...}&start=...&end=...
+        ├─ Collect source files and build a code bundle
         │
-        ├─ Call LLM
-        │    System: expert in application errors and logs
-        │    User:   alert context + log lines
-        │            → root cause / affected components / recommended actions
+        ├─ Estimate token count
+        │    ≤ token-threshold (default: 27,000)
+        │      → Single-call analysis
+        │           Call LLM once with the full bundle
+        │    > token-threshold
+        │      → Map-reduce analysis
+        │           Split into chunks → analyze each chunk in parallel
+        │           (max concurrency: 3, delay: 1,000 ms between calls)
+        │           Consolidate chunk results with a final LLM call
         │
-        ├─ Save AnalyzeFiringRecord to Redis  (key: firing:{application})
+        ├─ Parse LLM response
+        │    Markdown analysis  (overall summary, recommendations)
+        │    Issues JSON        (file, line, severity, description, codeSnippet)
         │
-        └─ Push to /topic/firing via WebSocket
+        ├─ Save CodeRiskRecord to Redis  (key: code-risk:{application})
+        │
+        ├─ Push progress messages to /topic/analysis/status via WebSocket
+        │
+        └─ Push completion notification to /topic/analysis/result via WebSocket
                 │
                 ▼
-           Browser receives analysis result in real time
+           Browser opens Code Risk tab with full analysis result
 ```
 
-> **Prerequisite**: Prometheus metric labels and Loki stream labels must share the same key set (`job`, `instance`, `namespace`, `pod`, etc.). Configure Promtail or Grafana Alloy accordingly.
+> **Note**: Analysis progress (cloning, chunk status, consolidation) is streamed to the dashboard in real time via WebSocket. If the LLM returns a rate-limit error (429) mid-analysis, the facade stops and returns partial results gathered up to that point.
+
+> **Git Authentication**: The access token configured under Git Remote Configuration (GitHub or GitLab) is used automatically for private repository cloning. No additional setup is required.
 
 ---
 
@@ -194,6 +205,44 @@ POST /webhook/git[/{application}]
 
 ---
 
+### Grafana → Loki → LLM (Error Analysis)
+
+```
+Grafana Alert fires
+        │
+        ▼
+POST /webhook/grafana[/{application}]
+        │
+        ├─ status == "resolved"? → skip (return RESOLVED)
+        │
+        ├─ Extract Loki stream selector from alert labels
+        │    e.g. {job="my-app", namespace="prod", pod="api-xyz"}
+        │
+        ├─ Calculate time range
+        │    start = alert.startsAt − 5 min buffer
+        │    end   = alert.endsAt  (current time if zero-value)
+        │
+        ├─ Query Loki
+        │    GET {loki.url}/loki/api/v1/query_range
+        │    ?query={...}&start=...&end=...
+        │
+        ├─ Call LLM
+        │    System: expert in application errors and logs
+        │    User:   alert context + log lines
+        │            → root cause / affected components / recommended actions
+        │
+        ├─ Save AnalyzeFiringRecord to Redis  (key: firing:{application})
+        │
+        └─ Push to /topic/firing via WebSocket
+                │
+                ▼
+           Browser receives analysis result in real time
+```
+
+> **Prerequisite**: Prometheus metric labels and Loki stream labels must share the same key set (`job`, `instance`, `namespace`, `pod`, etc.). Configure Promtail or Grafana Alloy accordingly.
+
+---
+
 ## Screenshots
 
 ### LLM API Key Configuration
@@ -201,6 +250,22 @@ POST /webhook/git[/{application}]
 *LLM 제공자와 API 키를 UI에서 입력합니다. 애플리케이션 재시작 없이 즉시 모델이 활성화됩니다.*
 
 ![LLM API Key Configuration](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AIConfig.png?raw=true)
+
+---
+
+### Static Code Risk Analysis
+*Run a full AI-powered static analysis on any registered Git repository. Issues are grouped by file with severity levels (HIGH / MEDIUM / LOW), and each entry includes the affected code snippet and a recommended fix.*  
+*등록된 Git 저장소를 대상으로 AI 기반 전체 코드 정적 분석을 실행합니다. 이슈는 파일 단위로 그룹화되어 심각도(HIGH / MEDIUM / LOW)와 함께 표시되며, 각 항목에는 문제 코드 스니펫과 개선 권고사항이 포함됩니다.*
+
+![Static Code Risk Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeRisk.png?raw=true)
+
+---
+
+### AI-Powered Code Review
+*When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*  
+*GitHub push 이벤트가 수신되면 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재적 버그, 보안 고려사항, 개선 제안을 구조화된 보고서로 제공합니다.*
+
+![Code Review](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview.png?raw=true)
 
 ---
 
@@ -217,14 +282,6 @@ POST /webhook/git[/{application}]
 *LLM이 Grafana 알림 컨텍스트와 Loki 로그를 함께 분석하여 근본 원인, 영향 범위, 조치 방법을 대시보드에 실시간으로 스트리밍합니다.*
 
 ![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
-
----
-
-### AI-Powered Code Review
-*When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*  
-*GitHub push 이벤트가 수신되면 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재적 버그, 보안 고려사항, 개선 제안을 구조화된 보고서로 제공합니다.*
-
-![Code Review](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview.png?raw=true)
 
 ---
 
@@ -298,6 +355,10 @@ analysis:
   data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
   maximum-view-count: 5      # Max records shown per application (0 = unlimited)
   result-language: en        # Language of LLM analysis output (e.g. ko, ja, en)
+  code-risk:
+    token-threshold: 27000        # Max tokens for single-call analysis; larger bundles switch to map-reduce (default: 27000)
+    map-reduce-concurrency: 3     # Max parallel chunk analysis calls in map phase (default: 3)
+    map-reduce-delay-ms: 1000     # Delay (ms) after each chunk call in map phase (default: 1000)
 
 app:
   async:
@@ -421,6 +482,8 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 | `DELETE` | `/api/app/remove/{application}` | Remove an application |
 | `GET` | `/api/firing/{application}/list` | Get alert analysis records for an application |
 | `GET` | `/api/commit/{application}/list` | Get code review records for an application |
+| `POST` | `/api/code-risk` | Run static code risk analysis for an application |
+| `GET` | `/api/code-risk/{application}/list` | Get static analysis records for an application |
 | `POST` | `/webhook/grafana[/{application}]` | Grafana Alerting webhook receiver |
 | `POST` | `/webhook/git[/{application}]` | GitHub / GitLab push webhook receiver |
 
@@ -430,6 +493,8 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 |---|---|---|
 | `/topic/firing` | `AnalyzeFiringRecord` | LLM error analysis completes |
 | `/topic/commit` | `CodeReviewRecord` | LLM code review completes |
+| `/topic/analysis/status` | `String` | Static analysis progress update |
+| `/topic/analysis/result` | `String` | Static analysis completes (completion notification) |
 
 ---
 
@@ -475,19 +540,29 @@ com.walter.spring.ai.ops
 │   ├── ApplicationController.kt   # GET|POST|DELETE /api/app/*
 │   ├── FiringController.kt        # GET /api/firing/{app}/list
 │   ├── CommitController.kt        # GET /api/commit/{app}/list
+│   ├── CodeRiskController.kt      # POST /api/code-risk, GET /api/code-risk/{app}/list
 │   └── dto/                       # Request/Response DTOs
+├── event/
+│   ├── RateLimitHitEvent.kt       # Published by AiModelService on 429 response
+│   └── RateLimitHitEventListener.kt  # Forwards rate-limit event to MessageService
 ├── facade/
-│   └── AnalyzeFacade.kt           # Orchestrates firing analysis & code review
+│   ├── ObservabilityFacade.kt     # Orchestrates firing analysis & code review
+│   └── CodeRiskFacade.kt          # Orchestrates static code risk analysis (clone → analyze → save)
 ├── record/
 │   ├── AnalyzeFiringRecord.java   # Grafana analysis result (Java record)
 │   ├── CodeReviewRecord.java      # Code review result (Java record)
-│   └── ChangedFile.java           # Per-file diff info (Java record)
+│   ├── ChangedFile.java           # Per-file diff info (Java record)
+│   ├── CodeRiskRecord.java        # Static analysis result (Java record)
+│   └── CodeRiskIssue.java         # Per-issue entry: file, line, severity, description, codeSnippet
 ├── service/
 │   ├── AiModelService.kt          # ChatModel lifecycle & LLM calls
 │   ├── ApplicationService.kt      # Application registry (Redis)
 │   ├── GrafanaService.kt          # Alert → Loki inquiry, firing record persistence
 │   ├── GithubService.kt           # GitHub differ inquiry, code review persistence
-│   └── LokiService.kt             # Loki log query execution
+│   ├── LokiService.kt             # Loki log query execution
+│   ├── MessageService.kt          # WebSocket push for all topics (firing, commit, analysis)
+│   ├── RepositoryService.kt       # Git clone, source file collection, record persistence for code-risk
+│   └── dto/CodeChunk.kt           # Bundle chunk for map-reduce analysis
 └── util/
     ├── RedisExtensions.kt         # listPushWithTtl helper
     ├── StringExtentions.kt        # toISO8601 helper
@@ -500,6 +575,7 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-20 | Added Static Code Risk Analysis — clone a Git repository and run AI-powered full-codebase review with single-call or map-reduce strategy; results include per-issue severity, affected file, and code snippet |
 | 2026-04-18 | Added GitLab push webhook support — automatically detected via `X-Gitlab-Event` header on the unified `/webhook/git` endpoint |
 | 2026-04-15 | Abstracted external connector integration with a shared dynamic URL resolution base for GitHub and Loki |
 | 2026-04-15 | Fixed embedded Redis startup failure on macOS ARM64 — requires `brew install openssl@3` due to dynamic link dependency in the bundled binary |
@@ -554,48 +630,61 @@ SOFTWARE.
 
 | 기능 | 설명 |
 |---|---|
-| **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 → 근본 원인, 영향 범위, 조치 방법 |
+| **정적 코드 위험 분석** | Git 저장소를 클론하여 AI 기반 전체 코드베이스 리뷰 수행 — 보안 취약점, 코드 품질 이슈, 개선 권고사항. 코드베이스 크기에 따라 단일 호출 또는 맵-리듀스 전략 자동 선택 |
 | **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
+| **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 → 근본 원인, 영향 범위, 조치 방법 |
 | **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
 | **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic 전환 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
 | **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
-| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 10) |
+| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 20) |
 
 ---
 
 ### 인터페이스 흐름
 
-#### Grafana → Loki → LLM (장애 분석)
+#### 정적 코드 위험 분석
 
 ```
-Grafana Alert 발생
+대시보드에서 "Run Static Analysis" 클릭
         │
         ▼
-POST /webhook/grafana[/{application}]
+POST /api/code-risk
         │
-        ├─ status == "resolved"? → 처리 스킵 (RESOLVED 반환)
+        ├─ 애플리케이션에 등록된 Git 저장소 URL 조회
         │
-        ├─ 알림 레이블로 Loki 스트림 셀렉터 생성
-        │    예: {job="my-app", namespace="prod", pod="api-xyz"}
+        ├─ 액세스 토큰 결정 (Redis에 저장된 GitHub 또는 GitLab 토큰)
         │
-        ├─ 시간 범위 계산
-        │    start = alert.startsAt − 5분 버퍼
-        │    end   = alert.endsAt  (zero-value이면 현재 시각)
+        ├─ JGit으로 저장소 클론 (토큰 인증 적용)
+        │    지정된 브랜치, 미입력 시 기본 브랜치
         │
-        ├─ Loki 로그 조회
-        │    GET {loki.url}/loki/api/v1/query_range
+        ├─ 소스 파일 수집 및 코드 번들 구성
         │
-        ├─ LLM 분석 요청
-        │    알림 컨텍스트 + 로그 라인
-        │    → 근본 원인 / 영향 범위 / 조치 방법
+        ├─ 토큰 수 추정
+        │    ≤ token-threshold (기본: 27,000)
+        │      → 단일 호출 분석 (전체 번들을 LLM에 한 번에 전달)
+        │    > token-threshold
+        │      → 맵-리듀스 분석
+        │           청크 분할 → 병렬 분석 (최대 동시 3개, 호출 간 1,000ms 지연)
+        │           최종 LLM 호출로 청크 결과 통합
         │
-        ├─ AnalyzeFiringRecord를 Redis에 저장 (key: firing:{application})
+        ├─ LLM 응답 파싱
+        │    Markdown 분석  (전체 요약, 권고사항)
+        │    Issues JSON   (파일, 라인, 심각도, 설명, 코드 스니펫)
         │
-        └─ WebSocket /topic/firing 으로 결과 Push
+        ├─ CodeRiskRecord를 Redis에 저장 (key: code-risk:{application})
+        │
+        ├─ /topic/analysis/status 로 진행 상황 실시간 Push
+        │
+        └─ /topic/analysis/result 로 완료 알림 Push
+                │
+                ▼
+           브라우저 Code Risk 탭에 전체 분석 결과 표시
 ```
 
-> **전제 조건**: Prometheus 메트릭 레이블과 Loki 스트림 레이블이 동일(`job`, `instance` 등)해야 로그 조회가 동작합니다. Promtail 또는 Grafana Alloy 설정을 확인하세요.
+> **참고**: 클론, 청크 분석, 통합 등 분석 진행 상황이 WebSocket을 통해 대시보드에 실시간으로 전달됩니다. LLM이 분석 도중 429(Rate Limit) 오류를 반환하면 중단하고 그 시점까지 수집된 결과를 저장합니다.
+
+> **Git 인증**: Git Remote Configuration에서 등록한 GitHub 또는 GitLab 액세스 토큰이 비공개 저장소 클론에 자동으로 사용됩니다.
 
 #### GitHub → LLM (코드 리뷰)
 
@@ -644,6 +733,37 @@ POST /webhook/git[/{application}]
         │
         └─ WebSocket /topic/commit 으로 결과 Push
 ```
+
+#### Grafana → Loki → LLM (장애 분석)
+
+```
+Grafana Alert 발생
+        │
+        ▼
+POST /webhook/grafana[/{application}]
+        │
+        ├─ status == "resolved"? → 처리 스킵 (RESOLVED 반환)
+        │
+        ├─ 알림 레이블로 Loki 스트림 셀렉터 생성
+        │    예: {job="my-app", namespace="prod", pod="api-xyz"}
+        │
+        ├─ 시간 범위 계산
+        │    start = alert.startsAt − 5분 버퍼
+        │    end   = alert.endsAt  (zero-value이면 현재 시각)
+        │
+        ├─ Loki 로그 조회
+        │    GET {loki.url}/loki/api/v1/query_range
+        │
+        ├─ LLM 분석 요청
+        │    알림 컨텍스트 + 로그 라인
+        │    → 근본 원인 / 영향 범위 / 조치 방법
+        │
+        ├─ AnalyzeFiringRecord를 Redis에 저장 (key: firing:{application})
+        │
+        └─ WebSocket /topic/firing 으로 결과 Push
+```
+
+> **전제 조건**: Prometheus 메트릭 레이블과 Loki 스트림 레이블이 동일(`job`, `instance` 등)해야 로그 조회가 동작합니다. Promtail 또는 Grafana Alloy 설정을 확인하세요.
 
 ---
 
@@ -701,6 +821,10 @@ analysis:
   data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
   maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
   result-language: en        # LLM 분석 결과 언어 (ko, en, ja 등)
+  code-risk:
+    token-threshold: 27000        # 단일 호출 분석의 최대 토큰 수; 초과 시 맵-리듀스로 전환 (기본: 27000)
+    map-reduce-concurrency: 3     # 맵 단계 병렬 청크 분석 최대 동시 수 (기본: 3)
+    map-reduce-delay-ms: 1000     # 맵 단계 청크 호출 후 지연 시간 ms (기본: 1000)
 
 app:
   async:

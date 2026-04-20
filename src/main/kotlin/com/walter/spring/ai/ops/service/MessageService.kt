@@ -19,4 +19,8 @@ class MessageService(private val messagingTemplate: SimpMessagingTemplate) {
     fun pushAnalysisStatus(message: String) {
         messagingTemplate.convertAndSend("/topic/analysis/status", message)
     }
+
+    fun pushAnalysisResult(message: String) {
+        messagingTemplate.convertAndSend("/topic/analysis/result", message)
+    }
 }

@@ -72,7 +72,10 @@ class CodeRiskFacade(
         }
 
         messageService.pushAnalysisStatus("Analysis complete. Saving results...")
-        return repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
+        val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
+        val branchLabel = record.branch?.takeIf { it.isNotBlank() } ?: "default"
+        messageService.pushAnalysisResult("Static analysis of $branchLabel branch for $appName has completed.")
+        return record
     }
 
     fun getRecords(appName: String) = repositoryService.getCodeRiskRecords(appName)
