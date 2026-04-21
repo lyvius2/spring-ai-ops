@@ -34,7 +34,7 @@ class RepositoryService(
     private val excludedDirectoryNames = setOf(
         "node_modules", "vendor", "target", "build", "dist",
         ".git", ".idea", ".vscode", "__pycache__", "bin",
-        "obj", "out", "logs", "coverage", ".gradle", "md"
+        "obj", "out", "logs", "coverage", ".gradle"
     )
 
     fun scanAllAtOnce(appName: String, gitUrl: String, branch: String = ""): String {
