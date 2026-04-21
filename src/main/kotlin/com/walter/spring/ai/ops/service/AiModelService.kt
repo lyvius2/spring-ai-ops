@@ -40,7 +40,7 @@ class AiModelService(
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
     @Value("\${ai.anthropic.api-key:}") private val anthropicApiKey: String,
     @Value("\${ai.anthropic.max-tokens:8192}") private val anthropicMaxTokens: Int,
-    @Value("\${ai.groq.model:qwen/qwen3-32b}") private val groqModel: String,
+    @Value("\${ai.groq.model:llama-3.3-70b-versatile}") private val groqModel: String,
     @Value("\${ai.groq.api-key:}") private val groqApiKey: String,
     @Value("\${ai.groq.base-url:https://api.groq.com/openai}") private val groqBaseUrl: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
