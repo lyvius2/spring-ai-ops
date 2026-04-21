@@ -647,18 +647,10 @@ async function handleCommitRecord(record) {
     const existing = Array.from(container.querySelectorAll('.app-item'))
         .find(el => el.dataset.app === appName);
 
-    const defaultTab = (appName) =>
-        (appCodeRiskLists[appName]?.length > 0) ? 'coderisk' : 'codereview';
-
     const switchToDefaultTab = (appName) => {
-        const tab = defaultTab(appName);
-        switchToTab(tab);
-        if (tab === 'coderisk') {
-            renderCodeRiskContent(appName);
-        } else {
-            const content = document.getElementById('codereview-content');
-            if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
-        }
+        switchToTab('codereview');
+        const content = document.getElementById('codereview-content');
+        if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
     };
 
     if (existing) {

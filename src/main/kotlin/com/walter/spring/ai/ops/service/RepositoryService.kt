@@ -28,7 +28,7 @@ class RepositoryService(
     private val allowedExtensions = setOf(
         "kt", "kts", "java", "js", "ts", "tsx", "jsx",
         "py", "go", "rb", "cs", "php", "yml", "yaml",
-        "xml", "json", "sql", "properties", "md"
+        "xml", "json", "sql", "properties"
     )
 
     private val excludedDirectoryNames = setOf(
