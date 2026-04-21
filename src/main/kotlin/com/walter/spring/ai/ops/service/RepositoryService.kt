@@ -28,13 +28,13 @@ class RepositoryService(
     private val allowedExtensions = setOf(
         "kt", "kts", "java", "js", "ts", "tsx", "jsx",
         "py", "go", "rb", "cs", "php", "yml", "yaml",
-        "xml", "json", "sql", "properties", "md"
+        "xml", "json", "sql", "properties"
     )
 
     private val excludedDirectoryNames = setOf(
         "node_modules", "vendor", "target", "build", "dist",
         ".git", ".idea", ".vscode", "__pycache__", "bin",
-        "obj", "out", "logs", "coverage", ".gradle"
+        "obj", "out", "logs", "coverage", ".gradle", "md"
     )
 
     fun scanAllAtOnce(appName: String, gitUrl: String, branch: String = ""): String {
