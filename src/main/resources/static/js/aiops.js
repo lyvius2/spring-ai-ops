@@ -623,31 +623,6 @@ function connectWebSocket() {
 }
 
 function showAnalysisStatus(text) {
-    // Update modal status if modal is still visible (brief loading state)
-    const modal = document.getElementById('run-analysis-modal');
-    if (modal && modal.style.display !== 'none') {
-        const el = document.getElementById('analysis-status-msg');
-        if (el) {
-            const isWarning = text.startsWith('⚠') || text.startsWith('⏳');
-            if (el.textContent) {
-                el.classList.add('analysis-status-exit');
-                el.addEventListener('animationend', () => {
-                    el.classList.remove('analysis-status-exit');
-                    el.textContent = text;
-                    el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
-                    el.classList.add('analysis-status-enter');
-                    el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
-                }, { once: true });
-            } else {
-                el.textContent = text;
-                el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
-                el.classList.add('analysis-status-enter');
-                el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
-            }
-        }
-    }
-
-    // Always update bottom-left running indicator
     _updateAnalysisIndicator(text);
 }
 
@@ -1459,7 +1434,6 @@ async function openRunAnalysisModal() {
     document.getElementById('run-analysis-alert-error').style.display = 'none';
     document.getElementById('run-analysis-no-git').style.display = 'none';
     document.getElementById('run-analysis-form').style.display = 'block';
-    document.getElementById('run-analysis-loading').style.display = 'none';
     const btn = document.getElementById('run-analysis-submit-btn');
     btn.disabled = false;
     btn.textContent = 'Run Analysis';
@@ -1483,8 +1457,6 @@ async function openRunAnalysisModal() {
 
 function closeRunAnalysisModal() {
     document.getElementById('run-analysis-modal').style.display = 'none';
-    const el = document.getElementById('analysis-status-msg');
-    if (el) { el.textContent = ''; el.className = 'analysis-status-msg'; }
 }
 
 function openAnalysisStartedModal() {
@@ -1504,8 +1476,6 @@ async function submitRunAnalysis() {
     btn.disabled = true;
     btn.textContent = 'Starting...';
     errEl.style.display = 'none';
-    document.getElementById('run-analysis-form').style.display = 'none';
-    document.getElementById('run-analysis-loading').style.display = 'block';
 
     try {
         const res  = await fetch('/api/code-risk', {
@@ -1522,7 +1492,6 @@ async function submitRunAnalysis() {
             openAnalysisStartedModal();
         } else {
             // Show error inline
-            document.getElementById('run-analysis-loading').style.display = 'none';
             document.getElementById('run-analysis-form').style.display = 'block';
             btn.disabled = false;
             btn.textContent = 'Run Analysis';

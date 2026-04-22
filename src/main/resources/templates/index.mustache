@@ -213,15 +213,6 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
                 <button class="btn-danger" id="run-analysis-submit-btn" onclick="submitRunAnalysis()">Run Analysis</button>
                 <div class="alert alert-error" id="run-analysis-alert-error"></div>
             </div>
-            <div id="run-analysis-loading" style="display:none;">
-                <div class="loading-overlay" style="padding:20px 0;">
-                    <div class="analysis-status-wrap">
-                        <div id="analysis-status-msg" class="analysis-status-msg"></div>
-                    </div>
-                    <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
-                    <span>Code risk analysis in progress. This may take a few minutes...</span>
-                </div>
-            </div>
         </div>
     </div>
 </div>
