@@ -12,11 +12,9 @@ data class CodeRiskResponse(
     val success: Boolean,
     @Schema(description = "Human-readable result message")
     val message: String,
-    @Schema(description = "Analysis result record; present only on success", nullable = true)
-    val data: CodeRiskRecord? = null,
 ) {
     companion object {
-        fun success(data: CodeRiskRecord) = CodeRiskResponse(true, "Static analysis completed successfully.", data)
+        fun success() = CodeRiskResponse(true, "Static analysis completed successfully.")
         fun failure(e: Exception) = CodeRiskResponse(false, extractMessage(e.message))
 
         private fun extractMessage(raw: String?): String {

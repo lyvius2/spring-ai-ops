@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.record.CodeRiskIssue
-import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.ApplicationService
@@ -15,6 +14,7 @@ import com.walter.spring.ai.ops.service.RepositoryService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
+import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.Semaphore
@@ -44,7 +44,7 @@ class CodeRiskFacade(
         private const val ISSUES_END   = "---ISSUES_JSON_END---"
     }
 
-    fun analyze(appName: String, branch: String): CodeRiskRecord {
+    fun analyze(appName: String, branch: String) {
         val gitRepoUrl = applicationService.getGitRepoByAppName(appName)
         val accessToken = resolveAccessToken(gitRepoUrl)
         val sourcePath = repositoryService.cloneRepository(appName, gitRepoUrl, branch, accessToken)
@@ -53,29 +53,36 @@ class CodeRiskFacade(
         val tokenCount = aiModelService.estimateTokenCount(bundle)
         log.info("Code risk analysis started — app: {}, estimated tokens: {}", appName, tokenCount)
 
-        val (markdown, issues) = if (tokenCount <= tokenThreshold) {
-            log.info("Strategy: single-call analysis")
-            messageService.pushAnalysisStatus("Running single-call analysis (est. ${tokenCount} tokens)...")
-            val raw = aiModelService.executeAnalyzeCodeRisk(bundle)
-            parseResponse(raw)
-        } else {
-            log.info("Strategy: map-reduce analysis")
-            messageService.pushAnalysisStatus("Large codebase detected — using map-reduce strategy (${files.size} files)...")
-            val chunks = repositoryService.createChunks(sourcePath, files)
-            val rawResults = executeMapPhase(chunks)
-            val parsedChunks = rawResults.map { parseResponse(it) }
-            val markdownParts = parsedChunks.map { it.first }
-            val allIssues = parsedChunks.flatMap { it.second }
-            messageService.pushAnalysisStatus("Consolidating results from ${chunks.size} chunks...")
-            val finalMarkdown = aiModelService.executeFinalAnalyzeCode(markdownParts)
-            Pair(finalMarkdown, allIssues)
-        }
+        CompletableFuture.runAsync( {
+            val (markdown, issues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
 
-        messageService.pushAnalysisStatus("Analysis complete. Saving results...")
-        val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
-        val branchLabel = record.branch?.takeIf { it.isNotBlank() } ?: "default"
-        messageService.pushAnalysisResult("Static analysis of $branchLabel branch for $appName has completed.")
-        return record
+            messageService.pushAnalysisStatus("Analysis complete. Saving results...")
+            val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
+            val branchLabel = record.branch?.takeIf { it.isNotBlank() } ?: "default"
+            messageService.pushAnalysisResult("Static analysis of $branchLabel branch for $appName has completed.")
+        }, executor).exceptionally { ex ->
+            log.error("Code risk analysis failed for app: {}, error: {}", appName, ex.message)
+            messageService.pushAnalysisStatus("⚠️ Analysis failed: ${ex.message}")
+            null
+        }
+    }
+
+    private fun executeAnalyze(tokenCount: Int, bundle: String, files: List<Path>, sourcePath: Path): Pair<String, List<CodeRiskIssue>> = if (tokenCount <= tokenThreshold) {
+        log.info("Strategy: single-call analysis")
+        messageService.pushAnalysisStatus("Running single-call analysis (est. $tokenCount tokens)...")
+        val raw = aiModelService.executeAnalyzeCodeRisk(bundle)
+        parseResponse(raw)
+    } else {
+        log.info("Strategy: map-reduce analysis")
+        messageService.pushAnalysisStatus("Large codebase detected — using map-reduce strategy (${files.size} files)...")
+        val chunks = repositoryService.createChunks(sourcePath, files)
+        val rawResults = executeMapPhase(chunks)
+        val parsedChunks = rawResults.map { parseResponse(it) }
+        val markdownParts = parsedChunks.map { it.first }
+        val allIssues = parsedChunks.flatMap { it.second }
+        messageService.pushAnalysisStatus("Consolidating results from ${chunks.size} chunks...")
+        val finalMarkdown = aiModelService.executeFinalAnalyzeCode(markdownParts)
+        Pair(finalMarkdown, allIssues)
     }
 
     fun getRecords(appName: String) = repositoryService.getCodeRiskRecords(appName)
