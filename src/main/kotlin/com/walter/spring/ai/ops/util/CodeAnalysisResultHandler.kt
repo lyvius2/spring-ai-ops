@@ -1,15 +1,20 @@
 package com.walter.spring.ai.ops.util
 
+import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.core.JsonToken
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 
 @Component
 class CodeAnalysisResultHandler(
-    @Qualifier("lenientMapper") private val lenientMapper: ObjectMapper,
+    private val objectMapper: ObjectMapper,
 ) {
+    val lenientMapper = objectMapper.copy().apply {
+        configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true)
+        configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true)
+    }
+
     fun <T> parseJsonArray(json: String, elementType: Class<T>): List<T> {
         val type = lenientMapper.typeFactory.constructCollectionType(List::class.java, elementType)
         return lenientMapper.readValue(json, type)
