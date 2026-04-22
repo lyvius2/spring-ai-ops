@@ -68,10 +68,6 @@ body {
     letter-spacing: 0.6px;
 }
 
-.panel-body {
-    padding: 20px 24px;
-}
-
 /* ── Info table ── */
 .info-table {
     width: 100%;
@@ -238,51 +234,6 @@ body {
 
 .btn-primary:hover    { background: #5a9632; }
 .btn-primary:disabled { background: #b5d98a; border-color: #b5d98a; cursor: not-allowed; }
-
-/* ── Analysis status message ── */
-.analysis-status-wrap {
-    overflow: hidden;
-    min-height: 28px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.analysis-status-msg:empty {
-    display: none;
-}
-
-.analysis-status-msg {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #4a9eff;
-    letter-spacing: 0.2px;
-    text-align: center;
-    padding: 4px 10px;
-    border-radius: 4px;
-    background: rgba(74, 158, 255, 0.08);
-    border: 1px solid rgba(74, 158, 255, 0.2);
-}
-
-.analysis-status-msg.analysis-status-warn {
-    color: #f0a500;
-    background: rgba(240, 165, 0, 0.08);
-    border-color: rgba(240, 165, 0, 0.25);
-}
-
-@keyframes statusEnter {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes statusExit {
-    from { opacity: 1; transform: translateY(0); }
-    to   { opacity: 0; transform: translateY(-10px); }
-}
-
-.analysis-status-enter { animation: statusEnter 0.25s ease forwards; }
-.analysis-status-exit  { animation: statusExit  0.2s ease forwards; }
 
 /* ── Danger button (static analysis) ── */
 .btn-danger {
@@ -459,32 +410,6 @@ body {
 }
 
 /* ── Code Risk tab content ── */
-.code-risk-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-}
-
-.code-risk-meta-row {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    font-size: 0.88rem;
-}
-
-.code-risk-meta-label {
-    font-weight: 600;
-    color: #555;
-    width: 110px;
-    flex-shrink: 0;
-}
-
-.code-risk-meta-value {
-    color: #333;
-    word-break: break-all;
-}
-
 .code-risk-history-table {
     width: 100%;
     border-collapse: collapse;

@@ -614,7 +614,7 @@ function connectWebSocket() {
             showAnalysisStatus(message.body);
         });
         stompClient.subscribe('/topic/analysis/result', function (message) {
-            showAnalysisNotification(message.body);
+            handleCodeRiskRecord(JSON.parse(message.body));
         });
     }, function () {
         stompClient = null;
@@ -711,11 +711,54 @@ async function handleCommitRecord(record) {
     }
 }
 
-async function selectApp(item, appName) {
-    document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
-    item.classList.add('active');
-    selectedApp = appName;
-    await renderAppDetail(appName);
+async function handleCodeRiskRecord(record) {
+    const appName = record.application;
+
+    closeAnalysisStartedModal();
+    _hideAnalysisIndicator();
+
+    await loadCodeRiskList(appName);
+    appSelectedRiskIdx[appName] = 0;
+
+    const branch = record.branch || 'default';
+    if (record.isSuccess) {
+        showAnalysisNotification(`Code risk analysis of '${branch}' branch for ${appName} has completed.`);
+    } else {
+        const errorMessage = record['analyzedResult']
+        showAnalysisNotification(`Code risk analysis for ${appName} failed.\n${errorMessage}`);
+    }
+
+    const container = document.getElementById('app-list-container');
+    const existing = Array.from(container.querySelectorAll('.app-item'))
+        .find(el => el.dataset.app === appName);
+
+    const switchToCodeRiskTab = () => {
+        const tabBtn = document.getElementById('tab-btn-coderisk');
+        if (tabBtn) tabBtn.style.display = '';
+        switchToTab('coderisk');
+        renderCodeRiskContent(appName);
+    };
+
+    if (existing) {
+        if (selectedApp === appName) {
+            switchToCodeRiskTab();
+        } else {
+            renderAppDetailFromLocal(appName);
+            switchToCodeRiskTab();
+            document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+            existing.classList.add('active');
+            selectedApp = appName;
+        }
+    } else {
+        const item = addAppToList(appName);
+        item.addEventListener('animationend', () => {
+            renderAppDetailFromLocal(appName);
+            switchToCodeRiskTab();
+            document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            selectedApp = appName;
+        }, { once: true });
+    }
 }
 
 // ── App Detail / Tabs ────────────────────────────────────────────────────────
@@ -1086,9 +1129,6 @@ function showNotification(appName) {
 }
 
 function showAnalysisNotification(text) {
-    // Hide the bottom-left running indicator — analysis is complete
-    _hideAnalysisIndicator();
-
     let container = document.getElementById('notification-container');
     if (!container) {
         container = document.createElement('div');
