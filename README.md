@@ -342,10 +342,11 @@ Edit `src/main/resources/application.yml`:
 ai:
   open-ai:
     model: gpt-4o-mini                   # OpenAI model name
-    api-key: ${AI_OPENAI_API_KEY:}       # Or set env var AI_OPENAI_API_KEY
+    api-key: ${AI_OPEN_AI_API_KEY:}      # Or set env var AI_OPEN_AI_API_KEY
   anthropic:
     model: claude-sonnet-4-6             # Anthropic model name
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Or set env var AI_ANTHROPIC_API_KEY
+    max-tokens: 8192                     # Max output tokens for Anthropic (default: 8192)
 
 loki:
   url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
@@ -362,7 +363,7 @@ gitlab:
 analysis:
   data-retention-hours: 120  # How long to keep analysis records (default: 5 days)
   maximum-view-count: 5      # Max records shown per application (0 = unlimited)
-  result-language: en        # Language of LLM analysis output (e.g. ko, ja, en)
+  result-language: ${ANALYSIS_RESULT_LANGUAGE:en}  # Language of LLM analysis output (e.g. ko, ja, en)
   code-risk:
     token-threshold: 27000        # Max tokens for single-call analysis; larger bundles switch to map-reduce (default: 27000)
     map-reduce-concurrency: 3     # Max parallel chunk analysis calls in map phase (default: 3)
@@ -371,7 +372,14 @@ analysis:
 app:
   async:
     virtual:
-      llm-max-concurrency: 10  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
+      llm-max-concurrency: 20  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 35s         # Safety net only — Feign read-timeout (30s) fires first
+        cancel-running-future: false  # Prevent Thread.interrupt() on Virtual Threads
 
 feign:
   loki:
@@ -501,8 +509,8 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 |---|---|---|
 | `/topic/firing` | `AnalyzeFiringRecord` | LLM error analysis completes |
 | `/topic/commit` | `CodeReviewRecord` | LLM code review completes |
-| `/topic/analysis/status` | `String` | Static analysis progress update |
-| `/topic/analysis/result` | `String` | Static analysis completes (completion notification) |
+| `/topic/analysis/status` | `String` | Static analysis progress update (clone / chunk / consolidate) |
+| `/topic/analysis/result` | `CodeRiskRecord` | Static analysis completes |
 
 ---
 
@@ -527,14 +535,24 @@ com.walter.spring.ai.ops
 ├── SpringAiOpsApplication.kt
 ├── code/
 │   ├── AlertingStatus.kt          # FIRING / RESOLVED / ACCEPTED
-│   └── ConnectionStatus.kt        # SUCCESS / READY / FAILURE
+│   ├── ConnectionStatus.kt        # SUCCESS / READY / FAILURE
+│   ├── GitRemoteProvider.kt       # GITHUB / GITLAB enum
+│   ├── LlmProvider.kt             # OPEN_AI / ANTHROPIC enum with product name & key
+│   └── RedisKeyConstants.kt       # Centralised Redis key constants
 ├── config/
+│   ├── CsrfTokenProvider.kt       # Generates a startup-time CSRF token for same-origin protection
+│   ├── CsrfTokenInterceptor.kt    # Validates X-CSRF-Token header on /api/code-risk/**
 │   ├── EmbeddedRedisConfig.kt     # Auto-start embedded Redis (local profile)
 │   ├── GithubConnectorConfig.kt   # Feign client configuration for GitHub API
+│   ├── GitlabConnectorConfig.kt   # Feign client configuration for GitLab API
 │   ├── LokiConnectorConfig.kt     # Feign client configuration for Loki API
+│   ├── MapperConfig.kt            # Registers lenientMapper bean (allows unquoted control chars)
+│   ├── SwaggerConfig.kt           # springdoc-openapi OpenAPI info & server config
 │   ├── VirtualThreadConfig.kt     # Virtual thread task executor
+│   ├── WebMvcConfig.kt            # Registers CsrfTokenInterceptor on /api/code-risk/**
 │   ├── WebSocketConfig.kt         # STOMP WebSocket endpoint & broker
-│   └── annotation/Facade.kt       # Custom @Facade stereotype annotation
+│   ├── annotation/Facade.kt       # Custom @Facade stereotype annotation
+│   └── base/DynamicConnectorConfig.kt  # Abstract base for dynamic URL resolution (GitHub / Loki)
 ├── connector/
 │   ├── GithubConnector.kt         # Feign: GitHub Commits / Compare API
 │   ├── LokiConnector.kt           # Feign: Loki query_range API
@@ -544,7 +562,7 @@ com.walter.spring.ai.ops
 │   ├── WebhookController.kt       # POST /webhook/grafana, /webhook/git
 │   ├── AiConfigController.kt      # POST /api/llm/*
 │   ├── LokiConfigController.kt    # POST /api/loki/config
-│   ├── GithubConfigController.kt  # POST /api/github/token
+│   ├── GitRemoteConfigController.kt  # POST /api/github/config, GET /api/github/config/status
 │   ├── ApplicationController.kt   # GET|POST|DELETE /api/app/*
 │   ├── FiringController.kt        # GET /api/firing/{app}/list
 │   ├── CommitController.kt        # GET /api/commit/{app}/list
@@ -561,18 +579,23 @@ com.walter.spring.ai.ops
 │   ├── CodeReviewRecord.java      # Code review result (Java record)
 │   ├── ChangedFile.java           # Per-file diff info (Java record)
 │   ├── CodeRiskRecord.java        # Static analysis result (Java record)
-│   └── CodeRiskIssue.java         # Per-issue entry: file, line, severity, description, codeSnippet
+│   ├── CodeRiskIssue.java         # Per-issue entry: file, line, severity, description, codeSnippet
+│   └── CommitSummary.java         # Commit metadata: id, message, url, timestamp
 ├── service/
 │   ├── AiModelService.kt          # ChatModel lifecycle & LLM calls
 │   ├── ApplicationService.kt      # Application registry (Redis)
 │   ├── GrafanaService.kt          # Alert → Loki inquiry, firing record persistence
+│   ├── GitRemoteService.kt        # Abstract base for GitHub / GitLab services (token, URL, diff)
 │   ├── GithubService.kt           # GitHub differ inquiry, code review persistence
+│   ├── GitlabService.kt           # GitLab differ inquiry, code review persistence
 │   ├── LokiService.kt             # Loki log query execution
 │   ├── MessageService.kt          # WebSocket push for all topics (firing, commit, analysis)
 │   ├── RepositoryService.kt       # Git clone, source file collection, record persistence for code-risk
 │   └── dto/CodeChunk.kt           # Bundle chunk for map-reduce analysis
 └── util/
-    ├── RedisExtensions.kt         # listPushWithTtl helper
+    ├── CodeAnalysisResultHandler.kt  # JSON parsing, sanitisation, and recovery for LLM issue output
+    ├── CryptoProvider.kt          # AES encryption/decryption for stored API keys
+    ├── RedisExtensions.kt         # zSetPushWithTtl / zSetRangeAllDesc helpers
     ├── StringExtentions.kt        # toISO8601 helper
     └── URIExtentions.kt           # URI builder helpers
 ```
@@ -583,6 +606,10 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-22 | Added CSRF token same-origin protection for `/api/code-risk/**` — token embedded in HTML meta tag, validated via `X-CSRF-Token` header |
+| 2026-04-22 | Added `<think>` block stripping in `AiModelService` to remove chain-of-thought output from models that emit it (e.g. DeepSeek, QwQ) |
+| 2026-04-22 | Added fallback JSON parser in `CodeAnalysisResultHandler` to recover partial issue data when LLM returns malformed delimiters or truncated JSON |
+| 2026-04-22 | Added `@Schema` annotations to all request/response DTOs and Java records for complete Swagger UI documentation |
 | 2026-04-20 | Added Static Code Risk Analysis — clone a Git repository and run AI-powered full-codebase review with single-call or map-reduce strategy; results include per-issue severity, affected file, and code snippet |
 | 2026-04-18 | Added GitLab push webhook support — automatically detected via `X-Gitlab-Event` header on the unified `/webhook/git` endpoint |
 | 2026-04-15 | Abstracted external connector integration with a shared dynamic URL resolution base for GitHub and Loki |
@@ -817,9 +844,10 @@ POST /webhook/grafana[/{application}]
 ```yaml
 ai:
   open-ai:
-    api-key: ${AI_OPENAI_API_KEY:}       # OpenAI API 키
+    api-key: ${AI_OPEN_AI_API_KEY:}      # OpenAI API 키
   anthropic:
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Anthropic API 키
+    max-tokens: 8192                     # Anthropic 모델 최대 출력 토큰 수 (기본: 8192)
 
 loki:
   url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100) — 인증 미지원
@@ -836,7 +864,7 @@ gitlab:
 analysis:
   data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
   maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
-  result-language: en        # LLM 분석 결과 언어 (ko, en, ja 등)
+  result-language: ${ANALYSIS_RESULT_LANGUAGE:en}  # LLM 분석 결과 언어 (ko, en, ja 등)
   code-risk:
     token-threshold: 27000        # 단일 호출 분석의 최대 토큰 수; 초과 시 맵-리듀스로 전환 (기본: 27000)
     map-reduce-concurrency: 3     # 맵 단계 병렬 청크 분석 최대 동시 수 (기본: 3)
@@ -845,7 +873,14 @@ analysis:
 app:
   async:
     virtual:
-      llm-max-concurrency: 10  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
+      llm-max-concurrency: 20  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 35s         # 안전망 — Feign read-timeout(30s)이 먼저 동작
+        cancel-running-future: false  # Virtual Thread 대상 Thread.interrupt() 방지
 
 feign:
   loki:
