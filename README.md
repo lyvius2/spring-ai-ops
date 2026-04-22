@@ -546,7 +546,6 @@ com.walter.spring.ai.ops
 │   ├── GithubConnectorConfig.kt   # Feign client configuration for GitHub API
 │   ├── GitlabConnectorConfig.kt   # Feign client configuration for GitLab API
 │   ├── LokiConnectorConfig.kt     # Feign client configuration for Loki API
-│   ├── MapperConfig.kt            # Registers lenientMapper bean (allows unquoted control chars)
 │   ├── SwaggerConfig.kt           # springdoc-openapi OpenAPI info & server config
 │   ├── VirtualThreadConfig.kt     # Virtual thread task executor
 │   ├── WebMvcConfig.kt            # Registers CsrfTokenInterceptor on /api/code-risk/**
