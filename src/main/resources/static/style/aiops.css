@@ -1358,3 +1358,42 @@ body {
 
 .notification-commit    { border-left-color: #1a56c4; }
 .notification-analysis  { border-left-color: #27ae60; }
+
+/* ── Analysis Running Indicator (bottom-left) ── */
+.analysis-running-indicator {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 1500;
+    width: 320px;
+    background: rgba(20, 36, 58, 0.94);
+    border: 1px solid rgba(74, 158, 255, 0.35);
+    border-left: 3px solid #4a9eff;
+    border-radius: 5px;
+    padding: 10px 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    opacity: 1;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+}
+.analysis-running-indicator.fading-out {
+    opacity: 0;
+}
+.analysis-running-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #4a9eff;
+    letter-spacing: 0.2px;
+    margin-bottom: 5px;
+    white-space: nowrap;
+}
+.analysis-running-elapsed {
+    color: #7ec8ff;
+}
+.analysis-running-msg {
+    font-size: 0.79rem;
+    color: #a0c4e8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

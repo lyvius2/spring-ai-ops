@@ -189,11 +189,11 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
     </div>
 </div>
 
-<!-- ══ Modal: Run Static Analysis ══ -->
+<!-- ══ Modal: Run Code Risk Analysis ══ -->
 <div id="run-analysis-modal" class="modal-overlay" style="display:none;">
     <div class="modal-box modal-box-sm">
         <div class="modal-header modal-header-sm">
-            Run Static Analysis
+            Run Code Risk Analysis
             <button class="modal-close-btn" onclick="closeRunAnalysisModal()">&#10005;</button>
         </div>
         <div class="modal-body modal-body-sm">
@@ -219,7 +219,7 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
                         <div id="analysis-status-msg" class="analysis-status-msg"></div>
                     </div>
                     <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
-                    <span>Static analysis in progress. This may take a few minutes...</span>
+                    <span>Code risk analysis in progress. This may take a few minutes...</span>
                 </div>
             </div>
         </div>
@@ -230,11 +230,11 @@ const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl"
 <div id="analysis-started-modal" class="modal-overlay" style="display:none;">
     <div class="modal-box modal-box-sm">
         <div class="modal-header modal-header-sm">
-            Static Analysis Started
+            Code Risk Analysis Started
         </div>
         <div class="modal-body modal-body-sm" style="text-align:center; padding:24px 20px;">
             <p style="margin:0 0 20px; line-height:1.6;">
-                Static analysis has started.<br>
+                Code risk analysis has started.<br>
                 Results may take a few minutes.<br>
                 You will be notified when the analysis is complete.
             </p>

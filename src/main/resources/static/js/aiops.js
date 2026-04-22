@@ -533,6 +533,67 @@ const appCodeRiskLists     = {};   // { appName: CodeRiskRecord[] }       newest
 const appSelectedRiskIdx   = {};   // { appName: number }
 let stompClient = null;
 
+// ── Analysis Running Indicator ────────────────────────────────────────────────
+
+let _analysisStartTime    = null;
+let _analysisElapsedTimer = null;
+let _analysisTimeoutTimer = null;
+const ANALYSIS_INDICATOR_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+function _getOrCreateAnalysisIndicator() {
+    let el = document.getElementById('analysis-running-indicator');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'analysis-running-indicator';
+        el.className = 'analysis-running-indicator';
+        el.innerHTML = `
+            <div class="analysis-running-title">
+                Code risk analysis in progress...
+                <span class="analysis-running-elapsed" id="analysis-running-elapsed">(00:00)</span>
+            </div>
+            <div class="analysis-running-msg" id="analysis-running-msg"></div>`;
+        document.body.appendChild(el);
+    }
+    el.classList.remove('fading-out');
+    return el;
+}
+
+function _startAnalysisElapsedTimer() {
+    if (_analysisElapsedTimer) clearInterval(_analysisElapsedTimer);
+    _analysisElapsedTimer = setInterval(() => {
+        const el = document.getElementById('analysis-running-elapsed');
+        if (!el || !_analysisStartTime) return;
+        const elapsed = Math.floor((Date.now() - _analysisStartTime) / 1000);
+        const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const ss = String(elapsed % 60).padStart(2, '0');
+        el.textContent = `(${mm}:${ss})`;
+    }, 1000);
+}
+
+function _resetAnalysisIndicatorTimeout() {
+    if (_analysisTimeoutTimer) clearTimeout(_analysisTimeoutTimer);
+    _analysisTimeoutTimer = setTimeout(_hideAnalysisIndicator, ANALYSIS_INDICATOR_TIMEOUT_MS);
+}
+
+function _hideAnalysisIndicator() {
+    if (_analysisElapsedTimer) { clearInterval(_analysisElapsedTimer); _analysisElapsedTimer = null; }
+    if (_analysisTimeoutTimer) { clearTimeout(_analysisTimeoutTimer); _analysisTimeoutTimer = null; }
+    _analysisStartTime = null;
+    const el = document.getElementById('analysis-running-indicator');
+    if (!el) return;
+    el.classList.add('fading-out');
+    el.addEventListener('transitionend', () => el.remove(), { once: true });
+}
+
+function _updateAnalysisIndicator(text) {
+    if (!_analysisStartTime) _analysisStartTime = Date.now();
+    _getOrCreateAnalysisIndicator();
+    const msgEl = document.getElementById('analysis-running-msg');
+    if (msgEl) msgEl.textContent = text;
+    if (!_analysisElapsedTimer) _startAnalysisElapsedTimer();
+    _resetAnalysisIndicatorTimeout();
+}
+
 function connectWebSocket() {
     // Disconnect existing client before creating a new one to prevent duplicate subscriptions
     if (stompClient !== null) {
@@ -562,29 +623,32 @@ function connectWebSocket() {
 }
 
 function showAnalysisStatus(text) {
+    // Update modal status if modal is still visible (brief loading state)
     const modal = document.getElementById('run-analysis-modal');
-    if (!modal || modal.style.display === 'none') return;
-    const el = document.getElementById('analysis-status-msg');
-    if (!el) return;
-
-    const isWarning = text.startsWith('⚠') || text.startsWith('⏳');
-
-    if (el.textContent) {
-        // Slide existing message upward and fade out, then replace
-        el.classList.add('analysis-status-exit');
-        el.addEventListener('animationend', () => {
-            el.classList.remove('analysis-status-exit');
-            el.textContent = text;
-            el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
-            el.classList.add('analysis-status-enter');
-            el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
-        }, { once: true });
-    } else {
-        el.textContent = text;
-        el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
-        el.classList.add('analysis-status-enter');
-        el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
+    if (modal && modal.style.display !== 'none') {
+        const el = document.getElementById('analysis-status-msg');
+        if (el) {
+            const isWarning = text.startsWith('⚠') || text.startsWith('⏳');
+            if (el.textContent) {
+                el.classList.add('analysis-status-exit');
+                el.addEventListener('animationend', () => {
+                    el.classList.remove('analysis-status-exit');
+                    el.textContent = text;
+                    el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
+                    el.classList.add('analysis-status-enter');
+                    el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
+                }, { once: true });
+            } else {
+                el.textContent = text;
+                el.className = 'analysis-status-msg' + (isWarning ? ' analysis-status-warn' : '');
+                el.classList.add('analysis-status-enter');
+                el.addEventListener('animationend', () => el.classList.remove('analysis-status-enter'), { once: true });
+            }
+        }
     }
+
+    // Always update bottom-left running indicator
+    _updateAnalysisIndicator(text);
 }
 
 async function handleFiringRecord(record) {
@@ -1047,6 +1111,9 @@ function showNotification(appName) {
 }
 
 function showAnalysisNotification(text) {
+    // Hide the bottom-left running indicator — analysis is complete
+    _hideAnalysisIndicator();
+
     let container = document.getElementById('notification-container');
     if (!container) {
         container = document.createElement('div');
@@ -1083,7 +1150,7 @@ function buildAppDetailHtml(appName) {
     return `
         <div class="app-detail-header-row">
             <span class="app-detail-title">${escHtml(appName)}</span>
-            <button class="btn-run-analysis" onclick="openRunAnalysisModal()">Run Static Analysis</button>
+            <button class="btn-run-analysis" onclick="openRunAnalysisModal()">Run Code Risk Analysis</button>
         </div>
         <div class="tab-bar">
             <button class="tab-btn" data-tab="coderisk" id="tab-btn-coderisk" style="${hasRisk ? '' : 'display:none;'}">Code Risk</button>
@@ -1345,7 +1412,7 @@ function renderCodeRiskContent(appName) {
     const rec  = list[idx] || null;
 
     if (!rec) {
-        content.innerHTML = `<div class="info-message">No static analysis has been performed for this application.</div>`;
+        content.innerHTML = `<div class="info-message">No code risk analysis has been performed for this application.</div>`;
         return;
     }
 
@@ -1451,6 +1518,7 @@ async function submitRunAnalysis() {
         closeRunAnalysisModal();
 
         if (data.success) {
+            _analysisStartTime = Date.now();
             openAnalysisStartedModal();
         } else {
             // Show error inline
