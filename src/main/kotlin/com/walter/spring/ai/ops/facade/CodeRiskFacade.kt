@@ -58,7 +58,7 @@ class CodeRiskFacade(
             messageService.pushAnalysisStatus("Analysis complete. Saving results...")
             val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
             val branchLabel = record.branch?.takeIf { it.isNotBlank() } ?: "default"
-            messageService.pushAnalysisResult("Static analysis of $branchLabel branch for $appName has completed.")
+            messageService.pushAnalysisResult("Code risk analysis of $branchLabel branch for $appName has completed.")
         }, executor).exceptionally { ex ->
             log.error("Code risk analysis failed for app: {}, error: {}", appName, ex.message)
             messageService.pushAnalysisResult("⚠️ Analysis failed: ${ex.message}")

@@ -14,11 +14,11 @@ data class CodeRiskResponse(
     val message: String,
 ) {
     companion object {
-        fun success() = CodeRiskResponse(true, "Static analysis has been started.")
+        fun success() = CodeRiskResponse(true, "Code risk analysis has been started.")
         fun failure(e: Exception) = CodeRiskResponse(false, extractMessage(e.message))
 
         private fun extractMessage(raw: String?): String {
-            if (raw == null) return "Static analysis failed."
+            if (raw == null) return "Code risk analysis failed."
             return runCatching {
                 val jsonStart = raw.indexOf('{')
                 val json = if (jsonStart >= 0) raw.substring(jsonStart) else raw
