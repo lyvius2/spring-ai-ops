@@ -61,7 +61,7 @@ class CodeRiskFacade(
             messageService.pushAnalysisResult("Static analysis of $branchLabel branch for $appName has completed.")
         }, executor).exceptionally { ex ->
             log.error("Code risk analysis failed for app: {}, error: {}", appName, ex.message)
-            messageService.pushAnalysisStatus("⚠️ Analysis failed: ${ex.message}")
+            messageService.pushAnalysisResult("⚠️ Analysis failed: ${ex.message}")
             null
         }
     }
