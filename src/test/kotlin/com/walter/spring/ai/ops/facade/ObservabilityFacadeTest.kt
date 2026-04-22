@@ -11,6 +11,7 @@ import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
+import com.walter.spring.ai.ops.service.MessageService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -23,7 +24,6 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.messaging.simp.SimpMessagingTemplate
 
 @Suppress("UNCHECKED_CAST")
 private fun <T> anyObject(): T = Mockito.any() as T
@@ -37,7 +37,7 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var githubService: GithubService
     @Mock private lateinit var gitlabService: GitlabService
     @Mock private lateinit var aiModelService: AiModelService
-    @Mock private lateinit var messagingTemplate: SimpMessagingTemplate
+    @Mock private lateinit var messageService: MessageService
 
     private lateinit var incidentAnalyzeFacade: ObservabilityFacade
 
@@ -45,7 +45,7 @@ class ObservabilityFacadeTest {
     fun setUp() {
         incidentAnalyzeFacade = ObservabilityFacade(
             applicationService, grafanaService, lokiService,
-            githubService, gitlabService, aiModelService, messagingTemplate
+            githubService, gitlabService, aiModelService, messageService
         )
     }
 
@@ -114,7 +114,7 @@ class ObservabilityFacadeTest {
         incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
-        verifyNoInteractions(applicationService, grafanaService, lokiService, aiModelService, messagingTemplate)
+        verifyNoInteractions(applicationService, grafanaService, lokiService, aiModelService, messageService)
     }
 
     @Test
@@ -184,7 +184,7 @@ class ObservabilityFacadeTest {
         incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
-        verify(messagingTemplate).convertAndSend(eq("/topic/firing"), anyObject<AnalyzeFiringRecord>())
+        verify(messageService).pushFiring(anyObject())
     }
 
     @Test
