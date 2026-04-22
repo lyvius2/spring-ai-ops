@@ -36,6 +36,7 @@ class CodeRiskController(
     @PostMapping
     fun analyzeCodeRisk(@RequestBody request: CodeRiskRequest): CodeRiskResponse {
         return try {
+            codeRiskFacade.analyze(request.appName, request.branch)
             CodeRiskResponse.success()
         } catch (e: Exception) {
             CodeRiskResponse.failure(e)

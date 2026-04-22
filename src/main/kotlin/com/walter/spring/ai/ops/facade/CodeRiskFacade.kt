@@ -55,7 +55,6 @@ class CodeRiskFacade(
 
         CompletableFuture.runAsync( {
             val (markdown, issues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
-
             messageService.pushAnalysisStatus("Analysis complete. Saving results...")
             val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
             val branchLabel = record.branch?.takeIf { it.isNotBlank() } ?: "default"
