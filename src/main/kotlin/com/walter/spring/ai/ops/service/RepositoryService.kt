@@ -102,7 +102,7 @@ class RepositoryService(
 
     fun saveAnalyzedResult(appName: String, gitUrl: String, branch: String, result: String, issues: List<CodeRiskIssue> = emptyList()): CodeRiskRecord {
         val key = "$REDIS_KEY_CODE_RISK_PREFIX$appName"
-        val record = CodeRiskRecord(LocalDateTime.now(), appName, gitUrl, branch, result, issues.ifEmpty { null })
+        val record = CodeRiskRecord(LocalDateTime.now(), appName, gitUrl, branch, true, result, issues.ifEmpty { null })
         redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
         return record
     }

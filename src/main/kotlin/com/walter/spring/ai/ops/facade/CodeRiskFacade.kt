@@ -1,9 +1,12 @@
 package com.walter.spring.ai.ops.facade
 
 import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.core.JsonToken
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.record.CodeRiskIssue
+import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.ApplicationService
@@ -57,11 +60,10 @@ class CodeRiskFacade(
             val (markdown, issues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
             messageService.pushAnalysisStatus("Analysis complete. Saving results...")
             val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
-            val branchLabel = record.branch?.takeIf { it.isNotBlank() } ?: "default"
-            messageService.pushAnalysisResult("Code risk analysis of $branchLabel branch for $appName has completed.")
+            messageService.pushAnalysisResult(record)
         }, executor).exceptionally { ex ->
             log.error("Code risk analysis failed for app: {}, error: {}", appName, ex.message)
-            messageService.pushAnalysisResult("⚠️ Analysis failed: ${ex.message}")
+            messageService.pushAnalysisResult(CodeRiskRecord.failure(appName, gitRepoUrl, branch, ex.message))
             null
         }
     }
@@ -103,15 +105,59 @@ class CodeRiskFacade(
         val afterStart = raw.substring(startIdx + ISSUES_START.length)
         val endIdx = afterStart.indexOf(ISSUES_END)
         val jsonText = (if (endIdx == -1) afterStart else afterStart.substring(0, endIdx)).trim()
+        val sanitized = sanitizeControlChars(jsonText)
 
         val issues = runCatching {
-            lenientMapper.readValue(jsonText, Array<CodeRiskIssue>::class.java).toList()
+            lenientMapper.readValue(sanitized, Array<CodeRiskIssue>::class.java).toList()
         }.getOrElse {
-            log.warn("Failed to parse issues JSON: {}", it.message)
-            messageService.pushAnalysisStatus("⚠ Some issue data could not be parsed — continuing with partial results.")
-            emptyList()
+            log.warn("Failed to parse issues JSON — attempting recovery: {}", it.message)
+            val recovered = recoverIssuesFromJson(sanitized)
+            if (recovered.isEmpty()) {
+                messageService.pushAnalysisStatus("⚠ Some issue data could not be parsed — continuing with partial results.")
+            } else {
+                log.info("Recovered {} issue(s) from malformed JSON", recovered.size)
+            }
+            recovered
         }
         return Pair(markdown, issues)
+    }
+
+    private fun sanitizeControlChars(jsonText: String): String {
+        val sb = StringBuilder(jsonText.length)
+        var inString = false
+        var escape = false
+        for (c in jsonText) {
+            when {
+                escape           -> { sb.append(c); escape = false }
+                c == '\\'        -> { sb.append(c); escape = true }
+                c == '"'         -> { sb.append(c); inString = !inString }
+                inString && c == '\n' -> sb.append("\\n")
+                inString && c == '\r' -> sb.append("\\r")
+                inString && c == '\t' -> sb.append("\\t")
+                inString && c.code < 0x20 ->
+                    sb.append("\\u${c.code.toString(16).padStart(4, '0')}")
+                else             -> sb.append(c)
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun recoverIssuesFromJson(jsonText: String): List<CodeRiskIssue> {
+        val recovered = mutableListOf<CodeRiskIssue>()
+        try {
+            lenientMapper.createParser(jsonText).use { parser ->
+                var token = parser.nextToken()
+                if (token == JsonToken.START_ARRAY) token = parser.nextToken()
+                while (token == JsonToken.START_OBJECT) {
+                    runCatching {
+                        val node = lenientMapper.readTree<JsonNode>(parser)
+                        recovered.add(lenientMapper.treeToValue(node, CodeRiskIssue::class.java))
+                    }
+                    token = try { parser.nextToken() } catch (_: Exception) { break }
+                }
+            }
+        } catch (_: Exception) { /* ignore outer parse errors */ }
+        return recovered
     }
 
     private fun executeMapPhase(chunks: List<CodeChunk>): List<String> {

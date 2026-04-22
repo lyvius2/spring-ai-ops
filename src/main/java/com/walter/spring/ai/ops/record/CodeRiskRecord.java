@@ -17,8 +17,14 @@ public record CodeRiskRecord(
     String githubUrl,
     @Schema(description = "Branch that was analysed", example = "main")
     String branch,
+    @Schema(description = "Code risk analysis success status")
+    Boolean isSuccess,
     @Schema(description = "LLM-generated overall analysis summary in Markdown")
     String analyzedResult,
     @Schema(description = "List of individual risk issues extracted from the analysis", nullable = true)
     List<CodeRiskIssue> issues
-) {}
+) {
+    public static CodeRiskRecord failure(String application, String githubUrl, String branch, String resultMessage) {
+        return new CodeRiskRecord(LocalDateTime.now(), application, githubUrl, branch, false, resultMessage, null);
+    }
+}

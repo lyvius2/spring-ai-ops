@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.record.CodeRiskRecord
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
 
@@ -20,7 +21,7 @@ class MessageService(private val messagingTemplate: SimpMessagingTemplate) {
         messagingTemplate.convertAndSend("/topic/analysis/status", message)
     }
 
-    fun pushAnalysisResult(message: String) {
-        messagingTemplate.convertAndSend("/topic/analysis/result", message)
+    fun pushAnalysisResult(record: CodeRiskRecord) {
+        messagingTemplate.convertAndSend("/topic/analysis/result", record)
     }
 }
