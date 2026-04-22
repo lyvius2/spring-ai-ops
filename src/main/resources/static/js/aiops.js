@@ -1420,6 +1420,14 @@ function closeRunAnalysisModal() {
     if (el) { el.textContent = ''; el.className = 'analysis-status-msg'; }
 }
 
+function openAnalysisStartedModal() {
+    document.getElementById('analysis-started-modal').style.display = 'flex';
+}
+
+function closeAnalysisStartedModal() {
+    document.getElementById('analysis-started-modal').style.display = 'none';
+}
+
 async function submitRunAnalysis() {
     if (!selectedApp) return;
     const branch = document.getElementById('run-analysis-branch').value.trim();
@@ -1442,18 +1450,8 @@ async function submitRunAnalysis() {
 
         closeRunAnalysisModal();
 
-        if (data.success && data.data) {
-            // Prepend to local list and re-render
-            if (!appCodeRiskLists[selectedApp]) appCodeRiskLists[selectedApp] = [];
-            appCodeRiskLists[selectedApp].unshift(data.data);
-            if (appCodeRiskLists[selectedApp].length > 5) appCodeRiskLists[selectedApp].length = 5;
-            appSelectedRiskIdx[selectedApp] = 0;
-
-            // Show the Code Risk tab
-            const tabBtn = document.getElementById('tab-btn-coderisk');
-            if (tabBtn) tabBtn.style.display = '';
-            switchToTab('coderisk');
-            renderCodeRiskContent(selectedApp);
+        if (data.success) {
+            openAnalysisStartedModal();
         } else {
             // Show error inline
             document.getElementById('run-analysis-loading').style.display = 'none';

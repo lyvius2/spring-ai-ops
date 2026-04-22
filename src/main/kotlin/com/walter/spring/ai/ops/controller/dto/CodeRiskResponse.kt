@@ -14,7 +14,7 @@ data class CodeRiskResponse(
     val message: String,
 ) {
     companion object {
-        fun success() = CodeRiskResponse(true, "Static analysis completed successfully.")
+        fun success() = CodeRiskResponse(true, "Static analysis has been started.")
         fun failure(e: Exception) = CodeRiskResponse(false, extractMessage(e.message))
 
         private fun extractMessage(raw: String?): String {
