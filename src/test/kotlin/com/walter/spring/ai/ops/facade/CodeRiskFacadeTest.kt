@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.MessageService
+import com.walter.spring.ai.ops.service.PmdService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
@@ -36,6 +37,7 @@ class CodeRiskFacadeTest {
 
     @Mock private lateinit var repositoryService: RepositoryService
     @Mock private lateinit var aiModelService: AiModelService
+    @Mock private lateinit var pmdService: PmdService
     @Mock private lateinit var applicationService: ApplicationService
     @Mock private lateinit var githubService: GithubService
     @Mock private lateinit var gitlabService: GitlabService
@@ -59,7 +61,7 @@ class CodeRiskFacadeTest {
         }
         val handler = CodeAnalysisResultHandler(lenientMapper)
         facade = CodeRiskFacade(
-            repositoryService, aiModelService, applicationService,
+            repositoryService, aiModelService, pmdService, applicationService,
             githubService, gitlabService, messageService, handler,
             inlineExecutor,
             tokenThreshold = 27000,

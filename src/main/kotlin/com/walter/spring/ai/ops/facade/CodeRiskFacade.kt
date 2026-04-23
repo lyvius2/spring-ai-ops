@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
+import com.walter.spring.ai.ops.service.PmdService
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
@@ -18,11 +19,13 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.Semaphore
+import kotlin.io.path.extension
 
 @Facade
 class CodeRiskFacade(
     private val repositoryService: RepositoryService,
     private val aiModelService: AiModelService,
+    private val pmdService: PmdService,
     private val applicationService: ApplicationService,
     private val githubService: GithubService,
     private val gitlabService: GitlabService,
@@ -49,7 +52,7 @@ class CodeRiskFacade(
         val tokenCount = aiModelService.estimateTokenCount(bundle)
         log.info("Code risk analysis started — app: {}, estimated tokens: {}", appName, tokenCount)
 
-        CompletableFuture.runAsync( {
+        val analyzeByAi = CompletableFuture.runAsync( {
             val (markdown, issues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
             messageService.pushAnalysisStatus("Analysis complete. Saving results...")
             val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
@@ -59,6 +62,21 @@ class CodeRiskFacade(
             messageService.pushAnalysisResult(CodeRiskRecord.failure(appName, gitRepoUrl, branch, ex.message))
             null
         }
+
+        if (isJvm(files)) {
+            val analyzeByPmd = CompletableFuture.runAsync( {
+                pmdService.executeAnalyze(sourcePath).let { markdown ->
+                    messageService.pushAnalysisStatus("PMD analysis complete. Saving results...")
+                }
+            }, executor)
+            // TODO : handle PMD result saving and potential errors, possibly in parallel with AI analysis. Compares two results to produce the intersection result.
+        }
+
+    }
+
+    private fun isJvm(files: List<Path>): Boolean {
+        val languages = files.map { it.extension.lowercase() }.toSet()
+        return (("kt" in languages || "kts" in languages) || "java" in languages)
     }
 
     private fun executeAnalyze(tokenCount: Int, bundle: String, files: List<Path>, sourcePath: Path): Pair<String, List<CodeRiskIssue>> = if (tokenCount <= tokenThreshold) {
@@ -92,7 +110,9 @@ class CodeRiskFacade(
 
     private fun parseResponse(raw: String): Pair<String, List<CodeRiskIssue>> {
         val startIdx = raw.indexOf(ISSUES_START)
-        if (startIdx == -1) return Pair(raw.trim(), emptyList())
+        if (startIdx == -1) {
+            return Pair(raw.trim(), emptyList())
+        }
 
         val markdown = raw.substring(0, startIdx).trim()
         val afterStart = raw.substring(startIdx + ISSUES_START.length)
