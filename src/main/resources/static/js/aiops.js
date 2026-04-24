@@ -167,41 +167,234 @@ function hideLlmAlerts() {
     });
 }
 
-// ── Loki Modal ───────────────────────────────────────────────────────────────
+// ── Observability Modal (Loki / Prometheus) ───────────────────────────────────
 
-async function saveLokiUrl() {
-    const url   = document.getElementById('loki-url-input').value.trim();
-    const btn   = document.getElementById('loki-save-btn');
-    const errEl = document.getElementById('loki-alert-error');
+let _observabilityStatusCache = null;
+let _statusLokiUrl = '';
+let _statusPrometheusUrl = '';
 
-    if (!url) {
+function renderObservabilityStatus() {
+    const cell = document.getElementById('status-observability');
+    if (!cell) return;
+
+    const badges = [];
+    if (_statusLokiUrl) {
+        badges.push(`<img src="/images/loki.svg" class="provider-logo provider-logo-badge" alt="Loki" onerror="this.style.display='none'">
+                     <span class="badge badge-up">LOKI</span>`);
+    }
+    if (_statusPrometheusUrl) {
+        badges.push(`<img src="/images/prometheus.svg" class="provider-logo provider-logo-badge" alt="Prometheus" onerror="this.style.display='none'">
+                     <span class="badge badge-up">PROMETHEUS</span>`);
+    }
+    if (badges.length === 0) return;
+
+    cell.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div>
+                ${badges.join(' ')}
+                <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
+            </div>
+            <button class="btn-secondary" style="margin-top:0;" onclick="openObservabilityModalForReconfigure()">Reconfigure</button>
+        </div>
+    `;
+}
+
+async function checkObservabilityAndProceed() {
+    let lokiConfigured = false;
+    let prometheusConfigured = false;
+    let lokiUrl = '';
+    let prometheusUrl = '';
+
+    try {
+        const [lokiRes, promRes] = await Promise.all([
+            fetch('/api/loki/status'),
+            fetch('/api/prometheus/status'),
+        ]);
+        const lokiData = await lokiRes.json();
+        const promData = await promRes.json();
+        lokiConfigured = lokiData.isConfigured;
+        prometheusConfigured = promData.isConfigured;
+        lokiUrl = lokiData.lokiUrl || '';
+        prometheusUrl = promData.prometheusUrl || '';
+        _observabilityStatusCache = { lokiConfigured, prometheusConfigured, lokiUrl, prometheusUrl };
+    } catch (_) {
+        // If check fails, proceed anyway
+    }
+
+    if (lokiConfigured) renderLokiStatus(lokiUrl);
+    if (prometheusConfigured) renderPrometheusStatus(prometheusUrl);
+
+    if (lokiConfigured) {
+        // Loki is required; Prometheus is optional — proceed once Loki is configured
+        await checkGitRemoteAndProceed();
+        return;
+    }
+
+    // Loki not configured — open modal defaulting to LOKI
+    openObservabilityModal(_observabilityStatusCache, false, 'LOKI');
+}
+
+function openObservabilityModal(statusData, closeable, defaultProvider) {
+    _observabilityStatusCache = statusData;
+
+    const closeBtn = document.getElementById('observability-modal-close');
+    closeBtn.style.display = closeable ? 'block' : 'none';
+
+    const desc = document.getElementById('observability-modal-desc');
+    desc.textContent = closeable
+        ? 'Reconfigure an observability provider.'
+        : 'Enter the base URL for each observability provider to enable analysis.';
+
+    // Build provider radio buttons from OBSERVABILITY_PROVIDERS enum
+    const group = document.getElementById('observability-provider-group');
+    group.innerHTML = '';
+    OBSERVABILITY_PROVIDERS.forEach((p, idx) => {
+        const lname = p.name.toLowerCase();
+        const div = document.createElement('div');
+        div.className = 'radio-option';
+        div.innerHTML = `
+            <input type="radio" name="observability-provider" id="obs-${lname}" value="${p.name}" ${idx === 0 ? 'checked' : ''}>
+            <label for="obs-${lname}">
+                <img src="/images/${lname}.svg" class="provider-logo" alt="${p.displayName}" onerror="this.style.display='none'">
+                ${p.displayName}
+            </label>`;
+        group.appendChild(div);
+    });
+
+    if (defaultProvider) {
+        const radio = group.querySelector(`input[value="${defaultProvider}"]`);
+        if (radio) radio.checked = true;
+    }
+
+    group.querySelectorAll('input[name="observability-provider"]').forEach(radio => {
+        radio.addEventListener('change', updateObservabilityUrlPlaceholder);
+    });
+    updateObservabilityUrlPlaceholder();
+
+    document.getElementById('observability-alert-error').style.display = 'none';
+    document.getElementById('observability-save-btn').disabled = false;
+    document.getElementById('observability-save-btn').textContent = 'Save';
+
+    document.getElementById('observability-modal').style.display = 'flex';
+}
+
+function updateObservabilityUrlPlaceholder() {
+    const selected = document.querySelector('input[name="observability-provider"]:checked');
+    if (!selected) return;
+    const providerInfo = OBSERVABILITY_PROVIDERS.find(p => p.name === selected.value);
+    const urlInput = document.getElementById('observability-url-input');
+
+    if (providerInfo) urlInput.placeholder = providerInfo.apiUrl;
+
+    if (_observabilityStatusCache) {
+        const savedUrl = selected.value === 'LOKI'
+            ? _observabilityStatusCache.lokiUrl
+            : _observabilityStatusCache.prometheusUrl;
+        urlInput.value = savedUrl || '';
+    } else {
+        urlInput.value = '';
+    }
+}
+
+function closeObservabilityModal() {
+    document.getElementById('observability-modal').style.display = 'none';
+}
+
+async function openObservabilityModalForReconfigure() {
+    try {
+        const [lokiRes, promRes] = await Promise.all([
+            fetch('/api/loki/status'),
+            fetch('/api/prometheus/status'),
+        ]);
+        const lokiData = await lokiRes.json();
+        const promData = await promRes.json();
+        _observabilityStatusCache = {
+            lokiConfigured: lokiData.isConfigured,
+            prometheusConfigured: promData.isConfigured,
+            lokiUrl: lokiData.lokiUrl || '',
+            prometheusUrl: promData.prometheusUrl || '',
+        };
+    } catch (_) {}
+    openObservabilityModal(_observabilityStatusCache, true, null);
+}
+
+async function saveObservabilityConfig() {
+    const providerEl    = document.querySelector('input[name="observability-provider"]:checked');
+    const url           = document.getElementById('observability-url-input').value.trim();
+    const btn           = document.getElementById('observability-save-btn');
+    const errEl         = document.getElementById('observability-alert-error');
+    const isReconfigure = document.getElementById('observability-modal-close').style.display !== 'none';
+
+    if (!providerEl) {
+        errEl.textContent = 'Please select a provider.';
+        errEl.style.display = 'block';
+        return;
+    }
+    // Loki URL is required; Prometheus URL is optional (allow blank to skip)
+    if (!url && providerEl.value === 'LOKI') {
         errEl.textContent = 'Please enter a Loki URL.';
         errEl.style.display = 'block';
         return;
     }
 
     btn.disabled = true;
+    btn.textContent = 'Saving...';
     errEl.style.display = 'none';
 
+    const isLoki  = providerEl.value === 'LOKI';
+    const apiPath = isLoki ? '/api/loki/config' : '/api/prometheus/config';
+
     try {
-        const res = await fetch('/api/loki/config', {
+        const res  = await fetch(apiPath, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url }),
         });
-        if (res.ok) {
-            document.getElementById('loki-modal').style.display = 'none';
-            renderLokiStatus(url);
+        const data = await res.json();
+
+        if (res.ok && data.status === 'OK') {
+            if (isLoki) {
+                renderLokiStatus(url);
+                if (_observabilityStatusCache) { _observabilityStatusCache.lokiUrl = url; _observabilityStatusCache.lokiConfigured = true; }
+            } else {
+                renderPrometheusStatus(url);
+                if (_observabilityStatusCache) { _observabilityStatusCache.prometheusUrl = url; _observabilityStatusCache.prometheusConfigured = true; }
+            }
+
+            if (isReconfigure) {
+                closeObservabilityModal();
+                return;
+            }
+
+            // Loki is required; Prometheus is optional.
+            // After saving, if Loki is now configured, proceed to Git Remote.
+            const lokiOk = _observabilityStatusCache ? _observabilityStatusCache.lokiConfigured : isLoki;
+
+            if (!lokiOk) {
+                // Prometheus was just saved but Loki is still missing — switch to LOKI
+                btn.disabled = false;
+                btn.textContent = 'Save';
+                const nextRadio = document.querySelector('input[value="LOKI"]');
+                if (nextRadio) {
+                    nextRadio.checked = true;
+                    updateObservabilityUrlPlaceholder();
+                }
+                return;
+            }
+
+            closeObservabilityModal();
             await checkGitRemoteAndProceed();
         } else {
-            errEl.textContent = 'Failed to save Loki URL. Please try again.';
+            errEl.textContent = data.message || 'Failed to save. Please try again.';
             errEl.style.display = 'block';
             btn.disabled = false;
+            btn.textContent = 'Save';
         }
     } catch (e) {
         errEl.textContent = 'A network error occurred.';
         errEl.style.display = 'block';
         btn.disabled = false;
+        btn.textContent = 'Save';
     }
 }
 
@@ -301,8 +494,8 @@ document.addEventListener('keydown', function (e) {
         saveLlmConfig();
     } else if (document.getElementById('git-remote-modal').style.display === 'flex') {
         saveGitRemoteConfig();
-    } else if (document.getElementById('loki-modal').style.display === 'flex') {
-        saveLokiUrl();
+    } else if (document.getElementById('observability-modal').style.display === 'flex') {
+        saveObservabilityConfig();
     } else if (document.getElementById('select-provider-modal').style.display === 'flex') {
         submitSelectProvider();
     } else if (document.getElementById('run-analysis-modal').style.display === 'flex') {
@@ -1913,26 +2106,6 @@ function applyHighlighting(containerEl) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
-async function openLokiModal() {
-    document.getElementById('loki-modal-close').style.display = '';
-    document.getElementById('loki-alert-error').style.display = 'none';
-    document.getElementById('loki-save-btn').disabled = false;
-
-    // Pre-fill existing URL if configured
-    const urlInput = document.getElementById('loki-url-input');
-    urlInput.value = '';
-    try {
-        const res  = await fetch('/api/loki/status');
-        const data = await res.json();
-        if (data.lokiUrl) urlInput.value = data.lokiUrl;
-    } catch (_) { /* proceed without pre-fill */ }
-
-    document.getElementById('loki-modal').style.display = 'flex';
-}
-
-function closeLokiModal() {
-    document.getElementById('loki-modal').style.display = 'none';
-}
 
 function renderGitRemoteStatus(statusData) {
     const cell = document.getElementById('status-git-remote');
@@ -1961,19 +2134,13 @@ function renderGitRemoteStatus(statusData) {
 }
 
 function renderLokiStatus(lokiUrl) {
-    const cell = document.getElementById('status-loki-url');
-    if (lokiUrl) {
-        cell.innerHTML = `
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-                <div>
-                    <img src="/images/loki.svg" class="provider-logo provider-logo-badge" alt="Loki">
-                    <span class="badge badge-up">LOKI</span>
-                    <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected (${escHtml(lokiUrl)})</span>
-                </div>
-                <button class="btn-secondary" style="margin-top:0;" onclick="openLokiModal()">Reconfigure</button>
-            </div>
-        `;
-    }
+    _statusLokiUrl = lokiUrl || '';
+    renderObservabilityStatus();
+}
+
+function renderPrometheusStatus(prometheusUrl) {
+    _statusPrometheusUrl = prometheusUrl || '';
+    renderObservabilityStatus();
 }
 
 function renderLlmStatus(provider) {
@@ -1993,21 +2160,8 @@ function renderLlmStatus(provider) {
 }
 
 async function proceedAfterLlm() {
-    // Step 2: check Loki
-    try {
-        const res  = await fetch('/api/loki/status');
-        const data = await res.json();
-        if (!data.isConfigured) {
-            document.getElementById('loki-modal').style.display = 'flex';
-            return;
-        }
-        renderLokiStatus(data.lokiUrl);
-    } catch (_) {
-        // If check fails, proceed anyway
-    }
-
-    // Step 3: check Git Remote → show modal if needed, or render status and proceed
-    await checkGitRemoteAndProceed();
+    // Step 2: check Observability (Loki + Prometheus)
+    await checkObservabilityAndProceed();
 }
 
 async function init() {

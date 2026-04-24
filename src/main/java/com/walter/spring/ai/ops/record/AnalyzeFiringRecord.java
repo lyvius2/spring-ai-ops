@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.record;
 
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult;
+import com.walter.spring.ai.ops.connector.dto.PrometheusQueryResult;
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -16,6 +17,8 @@ public record AnalyzeFiringRecord(
     GrafanaAlertingRequest alertingMessage,
     @Schema(description = "Loki log query result used for analysis")
     LokiQueryResult log,
+    @Schema(description = "Prometheus metric query result used for analysis; null if Prometheus is not configured")
+    PrometheusQueryResult metrics,
     @Schema(description = "LLM-generated analysis result in Markdown")
     String analyzeResults,
     @Schema(description = "Timestamp when the analysis was completed")

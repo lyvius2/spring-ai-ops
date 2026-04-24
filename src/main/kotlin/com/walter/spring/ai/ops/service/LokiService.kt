@@ -16,9 +16,7 @@ class LokiService(
     private val lokiConnector: LokiConnector,
     @Value("\${loki.url:}") private val lokiUrlFromConfig: String,
 ) {
-    fun isConfigured(): Boolean {
-        return getLokiUrl().isNotBlank()
-    }
+    fun isConfigured(): Boolean = getLokiUrl().isNotBlank()
 
     fun getLokiUrl(): String =
         redisTemplate.opsForValue().get(REDIS_KEY_LOKI_URL)?.takeIf { it.isNotBlank() }
@@ -32,5 +30,4 @@ class LokiService(
     fun executeLogQuery(request: LokiQueryInquiry): LokiQueryResult {
         return lokiConnector.queryRange(request)
     }
-
 }

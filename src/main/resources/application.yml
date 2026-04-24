@@ -39,6 +39,9 @@ feign:
   loki:
     connect-timeout: 5000   # Loki connect timeout (ms). Actual I/O timeout — takes effect before Resilience4j TimeLimiter.
     read-timeout: 30000     # Loki read timeout (ms)
+  prometheus:
+    connect-timeout: 5000   # Prometheus connect timeout (ms)
+    read-timeout: 30000     # Prometheus read timeout (ms)
   github:
     connect-timeout: 5000   # GitHub API connect timeout (ms)
     read-timeout: 30000     # GitHub API read timeout (ms)
@@ -62,6 +65,8 @@ ai:
     api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
     max-tokens: 8192                    # Max output tokens for Anthropic model : Default is 8192
 
+prometheus:
+  url: ${PROMETHEUS_URL:}               # Set your Prometheus URL (e.g., http://localhost:9090) : Default is empty
 loki:
   url: ${LOKI_URL:}                     # Set your Loki URL (e.g., http://localhost:3100) : Default is empty
 github:

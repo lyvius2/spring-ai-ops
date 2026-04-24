@@ -3,6 +3,7 @@ package com.walter.spring.ai.ops.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_FIRING_PREFIX
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
+import com.walter.spring.ai.ops.connector.dto.PrometheusQueryInquiry
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.util.zSetPushWithTtl
@@ -18,6 +19,29 @@ class GrafanaService(
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
 ) {
+    fun convertMetricInquiry(request: GrafanaAlertingRequest): PrometheusQueryInquiry {
+        val alert = request.alerts.firstOrNull { it.isFiring() }
+            ?: request.alerts.firstOrNull()
+            ?: throw IllegalArgumentException("No alerts found in the Grafana request.")
+
+        val prometheusLabels = alert.prometheusLabels()
+        val selector = if (prometheusLabels.isNotEmpty()) {
+            prometheusLabels.entries
+                .joinToString(separator = ", ", prefix = "{", postfix = "}") { (k, v) ->
+                    val escaped = v.replace("\\", "\\\\").replace("\"", "\\\"")
+                    """$k="$escaped""""
+                }
+        } else {
+            "{job=~\".+\"}"
+        }
+
+        return PrometheusQueryInquiry(
+            query = selector,
+            start = alert.prometheusStartSeconds(),
+            end = alert.prometheusEndSeconds(),
+        )
+    }
+
     fun convertLogInquiry(request: GrafanaAlertingRequest): LokiQueryInquiry {
         val alert = request.alerts.firstOrNull { it.isFiring() }
             ?: request.alerts.firstOrNull()

@@ -88,6 +88,7 @@ class GrafanaServiceTest {
         application,
         createRequest(alerts = listOf(createAlert())),
         LokiQueryResult(),
+        null,
         "analysis result",
         LocalDateTime.of(2026, 4, 12, 10, 1, 0),
     )

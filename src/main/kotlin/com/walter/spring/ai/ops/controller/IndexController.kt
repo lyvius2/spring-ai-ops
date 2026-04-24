@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.controller
 
 import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.code.LlmProvider
+import com.walter.spring.ai.ops.code.ObservabilityProvider
 import com.walter.spring.ai.ops.config.CsrfTokenProvider
 import com.walter.spring.ai.ops.service.AiModelService
 import io.swagger.v3.oas.annotations.Hidden
@@ -25,6 +26,7 @@ class IndexController(
         model.addAttribute("activeProfile", environment.activeProfiles.firstOrNull() ?: "default")
         model.addAttribute("llmProviders", LlmProvider.entries.toTypedArray())
         model.addAttribute("gitRemoteProviders", GitRemoteProvider.entries.toTypedArray())
+        model.addAttribute("observabilityProviders", ObservabilityProvider.entries.toTypedArray())
         model.addAttribute("csrfToken", csrfTokenProvider.token)
         return "index"
     }

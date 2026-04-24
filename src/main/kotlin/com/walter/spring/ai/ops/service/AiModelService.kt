@@ -243,7 +243,7 @@ class AiModelService(
         }
     }
 
-    fun executeAnalyzeFiring(alertSection: String, logSection: String): String {
+    fun executeAnalyzeFiring(alertSection: String, logSection: String, metricSection: String = ""): String {
         val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert in analyzing application errors and logs. " +
@@ -257,7 +257,11 @@ class AiModelService(
                 appendLine()
                 append(logSection)
                 appendLine()
-                appendLine("Based on the above alert and logs, please provide in markdown format:")
+                if (metricSection.isNotBlank()) {
+                    append(metricSection)
+                    appendLine()
+                }
+                appendLine("Based on the above alert${if (metricSection.isNotBlank()) ", metrics," else ""} and logs, please provide in markdown format:")
                 appendLine("1. Root cause analysis")
                 appendLine("2. Affected components")
                 appendLine("3. Recommended actions to resolve the issue")

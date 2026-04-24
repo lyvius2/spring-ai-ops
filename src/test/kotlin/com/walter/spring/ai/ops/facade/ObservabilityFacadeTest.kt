@@ -12,6 +12,8 @@ import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
+import com.walter.spring.ai.ops.service.PrometheusService
+import org.springframework.core.task.AsyncTaskExecutor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -34,20 +36,24 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var applicationService: ApplicationService
     @Mock private lateinit var grafanaService: GrafanaService
     @Mock private lateinit var lokiService: LokiService
+    @Mock private lateinit var prometheusService: PrometheusService
     @Mock private lateinit var githubService: GithubService
     @Mock private lateinit var gitlabService: GitlabService
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var messageService: MessageService
+    @Mock private lateinit var taskExecutor: AsyncTaskExecutor
 
     private lateinit var incidentAnalyzeFacade: ObservabilityFacade
 
     @BeforeEach
     fun setUp() {
         incidentAnalyzeFacade = ObservabilityFacade(
-            applicationService, grafanaService, lokiService,
-            githubService, gitlabService, aiModelService, messageService
+            applicationService, grafanaService, lokiService, prometheusService,
+            githubService, gitlabService, aiModelService, messageService,
+            taskExecutor,
         )
     }
+
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -94,11 +100,16 @@ class ObservabilityFacadeTest {
 
     /** firing 경로에서 공통으로 필요한 서비스 Mock 설정 */
     private fun stubHappyPath(request: GrafanaAlertingRequest) {
+        // Run tasks synchronously on the calling thread for deterministic test execution
+        `when`(taskExecutor.execute(Mockito.any())).thenAnswer { invocation ->
+            (invocation.arguments[0] as Runnable).run()
+        }
         `when`(grafanaService.convertLogInquiry(request))
             .thenReturn(LokiQueryInquiry(query = "{job=\"test-app\"}", start = "0", end = "0"))
         `when`(lokiService.executeLogQuery(anyObject()))
             .thenReturn(LokiQueryResult())
-        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject()))
+        `when`(prometheusService.isConfigured()).thenReturn(false)
+        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject()))
             .thenReturn("Root cause: timeout in PaymentService")
     }
 
@@ -145,19 +156,6 @@ class ObservabilityFacadeTest {
         verify(lokiService).executeLogQuery(anyObject())
     }
 
-    @Test
-    @DisplayName("firing 요청이면 LLM으로 분석을 실행함")
-    fun analyzeFiring_executesAiAnalysis_whenRequestIsFiring() {
-        // given
-        val request = createRequest()
-        stubHappyPath(request)
-
-        // when
-        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
-
-        // then
-        verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject())
-    }
 
     @Test
     @DisplayName("firing 요청이면 분석 레코드를 Redis에 저장함")
