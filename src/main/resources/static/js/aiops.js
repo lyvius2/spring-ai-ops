@@ -1023,7 +1023,165 @@ function renderPrometheusMetrics(metrics) {
     if (!metrics) {
         return `<div class="metric-empty">No metric data.</div>`;
     }
-    return `<pre class="json-block">${syntaxHighlightJson(JSON.stringify(metrics, null, 2))}</pre>`;
+    const results = metrics?.data?.result;
+    if (!Array.isArray(results) || results.length === 0) {
+        return `<div class="metric-empty">No metric series found.</div>`;
+    }
+
+    const trendSeries = [];
+    const tableSeries = [];
+    let omittedTrendCount = 0;
+    let omittedTableCount = 0;
+    results.forEach(series => {
+        const samples = metricSamples(series);
+        if (samples.length > 1) {
+            const stats = metricStats(samples);
+            if (isZeroMetricStats(stats)) {
+                omittedTrendCount += 1;
+            } else {
+                trendSeries.push({ series, samples });
+            }
+        } else if (samples[0]?.value === 0) {
+            omittedTableCount += 1;
+        } else {
+            tableSeries.push({ series, samples });
+        }
+    });
+
+    return `
+        <div class="metric-viewer">
+            <div class="metric-summary">
+                <span>${escHtml(metrics.data?.resultType || 'unknown')}</span>
+                <span>${results.length} series</span>
+                <span>${trendSeries.length} trends</span>
+                <span>${tableSeries.length} snapshots</span>
+                <span>${omittedTrendCount + omittedTableCount} omitted</span>
+            </div>
+            ${renderMetricTrendGroups(trendSeries)}
+            ${renderMetricTable(tableSeries)}
+        </div>`;
+}
+
+function metricSamples(series) {
+    const values = Array.isArray(series?.values) ? series.values : (Array.isArray(series?.value) ? [series.value] : []);
+    return values
+        .map(([timestamp, value]) => ({ timestamp: Number(timestamp), value: Number(value) }))
+        .filter(sample => Number.isFinite(sample.timestamp) && Number.isFinite(sample.value));
+}
+
+function metricName(series) {
+    return series?.metric?.__name__ || '(unnamed metric)';
+}
+
+function metricLabelSummary(metric) {
+    const labels = Object.entries(metric || {})
+        .filter(([key]) => key !== '__name__' && key !== 'application' && key !== 'job' && key !== 'instance');
+    if (labels.length === 0) return 'default';
+    return labels.map(([key, value]) => `${key}=${value}`).join(', ');
+}
+
+function metricStats(samples) {
+    if (!samples.length) return { latest: null, min: null, max: null };
+    const values = samples.map(sample => sample.value);
+    return {
+        latest: values[values.length - 1],
+        min: Math.min(...values),
+        max: Math.max(...values),
+    };
+}
+
+function isZeroMetricStats(stats) {
+    return stats.latest === 0 && stats.min === 0 && stats.max === 0;
+}
+
+function formatMetricValue(value) {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+    const abs = Math.abs(value);
+    if (abs !== 0 && (abs >= 1_000_000 || abs < 0.001)) return value.toExponential(3);
+    return Number(value.toFixed(4)).toLocaleString();
+}
+
+function formatMetricTime(timestamp) {
+    if (!Number.isFinite(timestamp)) return '—';
+    return new Date(timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function renderMetricSparkline(samples) {
+    const width = 260;
+    const height = 64;
+    const pad = 8;
+    const xMin = samples[0].timestamp;
+    const xMax = samples[samples.length - 1].timestamp;
+    const yValues = samples.map(sample => sample.value);
+    const yMin = Math.min(...yValues);
+    const yMax = Math.max(...yValues);
+    const xSpan = xMax - xMin || 1;
+    const ySpan = yMax - yMin || 1;
+    const points = samples.map(sample => {
+        const x = pad + ((sample.timestamp - xMin) / xSpan) * (width - pad * 2);
+        const y = yMax === yMin
+            ? height / 2
+            : height - pad - ((sample.value - yMin) / ySpan) * (height - pad * 2);
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+
+    return `<svg class="metric-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="Metric trend">
+        <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="metric-axis"></line>
+        <polyline points="${points}" class="metric-line"></polyline>
+    </svg>`;
+}
+
+function renderMetricTrendGroups(trendSeries) {
+    if (trendSeries.length === 0) return '';
+    const groups = trendSeries.reduce((acc, item) => {
+        const name = metricName(item.series);
+        if (!acc.has(name)) acc.set(name, []);
+        acc.get(name).push(item);
+        return acc;
+    }, new Map());
+
+    return `<div class="metric-trend-groups">${Array.from(groups.entries()).map(([name, items], idx) => `
+        <details class="metric-group" ${idx < 3 ? 'open' : ''}>
+            <summary>${escHtml(name)} <span>${items.length} series</span></summary>
+            <div class="metric-series-list">
+                ${items.map(item => renderMetricTrendRow(item.series, item.samples)).join('')}
+            </div>
+        </details>
+    `).join('')}</div>`;
+}
+
+function renderMetricTrendRow(series, samples) {
+    const stats = metricStats(samples);
+    return `<div class="metric-series-row">
+        <div class="metric-series-chart">${renderMetricSparkline(samples)}</div>
+        <div class="metric-series-meta">
+            <div class="metric-labels">${escHtml(metricLabelSummary(series.metric))}</div>
+            <div class="metric-range">${escHtml(formatMetricTime(samples[0].timestamp))} - ${escHtml(formatMetricTime(samples[samples.length - 1].timestamp))}</div>
+        </div>
+        <div class="metric-values">
+            <span><b>Latest</b>${escHtml(formatMetricValue(stats.latest))}</span>
+            <span><b>Min</b>${escHtml(formatMetricValue(stats.min))}</span>
+            <span><b>Max</b>${escHtml(formatMetricValue(stats.max))}</span>
+        </div>
+    </div>`;
+}
+
+function renderMetricTable(tableSeries) {
+    if (tableSeries.length === 0) return '';
+    return `<div class="metric-table-wrap">
+        <table class="metric-table">
+            <thead><tr><th>Metric</th><th>Labels</th><th>Time</th><th>Value</th></tr></thead>
+            <tbody>${tableSeries.map(({ series, samples }) => {
+                const sample = samples[0] || {};
+                return `<tr>
+                    <td>${escHtml(metricName(series))}</td>
+                    <td>${escHtml(metricLabelSummary(series.metric))}</td>
+                    <td>${escHtml(formatMetricTime(sample.timestamp))}</td>
+                    <td>${escHtml(formatMetricValue(sample.value))}</td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table>
+    </div>`;
 }
 
 function renderAnalysisLayers(appName, record) {
@@ -1034,12 +1192,12 @@ function renderAnalysisLayers(appName, record) {
         </div>`;
     }
     return `
-        <div class="analysis-layer">
-            <div class="layer-header">Metric Firing</div>
+        <details class="analysis-layer collapsible-layer">
+            <summary class="layer-header">Metric Firing<span class="layer-toggle-icon"></span></summary>
             <pre class="json-block">${syntaxHighlightJson(JSON.stringify(record.alertingMessage, null, 2))}</pre>
-        </div>
+        </details>
         <div class="analysis-layer">
-            <div class="layer-header">Metric</div>
+            <div class="layer-header metric-layer-header">Metric<span class="layer-header-disclaimer">* Zero-value trend metrics and zero-value table rows are omitted.</span></div>
             ${renderPrometheusMetrics(record.metrics)}
         </div>
         <div class="analysis-layer">

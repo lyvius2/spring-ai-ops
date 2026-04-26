@@ -808,6 +808,33 @@ body {
     justify-content: space-between;
 }
 
+.collapsible-layer > .layer-header {
+    cursor: pointer;
+    list-style: none;
+}
+
+.collapsible-layer > .layer-header::-webkit-details-marker {
+    display: none;
+}
+
+.collapsible-layer:not([open]) > .layer-header {
+    border-bottom: none;
+}
+
+.layer-toggle-icon {
+    width: 8px;
+    height: 8px;
+    border-left: 2px solid #34302d;
+    border-bottom: 2px solid #34302d;
+    flex: 0 0 auto;
+    transform: rotate(45deg);
+    transition: transform 0.18s ease;
+}
+
+.collapsible-layer[open] .layer-toggle-icon {
+    transform: rotate(-45deg);
+}
+
 .layer-header-disclaimer {
     font-size: 0.7rem;
     font-weight: 400;
@@ -923,6 +950,182 @@ body {
     background: #1e1e1e;
     font-family: "SFMono-Regular", Consolas, monospace;
     font-size: 0.77rem;
+}
+
+.metric-viewer {
+    background: #fafafa;
+    max-height: 620px;
+    overflow-y: auto;
+}
+
+.metric-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e4e4e4;
+    background: #fff;
+}
+
+.metric-summary span {
+    padding: 2px 8px;
+    border: 1px solid #d8e8cc;
+    border-radius: 3px;
+    background: #eef5e6;
+    color: #34302d;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.metric-trend-groups {
+    padding: 8px 10px 2px;
+}
+
+.metric-group {
+    border: 1px solid #e4e4e4;
+    border-radius: 3px;
+    background: #fff;
+    margin-bottom: 8px;
+}
+
+.metric-group summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    color: #34302d;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.metric-group summary span {
+    margin-left: 6px;
+    color: #777;
+    font-family: Arial, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+.metric-series-list {
+    border-top: 1px solid #e4e4e4;
+}
+
+.metric-series-row {
+    display: grid;
+    grid-template-columns: 260px minmax(180px, 1fr) minmax(180px, auto);
+    gap: 12px;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.metric-series-row:last-child {
+    border-bottom: none;
+}
+
+.metric-sparkline {
+    display: block;
+    width: 260px;
+    height: 64px;
+    background: #1e1e1e;
+    border-radius: 3px;
+}
+
+.metric-axis {
+    stroke: #3d3d3d;
+    stroke-width: 1;
+}
+
+.metric-line {
+    fill: none;
+    stroke: #6db33f;
+    stroke-width: 2;
+}
+
+.metric-labels {
+    color: #34302d;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.74rem;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.metric-range {
+    margin-top: 4px;
+    color: #888;
+    font-size: 0.7rem;
+}
+
+.metric-values {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(58px, 1fr));
+    gap: 6px;
+}
+
+.metric-values span {
+    padding: 5px 7px;
+    background: #f5f5f5;
+    border: 1px solid #e4e4e4;
+    border-radius: 3px;
+    color: #34302d;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.72rem;
+    text-align: right;
+}
+
+.metric-values b {
+    display: block;
+    margin-bottom: 2px;
+    color: #777;
+    font-family: Arial, sans-serif;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.metric-table-wrap {
+    padding: 8px 10px 10px;
+    overflow-x: auto;
+}
+
+.metric-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: 0.75rem;
+}
+
+.metric-table th,
+.metric-table td {
+    border: 1px solid #e4e4e4;
+    padding: 7px 9px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.metric-table th {
+    background: #f5f5f5;
+    color: #34302d;
+    font-weight: 700;
+}
+
+.metric-table td {
+    color: #555;
+    font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+@media (max-width: 900px) {
+    .metric-series-row {
+        grid-template-columns: 1fr;
+    }
+
+    .metric-sparkline {
+        width: 100%;
+    }
+
+    .metric-values {
+        grid-template-columns: repeat(3, 1fr);
+    }
 }
 
 .credential-error-msg {
