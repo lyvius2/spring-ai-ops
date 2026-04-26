@@ -916,6 +916,15 @@ body {
     font-size: 0.77rem;
 }
 
+.metric-empty {
+    padding: 14px 16px;
+    color: #666;
+    font-style: italic;
+    background: #1e1e1e;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.77rem;
+}
+
 .credential-error-msg {
     margin: 12px 0;
     padding: 14px 18px;

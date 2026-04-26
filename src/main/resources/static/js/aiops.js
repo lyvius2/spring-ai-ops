@@ -1019,6 +1019,13 @@ function renderLokiLog(log) {
     }).join('')}</div>`;
 }
 
+function renderPrometheusMetrics(metrics) {
+    if (!metrics) {
+        return `<div class="metric-empty">No metric data.</div>`;
+    }
+    return `<pre class="json-block">${syntaxHighlightJson(JSON.stringify(metrics, null, 2))}</pre>`;
+}
+
 function renderAnalysisLayers(appName, record) {
     if (!record) {
         return `<div class="info-message">
@@ -1030,6 +1037,10 @@ function renderAnalysisLayers(appName, record) {
         <div class="analysis-layer">
             <div class="layer-header">Metric Firing</div>
             <pre class="json-block">${syntaxHighlightJson(JSON.stringify(record.alertingMessage, null, 2))}</pre>
+        </div>
+        <div class="analysis-layer">
+            <div class="layer-header">Metric</div>
+            ${renderPrometheusMetrics(record.metrics)}
         </div>
         <div class="analysis-layer">
             <div class="layer-header">Log</div>
@@ -2179,4 +2190,3 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
-
