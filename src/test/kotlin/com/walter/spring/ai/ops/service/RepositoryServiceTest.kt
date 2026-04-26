@@ -39,7 +39,7 @@ class RepositoryServiceTest {
     fun setUp() {
         service = RepositoryService(
             redisTemplate = redisTemplate,
-            objectMapper = ObjectMapper(),
+            objectMapper = ObjectMapper().findAndRegisterModules(),
             retentionHours = 120L,
             maximumViewCount = 5L,
         )
@@ -50,6 +50,7 @@ class RepositoryServiceTest {
 
         Git.init().setDirectory(remoteRepoDir.toFile()).call().use { git ->
             remoteRepoDir.resolve("README.md").toFile().writeText("# Test Repository")
+            remoteRepoDir.resolve("Main.kt").toFile().writeText("fun main() = println(\"test\")")
             git.add().addFilepattern(".").call()
             git.commit().setMessage("Initial commit")
                 .setAuthor("Test", "test@example.com")
@@ -358,8 +359,8 @@ class RepositoryServiceTest {
 
         // then
         assertThat(result).contains("# Repository source code bundle")
-        assertThat(result).contains("README.md")
-        assertThat(result).contains("# Test Repository")
+        assertThat(result).contains("Main.kt")
+        assertThat(result).contains("fun main() = println(\"test\")")
     }
 
     @Test
