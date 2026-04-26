@@ -4,12 +4,16 @@ import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.record.CodeRiskIssue
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
-import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
-import com.walter.spring.ai.ops.service.dto.CodeChunk
+import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.RepositoryService
+import com.walter.spring.ai.ops.sonar.service.RiskCorrelationService
+import com.walter.spring.ai.ops.sonar.service.SonarAnalysisService
+import com.walter.spring.ai.ops.sonar.service.SonarService
+import com.walter.spring.ai.ops.service.dto.CodeChunk
+import com.walter.spring.ai.ops.sonar.service.dto.SonarIssue
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -28,6 +32,9 @@ class CodeRiskFacade(
     private val gitlabService: GitlabService,
     private val messageService: MessageService,
     private val codeAnalysisResultHandler: CodeAnalysisResultHandler,
+    private val sonarService: SonarService,
+    private val sonarAnalysisService: SonarAnalysisService,
+    private val riskCorrelationService: RiskCorrelationService,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
     @Value("\${analysis.code-risk.token-threshold:27000}") private val tokenThreshold: Int,
     @Value("\${analysis.code-risk.map-reduce-concurrency:3}") private val mapReduceConcurrency: Int,
@@ -49,10 +56,12 @@ class CodeRiskFacade(
         val tokenCount = aiModelService.estimateTokenCount(bundle)
         log.info("Code risk analysis started — app: {}, estimated tokens: {}", appName, tokenCount)
 
-        CompletableFuture.runAsync( {
-            val (markdown, issues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
+        CompletableFuture.runAsync({
+            val sonarIssues = runSonarAnalysis(sourcePath)
+            val (markdown, llmIssues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
+            val correlatedIssues = riskCorrelationService.correlate(llmIssues, sonarIssues)
             messageService.pushAnalysisStatus("Analysis complete. Saving results...")
-            val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
+            val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, correlatedIssues)
             messageService.pushAnalysisResult(record)
         }, executor).exceptionally { ex ->
             log.error("Code risk analysis failed for app: {}, error: {}", appName, ex.message)
@@ -80,6 +89,25 @@ class CodeRiskFacade(
     }
 
     fun getRecords(appName: String) = repositoryService.getCodeRiskRecords(appName)
+
+    /**
+     * Runs SonarQube static analysis against the cloned source directory.
+     * Returns an empty list on any failure (sonar-scanner not installed, scan error, etc.)
+     * so that LLM analysis results are never blocked by Sonar unavailability.
+     */
+    fun runSonarAnalysis(sourcePath: Path): List<SonarIssue> {
+        return try {
+            val scanResult = sonarService.analyze(sourcePath)
+            if (!scanResult.success) {
+                log.warn("SonarQube scan failed for '{}' — continuing without static analysis", scanResult.projectKey)
+                return emptyList()
+            }
+            sonarAnalysisService.extractIssues(scanResult.projectKey)
+        } catch (e: Exception) {
+            log.warn("SonarQube analysis unavailable for '{}': {}", sourcePath.fileName, e.message)
+            emptyList()
+        }
+    }
 
     private fun resolveAccessToken(gitUrl: String): String? {
         val lower = gitUrl.lowercase()

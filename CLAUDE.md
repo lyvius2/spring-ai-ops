@@ -140,6 +140,7 @@ loki:
 - Defines and implements the sequencing and orchestration of business logic across multiple Services.
 - Coordinates calls to Services in the correct order to fulfill a use case (e.g., fetch diff → call LLM → save record → push via WebSocket).
 - Does not contain detailed business logic itself; delegates to the appropriate Services.
+- **Must not inject other Facade beans.** A Facade may only depend on Service-layer beans. If two Facades share orchestration logic, extract that logic into a shared Service.
 
 ## Data Class Rules
 

@@ -24,6 +24,15 @@ repositories {
 extra["springAiVersion"] = "1.1.0"
 extra["springCloudVersion"] = "2024.0.1"
 
+// Separate configuration for SonarQube language plugin JARs.
+// These are NOT added to the Spring Boot classloader — doing so would cause classpath
+// conflicts because the plugin JARs bundle their own Jasper/Servlet versions.
+// Instead, the JARs are copied to build/resources/main/sonar-plugins/ and served
+// as raw byte resources by SonarPluginRegistry at runtime.
+val sonarPlugins by configurations.creating {
+    isTransitive = false
+}
+
 dependencies {
     implementation(platform("org.springframework.ai:spring-ai-bom:${property("springAiVersion")}"))
     implementation(platform("org.springframework.cloud:spring-cloud-dependencies:${property("springCloudVersion")}"))
@@ -50,11 +59,37 @@ dependencies {
     implementation(kotlin("reflect"))
     implementation(kotlin("stdlib"))
 
+    implementation("org.sonarsource.api.plugin:sonar-plugin-api:10.3.0.1951") {
+        exclude(group = "org.slf4j")
+        exclude(group = "ch.qos.logback")
+    }
+    implementation("com.google.protobuf:protobuf-java:3.25.5")
+
+    // SonarQube language analysis plugins — resolved into sonarPlugins configuration only,
+    // NOT placed on the Spring Boot classloader. Copied to sonar-plugins/ resources by
+    // the copySonarPlugins task and served as byte resources via SonarPluginRegistry.
+    sonarPlugins("org.sonarsource.kotlin:sonar-kotlin-plugin:3.5.0.9240")
+    sonarPlugins("org.sonarsource.java:sonar-java-plugin:8.28.0.43176")
+    sonarPlugins("org.sonarsource.javascript:sonar-javascript-plugin:12.3.0.39932")
+    sonarPlugins("org.sonarsource.python:sonar-python-plugin:5.21.0.32726")
+    sonarPlugins("org.sonarsource.slang:sonar-ruby-plugin:1.7.0.883")
+
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// Copy sonar plugin JARs into the compiled resources directory so they are accessible
+// at runtime as classpath:sonar-plugins/*.jar without polluting the application classloader.
+tasks.register<Copy>("copySonarPlugins") {
+    from(configurations["sonarPlugins"])
+    into(layout.buildDirectory.dir("resources/main/sonar-plugins"))
+}
+
+tasks.named("processResources") {
+    dependsOn("copySonarPlugins")
 }
 
 tasks.withType<Test> {

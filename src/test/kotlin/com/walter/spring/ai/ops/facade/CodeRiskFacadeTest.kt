@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.facade
 
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.record.CodeRiskIssue
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
@@ -9,7 +10,12 @@ import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.RepositoryService
+import com.walter.spring.ai.ops.sonar.service.RiskCorrelationService
+import com.walter.spring.ai.ops.sonar.service.SonarAnalysisService
+import com.walter.spring.ai.ops.sonar.service.SonarService
 import com.walter.spring.ai.ops.service.dto.CodeChunk
+import com.walter.spring.ai.ops.sonar.service.dto.SonarIssue
+import com.walter.spring.ai.ops.sonar.service.dto.SonarScanResult
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -40,6 +46,9 @@ class CodeRiskFacadeTest {
     @Mock private lateinit var githubService: GithubService
     @Mock private lateinit var gitlabService: GitlabService
     @Mock private lateinit var messageService: MessageService
+    @Mock private lateinit var sonarService: SonarService
+    @Mock private lateinit var sonarAnalysisService: SonarAnalysisService
+    @Mock private lateinit var riskCorrelationService: RiskCorrelationService
     @Mock private lateinit var sourcePath: Path
 
     private lateinit var facade: CodeRiskFacade
@@ -49,7 +58,6 @@ class CodeRiskFacadeTest {
 
     private val githubUrl = "https://github.com/org/repo"
     private val gitlabUrl = "https://gitlab.com/org/repo"
-    private val unknownUrl = "https://bitbucket.org/org/repo"
 
     @BeforeEach
     fun setUp() {
@@ -61,6 +69,7 @@ class CodeRiskFacadeTest {
         facade = CodeRiskFacade(
             repositoryService, aiModelService, applicationService,
             githubService, gitlabService, messageService, handler,
+            sonarService, sonarAnalysisService, riskCorrelationService,
             inlineExecutor,
             tokenThreshold = 27000,
             mapReduceConcurrency = 3,
@@ -75,7 +84,8 @@ class CodeRiskFacadeTest {
 
     /**
      * Stubs the full single-call happy path.
-     * Uses anyString() / anyList() (both @NotNull) to avoid Kotlin null-check NPE that occurs with eq().
+     * sonarService returns a failed scan so the Sonar branch returns emptyList() without further setup.
+     * riskCorrelationService passes the LLM issue list through unchanged.
      */
     private fun stubSingleCallHappyPath(
         appName: String = "my-app",
@@ -94,6 +104,11 @@ class CodeRiskFacadeTest {
         `when`(repositoryService.buildBundle(sourcePath, files)).thenReturn("bundle")
         `when`(aiModelService.estimateTokenCount("bundle")).thenReturn(tokenCount)
         `when`(aiModelService.executeAnalyzeCodeRisk("bundle")).thenReturn(rawResponse)
+        // Sonar scan fails gracefully → emptyList()
+        `when`(sonarService.analyze(sourcePath)).thenReturn(SonarScanResult("my-project", success = false))
+        // Correlation pass-through: return first arg (llmIssues) unchanged
+        `when`(riskCorrelationService.correlate(anyList() ?: emptyList(), anyList() ?: emptyList()))
+            .thenAnswer { it.getArgument(0) }
         // Use anyString()/anyList() — both @NotNull in Mockito, safe with Kotlin non-null params
         `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList()))
             .thenReturn(returnRecord)
@@ -128,7 +143,6 @@ class CodeRiskFacadeTest {
         // then
         verify(messageService).pushAnalysisResult(record)
     }
-
 
     @Test
     @DisplayName("GitHub URL이면 githubService.getToken()으로 액세스 토큰 조회")
@@ -190,9 +204,37 @@ class CodeRiskFacadeTest {
         )
     }
 
+    @Test
+    @DisplayName("SonarQube 분석 성공 시 riskCorrelationService.correlate가 호출된다")
+    fun givenSonarScanSucceeds_whenAnalyze_thenCorrelationIsInvoked() {
+        // given
+        stubSingleCallHappyPath()
+        val sonarIssues = listOf(SonarIssue("kotlin:S101", "MAJOR", "Foo.kt", 10, "Rename"))
+        `when`(sonarService.analyze(sourcePath)).thenReturn(SonarScanResult("my-app", success = true))
+        `when`(sonarAnalysisService.extractIssues("my-app")).thenReturn(sonarIssues)
+
+        // when
+        facade.analyze("my-app", "main")
+
+        // then
+        verify(riskCorrelationService).correlate(anyList() ?: emptyList(), anyList() ?: emptyList())
+    }
+
+    @Test
+    @DisplayName("SonarQube가 예외를 던지면 LLM 결과만으로 저장이 완료된다")
+    fun givenSonarServiceThrows_whenAnalyze_thenSavesWithLlmResultsOnly() {
+        // given
+        stubSingleCallHappyPath()
+        `when`(sonarService.analyze(sourcePath)).thenThrow(RuntimeException("sonar-scanner not found"))
+
+        // when
+        facade.analyze("my-app", "main")
+
+        // then — save still happens (Sonar failure is non-fatal)
+        verify(repositoryService).saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList())
+    }
+
     // ── analyze — map-reduce path ──────────────────────────────────────────────
-
-
 
     @Test
     @DisplayName("맵-리듀스 분석 완료 후 최종 레코드를 WebSocket으로 전송")
@@ -210,6 +252,9 @@ class CodeRiskFacadeTest {
         `when`(repositoryService.createChunks(sourcePath, files)).thenReturn(listOf(chunk))
         `when`(aiModelService.executeAnalyzeCodeRisk("bundle-chunk")).thenReturn("## Chunk")
         `when`(aiModelService.executeFinalAnalyzeCode(listOf("## Chunk"))).thenReturn("## Final")
+        `when`(sonarService.analyze(sourcePath)).thenReturn(SonarScanResult("my-app", success = false))
+        `when`(riskCorrelationService.correlate(anyList() ?: emptyList(), anyList() ?: emptyList()))
+            .thenAnswer { it.getArgument(0) }
         val record = makeRecord()
         `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList()))
             .thenReturn(record)
@@ -219,6 +264,25 @@ class CodeRiskFacadeTest {
 
         // then
         verify(messageService).pushAnalysisResult(record)
+    }
+
+    // ── runSonarAnalysis ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("스캔 성공 시 extractIssues 결과를 반환한다")
+    fun givenSuccessfulScan_whenRunSonarAnalysis_thenReturnsExtractedIssues() {
+        // given
+        val sonarIssues = listOf(SonarIssue("kotlin:S101", "MAJOR", "Foo.kt", 10, "Rename"))
+        `when`(sonarService.analyze(sourcePath)).thenReturn(SonarScanResult("my-project", success = true))
+        `when`(sonarAnalysisService.extractIssues("my-project")).thenReturn(sonarIssues)
+
+        val path = repositoryService.cloneRepository("spring-ai-ops", "https://github.com/lyvius2/spring-ai-ops.git", "main")
+
+        // when
+        val result = facade.runSonarAnalysis(sourcePath)
+
+        // then
+        assertThat(result).isEqualTo(sonarIssues)
     }
 
     @Test
@@ -234,4 +298,3 @@ class CodeRiskFacadeTest {
         assertThat(result).isEmpty()
     }
 }
-

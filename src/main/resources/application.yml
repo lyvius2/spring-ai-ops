@@ -62,6 +62,15 @@ ai:
     api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
     max-tokens: 8192                    # Max output tokens for Anthropic model : Default is 8192
 
+sonar:
+  scanner:
+    path: ${SONAR_SCANNER_PATH:}               # Override sonar-scanner binary path. Leave empty to use auto-installed binary.
+    version: 6.2.1.4610                        # sonar-scanner-cli version to auto-download if not already installed.
+    install-dir: ${SONAR_SCANNER_INSTALL_DIR:} # Override install directory. Leave empty to use ~/.spring-ai-ops/sonar-scanner.
+    engine-version: 10.3.0.82913               # SonarQube server build version for sonar-scanner-engine-shaded.
+                                               # Downloaded from repox.jfrog.io/repox/sonarsource (NOT Maven Central).
+                                               # Override with SONAR_ENGINE_VERSION env var if this version is unavailable.
+
 loki:
   url: ${LOKI_URL:}                     # Set your Loki URL (e.g., http://localhost:3100) : Default is empty
 github:
