@@ -1,6 +1,7 @@
 # Spring AI Ops
 
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI or Anthropic) to analyze errors, review code, and perform static code risk analysis in real time — with results delivered to a live dashboard via WebSocket.
+[한국어 문서](README_KR.md)  
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time — with results delivered to a live dashboard via WebSocket. Prometheus metric data is optionally fetched alongside Loki logs to enrich LLM error analysis.  
 
 ---
 
@@ -13,7 +14,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
   - [Static Code Risk Analysis](#static-code-risk-analysis)
   - [GitHub → LLM](#github--llm-code-review)
   - [GitLab → LLM](#gitlab--llm-code-review)
-  - [Grafana → Loki → LLM](#grafana--loki--llm-error-analysis)
+  - [Grafana → Loki + Prometheus → LLM](#grafana--loki--prometheus--llm-error-analysis)
 - [Screenshots](#screenshots)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
@@ -28,7 +29,6 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 - [API Documentation (Swagger)](#api-documentation-swagger)
 - [Package Structure](#package-structure)
 - [License](#license)
-- [한국어 문서](#한국어-문서)
 
 ---
 
@@ -40,7 +40,7 @@ Spring AI Ops bridges your monitoring and version-control toolchain with large l
 
 2. **Automated Code Review** — When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review covering correctness, security, performance, and code quality.
 
-3. **Incident Intelligence** — When Grafana fires an alert, the application automatically queries the corresponding Loki logs, feeds the alert context and log lines to an LLM, and streams a root-cause analysis to the dashboard.
+3. **Incident Intelligence** — When Grafana fires an alert, the application automatically queries the corresponding Loki logs and — if configured — fetches relevant Prometheus metrics over the same time window. Both the log lines and metric data are fed to an LLM together with the alert context to produce a richer root-cause analysis, streamed to the dashboard in real time.
 
 All results are pushed to connected browsers in real time via STOMP WebSocket.
 
@@ -56,7 +56,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 |---|---|
 | **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
-| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs → root cause, affected components, and recommended actions |
+| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metrics (optional) → root cause, affected components, and recommended actions |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
@@ -80,13 +80,14 @@ No relational database is used. Redis serves as the sole persistence layer — s
 │  WebhookController  ──►  AnalyzeFacade                         │
 │  (POST /webhook/*)        │                                     │
 │                           ├─ ApplicationService  ──► Redis      │
-│  AiConfigController       ├─ GrafanaService      ──► Redis      │
-│  LokiConfigController     ├─ GithubService       ──► Redis      │
-│  ApplicationController    ├─ GitlabService       ──► Redis      │
-│  FiringController         ├─ LokiService         ──► Loki API   │
-│  CommitController         ├─ GithubConnector     ──► GitHub API │
-│                           ├─ GitlabConnector     ──► GitLab API │
-│                           └─ AiModelService      ──► LLM API   │
+│  AiConfigController       ├─ GrafanaService      ──► Redis           │
+│  LokiConfigController     ├─ GithubService       ──► Redis           │
+│  ApplicationController    ├─ GitlabService       ──► Redis           │
+│  FiringController         ├─ LokiService         ──► Loki API        │
+│  CommitController         ├─ PrometheusService   ──► Prometheus API  │
+│                           ├─ GithubConnector     ──► GitHub API      │
+│                           ├─ GitlabConnector     ──► GitLab API      │
+│                           └─ AiModelService      ──► LLM API        │
 │                                    │                            │
 │                           SimpMessagingTemplate                 │
 │                                    │                            │
@@ -213,7 +214,7 @@ POST /webhook/git[/{application}]
 
 ---
 
-### Grafana → Loki → LLM (Error Analysis)
+### Grafana → Loki + Prometheus → LLM (Error Analysis)
 
 ```
 Grafana Alert fires
@@ -230,13 +231,20 @@ POST /webhook/grafana[/{application}]
         │    start = alert.startsAt − 5 min buffer
         │    end   = alert.endsAt  (current time if zero-value)
         │
-        ├─ Query Loki
+        ├─ Query Loki logs  (if loki.url is configured)
         │    GET {loki.url}/loki/api/v1/query_range
         │    ?query={...}&start=...&end=...
         │
+        ├─ Query Prometheus metrics  ── OPTIONAL (if prometheus.url is configured)
+        │    GET {prometheus.url}/api/v1/query_range
+        │    Derives metric selectors from the same alert labels
+        │    e.g. {job="my-app"} for CPU, memory, HTTP error rate
+        │
         ├─ Call LLM
         │    System: expert in application errors and logs
-        │    User:   alert context + log lines
+        │    User:   alert context
+        │            + Loki log lines   (if available)
+        │            + Prometheus metric data  (if available)
         │            → root cause / affected components / recommended actions
         │
         ├─ Save AnalyzeFiringRecord to Redis  (key: firing:{application})
@@ -248,6 +256,8 @@ POST /webhook/grafana[/{application}]
 ```
 
 > **Prerequisite**: Prometheus metric labels and Loki stream labels must share the same key set (`job`, `instance`, `namespace`, `pod`, etc.). Configure Promtail or Grafana Alloy accordingly.
+
+> **Prometheus is optional**: If `prometheus.url` is not set, the analysis proceeds with Loki logs only. No errors are raised.
 
 ---
 
@@ -300,6 +310,7 @@ POST /webhook/grafana[/{application}]
 | Language | Kotlin 2.2 / Java 21 |
 | Framework | Spring Boot 3.4.4 |
 | AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
+| Observability | Loki (log queries), Prometheus (metric queries, optional) |
 | Persistence | Redis (primary store, no RDBMS) |
 | Dev Redis | Embedded Redis (auto-start, no install needed) |
 | HTTP Client | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
@@ -330,8 +341,9 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 ### Prerequisites
 
 - JDK 21+
-- (Optional) A running Loki instance if you want log queries
-- An API key for at least one LLM provider (OpenAI or Anthropic)
+- An API key for at least one LLM provider (OpenAI, Anthropic)
+- (Optional) A running Loki instance for log queries
+- (Optional) A running Prometheus instance for metric queries
 - A GitHub or GitLab personal access token if you want code review
 
 ### Configuration
@@ -350,6 +362,9 @@ ai:
 
 loki:
   url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
+
+prometheus:
+  url: ${PROMETHEUS_URL:}                # e.g. http://localhost:9090 (optional — omit to skip metric queries)
 
 github:
   url: ${GITHUB_URL:https://api.github.com}
@@ -491,6 +506,7 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 | `POST` | `/api/llm/config` | Save LLM provider + API key |
 | `POST` | `/api/llm/select-provider` | Select provider when both yml keys are present |
 | `POST` | `/api/loki/config` | Save Loki base URL |
+| `POST` | `/api/prometheus/config` | Save Prometheus base URL (optional) |
 | `POST` | `/api/github/config` | Save GitHub / GitLab access token and base URL |
 | `GET` | `/api/github/config/status` | Get Git provider configuration status |
 | `GET` | `/api/app/list` | List registered applications |
@@ -605,6 +621,7 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-26 | Added Prometheus metric query to Grafana alert analysis — `PrometheusService` fetches `query_range` data alongside Loki logs and sends both to the LLM; Prometheus is optional (`prometheus.url` may be left blank) |
 | 2026-04-22 | Added CSRF token same-origin protection for `/api/code-risk/**` — token embedded in HTML meta tag, validated via `X-CSRF-Token` header |
 | 2026-04-22 | Added `<think>` block stripping in `AiModelService` to remove chain-of-thought output from models that emit it (e.g. DeepSeek, QwQ) |
 | 2026-04-22 | Added fallback JSON parser in `CodeAnalysisResultHandler` to recover partial issue data when LLM returns malformed delimiters or truncated JSON |
@@ -648,338 +665,7 @@ SOFTWARE.
 
 ---
 
-## 한국어 문서
+## 한국어
 
-### 프로젝트 개요
+한국어 문서는 **[README_KR.md](README_KR.md)** 를 참고하세요.
 
-**Spring AI Ops**는 모니터링 및 형상관리 도구체인을 LLM과 연결하는 AI 기반 운영 자동화 도구입니다. 세 가지 AI 워크플로우를 제공합니다.
-
-1. **정적 코드 위험 분석** — 요청 시 등록된 Git 저장소를 클론하고 전체 소스 트리를 스캔하여 LLM에게 보안·품질 종합 리뷰를 요청합니다. 대용량 코드베이스는 청크로 분할하여 병렬 분석(맵-리듀스)한 뒤 단일 최종 보고서로 통합합니다. 결과에는 마크다운 보고서와 구조화된 JSON 이슈 목록(심각도, 파일, 라인, 권고사항)이 포함됩니다.
-
-2. **자동 코드 리뷰** — GitHub 또는 GitLab push webhook이 수신되면 커밋 diff를 가져와 LLM에게 정확성·보안·성능·코드 품질 관점의 자동 코드 리뷰를 수행합니다.
-
-3. **인시던트 인텔리전스** — Grafana 알림이 발생하면 해당 Loki 로그를 자동으로 조회하고, 알림 컨텍스트와 로그를 LLM에 전달하여 근본 원인 분석 결과를 대시보드에 스트리밍합니다.
-
-모든 분석 결과는 STOMP WebSocket을 통해 실시간으로 브라우저에 전달됩니다.
-
-관계형 데이터베이스는 사용하지 않으며, Redis를 유일한 저장소로 사용합니다. 로컬 개발 환경에서는 Embedded Redis가 자동으로 기동되므로 별도 설치가 필요 없습니다.
-
-> **데모 사이트**: [https://ai-ops.duckdns.org](https://ai-ops.duckdns.org)
-
----
-
-### 주요 기능
-
-| 기능 | 설명 |
-|---|---|
-| **정적 코드 위험 분석** | Git 저장소를 클론하여 AI 기반 전체 코드베이스 리뷰 수행 — 보안 취약점, 코드 품질 이슈, 개선 권고사항. 코드베이스 크기에 따라 단일 호출 또는 맵-리듀스 전략 자동 선택 |
-| **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
-| **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 → 근본 원인, 영향 범위, 조치 방법 |
-| **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
-| **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI ↔ Anthropic 전환 |
-| **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
-| **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
-| **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 20) |
-
----
-
-### 인터페이스 흐름
-
-#### 정적 코드 위험 분석
-
-```
-대시보드에서 "Run Static Analysis" 클릭
-        │
-        ▼
-POST /api/code-risk
-        │
-        ├─ 애플리케이션에 등록된 Git 저장소 URL 조회
-        │
-        ├─ 액세스 토큰 결정 (Redis에 저장된 GitHub 또는 GitLab 토큰)
-        │
-        ├─ JGit으로 저장소 클론 (토큰 인증 적용)
-        │    지정된 브랜치, 미입력 시 기본 브랜치
-        │
-        ├─ 소스 파일 수집 및 코드 번들 구성
-        │
-        ├─ 토큰 수 추정
-        │    ≤ token-threshold (기본: 27,000)
-        │      → 단일 호출 분석 (전체 번들을 LLM에 한 번에 전달)
-        │    > token-threshold
-        │      → 맵-리듀스 분석
-        │           청크 분할 → 병렬 분석 (최대 동시 3개, 호출 간 1,000ms 지연)
-        │           최종 LLM 호출로 청크 결과 통합
-        │
-        ├─ LLM 응답 파싱
-        │    Markdown 분석  (전체 요약, 권고사항)
-        │    Issues JSON   (파일, 라인, 심각도, 설명, 코드 스니펫)
-        │
-        ├─ CodeRiskRecord를 Redis에 저장 (key: code-risk:{application})
-        │
-        ├─ /topic/analysis/status 로 진행 상황 실시간 Push
-        │
-        └─ /topic/analysis/result 로 완료 알림 Push
-                │
-                ▼
-           브라우저 Code Risk 탭에 전체 분석 결과 표시
-```
-
-> **참고**: 클론, 청크 분석, 통합 등 분석 진행 상황이 WebSocket을 통해 대시보드에 실시간으로 전달됩니다. LLM이 분석 도중 429(Rate Limit) 오류를 반환하면 중단하고 그 시점까지 수집된 결과를 저장합니다.
-
-> **Git 인증**: Git Remote Configuration에서 등록한 GitHub 또는 GitLab 액세스 토큰이 비공개 저장소 클론에 자동으로 사용됩니다.
-
-#### GitHub → LLM (코드 리뷰)
-
-```
-git push 발생
-        │
-        ▼  (GitHub Webhook)
-POST /webhook/git[/{application}]
-        │
-        ├─ owner / repo / before SHA / after SHA 추출
-        │
-        ├─ GitHub API로 커밋 diff 조회
-        │    before == 0000... (첫 push) → GET /commits/{sha}
-        │    그 외                        → GET /compare/{base}...{head}
-        │
-        ├─ LLM 코드 리뷰 요청
-        │    변경 파일별 diff
-        │    → 변경 요약 / 잠재 이슈 / 보안 / 개선 제안
-        │
-        ├─ CodeReviewRecord를 Redis에 저장 (key: commit:{application})
-        │
-        └─ WebSocket /topic/commit 으로 결과 Push
-```
-
-#### GitLab → LLM (코드 리뷰)
-
-```
-git push 발생
-        │
-        ▼  (GitLab Webhook)
-POST /webhook/git[/{application}]
-        │
-        ├─ X-Gitlab-Event 헤더 감지 → GitLab 페이로드로 파싱
-        │
-        ├─ project / before SHA / after SHA 추출
-        │
-        ├─ GitLab API로 커밋 diff 조회
-        │    before == 0000... (첫 push) → GET /projects/{id}/repository/commits/{sha}/diff
-        │    그 외                        → GET /projects/{id}/repository/compare?from={base}&to={head}
-        │
-        ├─ LLM 코드 리뷰 요청
-        │    변경 파일별 diff
-        │    → 변경 요약 / 잠재 이슈 / 보안 / 개선 제안
-        │
-        ├─ CodeReviewRecord를 Redis에 저장 (key: commit:{application})
-        │
-        └─ WebSocket /topic/commit 으로 결과 Push
-```
-
-#### Grafana → Loki → LLM (장애 분석)
-
-```
-Grafana Alert 발생
-        │
-        ▼
-POST /webhook/grafana[/{application}]
-        │
-        ├─ status == "resolved"? → 처리 스킵 (RESOLVED 반환)
-        │
-        ├─ 알림 레이블로 Loki 스트림 셀렉터 생성
-        │    예: {job="my-app", namespace="prod", pod="api-xyz"}
-        │
-        ├─ 시간 범위 계산
-        │    start = alert.startsAt − 5분 버퍼
-        │    end   = alert.endsAt  (zero-value이면 현재 시각)
-        │
-        ├─ Loki 로그 조회
-        │    GET {loki.url}/loki/api/v1/query_range
-        │
-        ├─ LLM 분석 요청
-        │    알림 컨텍스트 + 로그 라인
-        │    → 근본 원인 / 영향 범위 / 조치 방법
-        │
-        ├─ AnalyzeFiringRecord를 Redis에 저장 (key: firing:{application})
-        │
-        └─ WebSocket /topic/firing 으로 결과 Push
-```
-
-> **전제 조건**: Prometheus 메트릭 레이블과 Loki 스트림 레이블이 동일(`job`, `instance` 등)해야 로그 조회가 동작합니다. Promtail 또는 Grafana Alloy 설정을 확인하세요.
-
----
-
-### 기술 스택
-
-| 구분 | 기술 |
-|---|---|
-| 언어 | Kotlin 2.2 / Java 21 |
-| 프레임워크 | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
-| 저장소 | Redis (유일한 데이터 저장소, RDB 미사용) |
-| 개발용 Redis | Embedded Redis (자동 기동, 별도 설치 불필요) |
-| HTTP 클라이언트 | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
-| 실시간 통신 | Spring WebSocket (STOMP over SockJS) |
-| 템플릿 | Mustache |
-| API 문서 | springdoc-openapi 2.8.3 (Swagger UI) |
-| 비동기 | Java 21 Virtual Thread (무제한 `SimpleAsyncTaskExecutor`) + Semaphore 기반 LLM 호출 수 제한 |
-| 빌드 | Gradle Kotlin DSL |
-
----
-
-### 시작하기
-
-#### 사전 요구사항
-
-- JDK 21 이상
-- OpenAI 또는 Anthropic API 키 (둘 중 하나 이상)
-- 코드 리뷰 기능 사용 시 GitHub 또는 GitLab Personal Access Token
-- Loki 연동 시 Loki 서버 URL
-
-#### 설정
-
-`src/main/resources/application.yml`을 편집하거나 환경 변수를 설정합니다:
-
-```yaml
-ai:
-  open-ai:
-    api-key: ${AI_OPEN_AI_API_KEY:}      # OpenAI API 키
-  anthropic:
-    api-key: ${AI_ANTHROPIC_API_KEY:}    # Anthropic API 키
-    max-tokens: 8192                     # Anthropic 모델 최대 출력 토큰 수 (기본: 8192)
-
-loki:
-  url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100) — 인증 미지원
-
-github:
-  url: ${GITHUB_URL:https://api.github.com}      # GitHub API URL
-  access-token: ${GITHUB_ACCESS_TOKEN:}          # GitHub 액세스 토큰
-  api-version: ${GITHUB_API_VERSION:2022-11-28}  # GitHub API 버전 헤더
-
-gitlab:
-  url: ${GITLAB_URL:https://gitlab.com/api/v4}  # GitLab API URL (셀프 호스팅 시 인스턴스 주소로 변경)
-  access-token: ${GITLAB_ACCESS_TOKEN:}          # GitLab 액세스 토큰
-
-analysis:
-  data-retention-hours: 120  # 분석 결과 보관 시간 (기본: 5일)
-  maximum-view-count: 5      # 애플리케이션별 최대 표시 건수 (0 = 무제한)
-  result-language: ${ANALYSIS_RESULT_LANGUAGE:en}  # LLM 분석 결과 언어 (ko, en, ja 등)
-  code-risk:
-    token-threshold: 27000        # 단일 호출 분석의 최대 토큰 수; 초과 시 맵-리듀스로 전환 (기본: 27000)
-    map-reduce-concurrency: 3     # 맵 단계 병렬 청크 분석 최대 동시 수 (기본: 3)
-    map-reduce-delay-ms: 1000     # 맵 단계 청크 호출 후 지연 시간 ms (기본: 1000)
-
-app:
-  async:
-    virtual:
-      llm-max-concurrency: 20  # 동시 LLM API 호출 허용 수 (Semaphore). Virtual Thread Executor 자체는 무제한.
-
-resilience4j:
-  timelimiter:
-    configs:
-      default:
-        timeout-duration: 35s         # 안전망 — Feign read-timeout(30s)이 먼저 동작
-        cancel-running-future: false  # Virtual Thread 대상 Thread.interrupt() 방지
-
-feign:
-  loki:
-    connect-timeout: 5000   # Loki 연결 타임아웃 (ms)
-    read-timeout: 30000     # Loki 읽기 타임아웃 (ms)
-  github:
-    connect-timeout: 5000   # GitHub API 연결 타임아웃 (ms)
-    read-timeout: 30000     # GitHub API 읽기 타임아웃 (ms)
-  gitlab:
-    connect-timeout: 5000   # GitLab API 연결 타임아웃 (ms)
-    read-timeout: 30000     # GitLab API 읽기 타임아웃 (ms)
-```
-
-동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
-
-#### 민감 정보 암호화
-
-Redis에 저장되는 API 키와 액세스 토큰은 **AES-256-GCM** 방식으로 암호화되어 보관됩니다.
-
-암호화를 활성화하려면 환경 변수 또는 `application.yml`에 시크릿 키를 설정합니다:
-
-```bash
-# 환경 변수 (운영 환경 권장)
-export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
-```
-
-```yaml
-# application.yml
-crypto:
-  secret-key: ${CRYPTO_SECRET_KEY:}
-```
-
-| 상황 | 동작 |
-|---|---|
-| `crypto.secret-key` 설정됨 | Redis에 저장되는 모든 민감 값이 AES-256-GCM으로 암호화됨 |
-| `crypto.secret-key` 미설정 | 값이 평문으로 저장됨 — 애플리케이션 기동 시 경고 로그 출력 |
-| 키를 변경한 경우 | 기존 암호화 값 복호화 불가 — UI에서 API 키를 재입력하면 새 키로 재암호화됨 |
-
-> **운영 환경 권고사항**: 반드시 `CRYPTO_SECRET_KEY`를 설정하세요. 미설정 시 Redis에 저장된 API 키가 평문으로 보관됩니다.
-
-#### 실행
-
-```bash
-# 빌드
-./gradlew build
-
-# 실행 (Embedded Redis 자동 기동)
-./gradlew bootRun
-
-# 전체 테스트
-./gradlew test
-```
-
-브라우저에서 `http://localhost:7079`에 접속합니다. yml에 API 키가 설정되어 있으면 자동으로 LLM이 구성됩니다.
-
-#### Grafana 설정
-
-1. **Alerting → Contact points → New contact point**
-2. 유형: **Webhook**
-3. URL: `http://<your-host>:7079/webhook/grafana/{application}`
-4. 알림 정책에 연결
-
-> **주의**: 현재 Loki 인증(Basic Auth, Bearer Token 등)은 지원하지 않습니다. 인증 없이 접근 가능한 Loki 엔드포인트만 사용할 수 있습니다.
-
-#### GitHub Webhook 설정
-
-1. **Repository → Settings → Webhooks → Add webhook**
-2. Payload URL: `http://<your-host>:7079/webhook/git/{application}`
-3. Content type: `application/json`
-4. 이벤트: **Just the push event**
-
-GitHub 액세스 토큰(yml 또는 UI에서 설정)은 `repo` read 스코프(클래식 PAT) 또는 `Contents: Read` 권한(세분화된 PAT)이 필요합니다.
-
-> **참고**: GitHub Webhook **Secret**은 현재 지원하지 않습니다. Webhook 설정 시 Secret 필드는 비워두세요. Secret 기반 HMAC-SHA256 서명 검증은 추후 지원 예정입니다.
-
-#### GitLab Webhook 설정
-
-1. **Project → Settings → Webhooks → Add new webhook**
-2. URL: `http://<your-host>:7079/webhook/git/{application}`
-3. **Trigger** 항목에서 **Push events** 선택
-4. 저장
-
-GitLab 액세스 토큰(yml 또는 UI에서 설정)은 `read_api` 스코프가 필요합니다. 셀프 호스팅 GitLab 인스턴스를 사용하는 경우 `gitlab.url`을 해당 인스턴스의 API 기본 URL(예: `https://gitlab.example.com/api/v4`)로 설정하세요.
-
-> **참고**: GitLab Webhook **Secret Token**은 현재 지원하지 않습니다. Webhook 설정 시 Secret Token 필드는 비워두세요.
-
-### API 문서 (Swagger)
-
-[springdoc-openapi](https://springdoc.org/)를 통해 Swagger UI를 제공합니다. 애플리케이션 실행 후 아래 URL에서 확인할 수 있습니다.
-
-| URL | 설명 |
-|---|---|
-| `http://localhost:7079/swagger-ui.html` | Swagger UI — 모든 REST 엔드포인트를 브라우저에서 직접 테스트 가능 |
-| `http://localhost:7079/v3/api-docs` | OpenAPI 3.0 명세 (JSON) |
-| `http://localhost:7079/v3/api-docs.yaml` | OpenAPI 3.0 명세 (YAML) |
-
-webhook 페이로드나 설정 엔드포인트를 별도 도구 없이 Swagger UI에서 바로 테스트할 수 있습니다.
-
----
-
-### 라이선스
-
-이 프로젝트는 [MIT License](LICENSE) 하에 오픈소스로 공개되어 있습니다.
