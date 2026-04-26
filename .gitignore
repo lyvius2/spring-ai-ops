@@ -24,6 +24,7 @@ logs/
 .env.*
 !.env.example
 
+sonar-scanner/
 target/
 bin/
 tmp/
