@@ -74,9 +74,9 @@ ai:
     max-tokens: 8192                    # Max output tokens for Anthropic model : Default is 8192
 
 prometheus:
-  url: ${PROMETHEUS_URL:}               # Set your Prometheus URL (e.g., http://localhost:9090) : Default is empty
+  url: ${PROMETHEUS_URL:}               # Set your Prometheus URL (e.g., http://localhost:9090). Optional; leave blank to skip metric queries.
 loki:
-  url: ${LOKI_URL:}                     # Set your Loki URL (e.g., http://localhost:3100) : Default is empty
+  url: ${LOKI_URL:}                     # Set your Loki URL (e.g., http://localhost:3100). Required for Grafana error analysis.
 github:
   url: ${GITHUB_URL:https://api.github.com}     # Set your GitHub API URL (e.g., https://api.github.com)
   access-token: ${GITHUB_ACCESS_TOKEN:}         # Set your GitHub access token for authentication
@@ -100,8 +100,8 @@ analysis:
 app:
   async:
     virtual:
-      executor-concurrency-limit: 200 # Max concurrent tasks for async operations using virtual threads (Semaphore). LLM calls are further limited by llm-max-concurrency.
-      llm-max-concurrency: 20         # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
+      executor-concurrency-limit: 200 # Max concurrent tasks for async operations using virtual threads.
+      llm-max-concurrency: 20         # Max simultaneous in-flight LLM API calls (Semaphore) within the executor capacity.
 
 springdoc:
   swagger-ui:

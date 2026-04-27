@@ -1,7 +1,8 @@
 # Spring AI Ops
 
-[한국어 문서](README_KR.md)  
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time — with results delivered to a live dashboard via WebSocket. Prometheus metric data is optionally fetched alongside Loki logs to enrich LLM error analysis.  
+[한국어(Korean) 문서](README_KR.md)  
+  
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs and, when a Prometheus URL is configured, also fetches Prometheus metrics over the same alert window before sending the combined context to the LLM. Results are delivered to a live dashboard via WebSocket.  
 
 ---
 
@@ -40,7 +41,7 @@ Spring AI Ops bridges your monitoring and version-control toolchain with large l
 
 2. **Automated Code Review** — When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review covering correctness, security, performance, and code quality.
 
-3. **Incident Intelligence** — When Grafana fires an alert, the application automatically queries the corresponding Loki logs and — if configured — fetches relevant Prometheus metrics over the same time window. Both the log lines and metric data are fed to an LLM together with the alert context to produce a richer root-cause analysis, streamed to the dashboard in real time.
+3. **Incident Intelligence** — When Grafana fires an alert, the application builds a Loki stream selector from alert labels, queries matching logs, and in parallel optionally queries Prometheus range data using the same alert labels and time window. The alert context, log lines, and metric series are sent together to an LLM to produce a richer root-cause analysis, streamed to the dashboard in real time.
 
 All results are pushed to connected browsers in real time via STOMP WebSocket.
 
@@ -56,7 +57,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 |---|---|
 | **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
-| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metrics (optional) → root cause, affected components, and recommended actions |
+| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) → root cause, affected components, and recommended actions |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
@@ -101,7 +102,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 - **Controller** — receives HTTP request and returns DTO; no business logic.
 - **Facade** — orchestrates multiple services for a single use-case; marked `@Facade`.
 - **Service** — single-responsibility business logic and Redis persistence.
-- **Connector** — OpenFeign clients for Loki and GitHub REST APIs.
+- **Connector** — OpenFeign clients for Loki, Prometheus, GitHub, and GitLab REST APIs.
 
 ---
 
@@ -224,21 +225,25 @@ POST /webhook/grafana[/{application}]
         │
         ├─ status == "resolved"? → skip (return RESOLVED)
         │
-        ├─ Extract Loki stream selector from alert labels
-        │    e.g. {job="my-app", namespace="prod", pod="api-xyz"}
+        ├─ Pick the first firing alert
+        │    (or the first alert in the payload if none are marked firing)
+        │
+        ├─ Build selectors from alert labels
+        │    Loki selector example:       {job="my-app", namespace="prod", pod="api-xyz"}
+        │    Prometheus selector example: {job="my-app", namespace="prod", pod="api-xyz"}
         │
         ├─ Calculate time range
         │    start = alert.startsAt − 5 min buffer
         │    end   = alert.endsAt  (current time if zero-value)
         │
-        ├─ Query Loki logs  (if loki.url is configured)
+        ├─ Query Loki logs
         │    GET {loki.url}/loki/api/v1/query_range
         │    ?query={...}&start=...&end=...
         │
-        ├─ Query Prometheus metrics  ── OPTIONAL (if prometheus.url is configured)
+        ├─ Query Prometheus metrics in parallel  ── OPTIONAL (if prometheus.url is configured)
         │    GET {prometheus.url}/api/v1/query_range
-        │    Derives metric selectors from the same alert labels
-        │    e.g. {job="my-app"} for CPU, memory, HTTP error rate
+        │    Reuses the same alert labels to build the metric selector
+        │    and returns all matching series for the alert window
         │
         ├─ Call LLM
         │    System: expert in application errors and logs
@@ -255,49 +260,46 @@ POST /webhook/grafana[/{application}]
            Browser receives analysis result in real time
 ```
 
-> **Prerequisite**: Prometheus metric labels and Loki stream labels must share the same key set (`job`, `instance`, `namespace`, `pod`, etc.). Configure Promtail or Grafana Alloy accordingly.
+> **Prerequisite**: Prometheus metric labels and Loki stream labels should share the same identifying labels (`job`, `instance`, `namespace`, `pod`, etc.). Configure Promtail or Grafana Alloy accordingly so the same alert labels can be reused for both queries.
 
 > **Prometheus is optional**: If `prometheus.url` is not set, the analysis proceeds with Loki logs only. No errors are raised.
+
+> **Loki is required for error analysis**: The current Grafana alert pipeline always attempts a Loki query. Configure `loki.url` before using Grafana webhook analysis.
 
 ---
 
 ## Screenshots
 
 ### LLM API Key Configuration
-*Enter your LLM provider and API key through the UI. The model is activated immediately without restarting the application.*  
-*LLM 제공자와 API 키를 UI에서 입력합니다. 애플리케이션 재시작 없이 즉시 모델이 활성화됩니다.*
+*Enter your LLM provider and API key through the UI. The model is activated immediately without restarting the application.*
 
 ![LLM API Key Configuration](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AIConfig.png?raw=true)
 
 ---
 
 ### Static Code Risk Analysis
-*Run a full AI-powered static analysis on any registered Git repository. Issues are grouped by file with severity levels (HIGH / MEDIUM / LOW), and each entry includes the affected code snippet and a recommended fix.*  
-*등록된 Git 저장소를 대상으로 AI 기반 전체 코드 정적 분석을 실행합니다. 이슈는 파일 단위로 그룹화되어 심각도(HIGH / MEDIUM / LOW)와 함께 표시되며, 각 항목에는 문제 코드 스니펫과 개선 권고사항이 포함됩니다.*
+*Run a full AI-powered static analysis on any registered Git repository. Issues are grouped by file with severity levels (HIGH / MEDIUM / LOW), and each entry includes the affected code snippet and a recommended fix.*
 
 ![Static Code Risk Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeRisk.png?raw=true)
 
 ---
 
 ### AI-Powered Code Review
-*When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*  
-*GitHub push 이벤트가 수신되면 LLM이 변경 파일별 diff를 리뷰하여 코드 품질, 잠재적 버그, 보안 고려사항, 개선 제안을 구조화된 보고서로 제공합니다.*
+*When a GitHub push event is received, the LLM reviews the commit diff per changed file and delivers a structured report — covering code quality, potential bugs, security considerations, and improvement suggestions.*
 
 ![Code Review](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeReview.png?raw=true)
 
 ---
 
 ### Grafana Alerting Webhook
-*When a Grafana alert fires, the webhook payload is delivered to Spring AI Ops in real time. The alert status and labels are visible in the dashboard.*  
-*Grafana 알림이 발생하면 webhook 페이로드가 실시간으로 Spring AI Ops에 전달됩니다. 대시보드에서 알림 상태와 레이블을 확인할 수 있습니다.*
+*When a Grafana alert fires, the webhook payload is delivered to Spring AI Ops in real time. The alert status and labels are visible in the dashboard.*
 
 ![Grafana Alerting Webhook](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/GrafanaAlerting.png?raw=true)
 
 ---
 
 ### AI-Powered Error Analysis
-*The LLM analyzes the Grafana alert context along with the corresponding Loki logs and streams a root-cause analysis — including affected components and recommended actions — directly to the dashboard.*  
-*LLM이 Grafana 알림 컨텍스트와 Loki 로그를 함께 분석하여 근본 원인, 영향 범위, 조치 방법을 대시보드에 실시간으로 스트리밍합니다.*
+*The LLM analyzes the Grafana alert context together with Loki logs and, when configured, Prometheus metric series, then streams a root-cause analysis — including affected components and recommended actions — directly to the dashboard.*
 
 ![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
 
@@ -317,7 +319,7 @@ POST /webhook/grafana[/{application}]
 | Real-Time | Spring WebSocket (STOMP over SockJS) |
 | Templating | Mustache |
 | API Docs | springdoc-openapi 2.8.3 (Swagger UI) |
-| Async | Java 21 Virtual Threads (`CompletableFuture` + unlimited `SimpleAsyncTaskExecutor`) + Semaphore-based LLM rate limiter |
+| Async | Java 21 Virtual Threads (`CompletableFuture` + `SimpleAsyncTaskExecutor` concurrency limit: 200) + Semaphore-based LLM rate limiter |
 | Build | Gradle Kotlin DSL |
 
 **Design note — Spring AI AutoConfiguration disabled**
@@ -326,7 +328,7 @@ All Spring AI `AutoConfiguration` classes are explicitly excluded in `applicatio
 
 **Design note — Virtual Thread concurrency**
 
-The `SimpleAsyncTaskExecutor` runs with **no concurrency limit** (`-1`). Virtual Threads release their OS carrier thread on blocking I/O, so an artificial cap would only trigger `ConcurrencyThrottledException` without providing any backpressure benefit. Instead, a `Semaphore` (`app.async.virtual.llm-max-concurrency`, default `10`) guards only the actual LLM API call inside `AiModelService`. Excess requests wait in a fair queue rather than failing, and the virtual-thread executor itself remains unblocked.
+The `SimpleAsyncTaskExecutor` is capped at **200 concurrent tasks** via `app.async.virtual.executor-concurrency-limit`. This bounds asynchronous work triggered by inbound webhooks while still using Virtual Threads for efficient blocking I/O. A separate `Semaphore` (`app.async.virtual.llm-max-concurrency`, default `10`) further limits only the actual LLM API call inside `AiModelService`, so webhook fan-out and external API work do not translate into unbounded model traffic.
 
 **Design note — Resilience4j TimeLimiter + Virtual Thread compatibility**
 
@@ -342,7 +344,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 
 - JDK 21+
 - An API key for at least one LLM provider (OpenAI, Anthropic)
-- (Optional) A running Loki instance for log queries
+- A running Loki instance for Grafana error analysis
 - (Optional) A running Prometheus instance for metric queries
 - A GitHub or GitLab personal access token if you want code review
 
@@ -387,7 +389,8 @@ analysis:
 app:
   async:
     virtual:
-      llm-max-concurrency: 20  # Max simultaneous in-flight LLM API calls (Semaphore). Virtual thread executor itself is unlimited.
+      executor-concurrency-limit: 200  # Max concurrent async tasks using virtual threads
+      llm-max-concurrency: 20          # Max simultaneous in-flight LLM API calls (Semaphore)
 
 resilience4j:
   timelimiter:
@@ -400,6 +403,9 @@ feign:
   loki:
     connect-timeout: 5000   # Loki connect timeout (ms)
     read-timeout: 30000     # Loki read timeout (ms)
+  prometheus:
+    connect-timeout: 5000   # Prometheus connect timeout (ms)
+    read-timeout: 30000     # Prometheus read timeout (ms)
   github:
     connect-timeout: 5000   # GitHub API connect timeout (ms)
     read-timeout: 30000     # GitHub API read timeout (ms)
@@ -469,7 +475,9 @@ Open `http://localhost:7079` in your browser. On first launch you will be prompt
 3. Set URL to `http://<your-host>:7079/webhook/grafana` (or `/webhook/grafana/{application}` to tag results with an application name).
 4. Add the contact point to your alert rule's notification policy.
 
-> Ensure Prometheus labels (`job`, `instance`, etc.) and Loki stream labels are identical so log queries work automatically.
+> Configure `loki.url` first. Loki is the primary data source for Grafana alert analysis; Prometheus only enriches the analysis when configured.
+
+> Ensure Prometheus labels (`job`, `instance`, `namespace`, `pod`, etc.) and Loki stream labels are aligned so the same alert labels can drive both log and metric queries automatically.
 
 > **Note**: Loki authentication (Basic Auth, Bearer Token, etc.) is not currently supported. Only unauthenticated Loki endpoints are supported at this time.
 
@@ -505,7 +513,9 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 | `GET` | `/` | Dashboard UI |
 | `POST` | `/api/llm/config` | Save LLM provider + API key |
 | `POST` | `/api/llm/select-provider` | Select provider when both yml keys are present |
+| `GET` | `/api/loki/status` | Get Loki configuration status |
 | `POST` | `/api/loki/config` | Save Loki base URL |
+| `GET` | `/api/prometheus/status` | Get Prometheus configuration status |
 | `POST` | `/api/prometheus/config` | Save Prometheus base URL (optional) |
 | `POST` | `/api/github/config` | Save GitHub / GitLab access token and base URL |
 | `GET` | `/api/github/config/status` | Get Git provider configuration status |
@@ -562,6 +572,7 @@ com.walter.spring.ai.ops
 │   ├── GithubConnectorConfig.kt   # Feign client configuration for GitHub API
 │   ├── GitlabConnectorConfig.kt   # Feign client configuration for GitLab API
 │   ├── LokiConnectorConfig.kt     # Feign client configuration for Loki API
+│   ├── PrometheusConnectorConfig.kt  # Feign client configuration for Prometheus API
 │   ├── SwaggerConfig.kt           # springdoc-openapi OpenAPI info & server config
 │   ├── VirtualThreadConfig.kt     # Virtual thread task executor
 │   ├── WebMvcConfig.kt            # Registers CsrfTokenInterceptor on /api/code-risk/**
@@ -570,13 +581,15 @@ com.walter.spring.ai.ops
 │   └── base/DynamicConnectorConfig.kt  # Abstract base for dynamic URL resolution (GitHub / Loki)
 ├── connector/
 │   ├── GithubConnector.kt         # Feign: GitHub Commits / Compare API
+│   ├── GitlabConnector.kt         # Feign: GitLab Compare / Commit Diff API
 │   ├── LokiConnector.kt           # Feign: Loki query_range API
+│   ├── PrometheusConnector.kt     # Feign: Prometheus query_range API
 │   └── dto/                       # Response DTOs (GithubCompareResult, LokiQueryResult, ...)
 ├── controller/
 │   ├── IndexController.kt         # GET /
 │   ├── WebhookController.kt       # POST /webhook/grafana, /webhook/git
 │   ├── AiConfigController.kt      # POST /api/llm/*
-│   ├── LokiConfigController.kt    # POST /api/loki/config
+│   ├── LokiConfigController.kt    # GET /api/loki/status, POST /api/loki/config, GET /api/prometheus/status, POST /api/prometheus/config
 │   ├── GitRemoteConfigController.kt  # POST /api/github/config, GET /api/github/config/status
 │   ├── ApplicationController.kt   # GET|POST|DELETE /api/app/*
 │   ├── FiringController.kt        # GET /api/firing/{app}/list
@@ -604,6 +617,7 @@ com.walter.spring.ai.ops
 │   ├── GithubService.kt           # GitHub differ inquiry, code review persistence
 │   ├── GitlabService.kt           # GitLab differ inquiry, code review persistence
 │   ├── LokiService.kt             # Loki log query execution
+│   ├── PrometheusService.kt       # Prometheus metric query execution
 │   ├── MessageService.kt          # WebSocket push for all topics (firing, commit, analysis)
 │   ├── RepositoryService.kt       # Git clone, source file collection, record persistence for code-risk
 │   └── dto/CodeChunk.kt           # Bundle chunk for map-reduce analysis
@@ -664,8 +678,3 @@ SOFTWARE.
 ```
 
 ---
-
-## 한국어
-
-한국어 문서는 **[README_KR.md](README_KR.md)** 를 참고하세요.
-
