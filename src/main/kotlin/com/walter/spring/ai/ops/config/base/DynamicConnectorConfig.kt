@@ -3,6 +3,7 @@ package com.walter.spring.ai.ops.config.base
 import feign.Client
 import feign.Request
 import feign.okhttp.OkHttpClient
+import okhttp3.ConnectionPool
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.util.concurrent.TimeUnit
@@ -20,7 +21,7 @@ abstract class DynamicConnectorConfig {
         redisTemplate.opsForValue().get(redisUrlKey)?.takeIf { it.isNotBlank() }
             ?: configuredUrl
 
-    protected val httpClient: OkHttpClient = OkHttpClient()
+    protected val httpClient: OkHttpClient = OkHttpClient(SHARED_HTTP_CLIENT)
 
     @Bean
     fun feignOptions(): Request.Options =
@@ -38,5 +39,11 @@ abstract class DynamicConnectorConfig {
             request.requestTemplate(),
         )
         httpClient.execute(resolvedRequest, options)
+    }
+
+    companion object {
+        private val SHARED_HTTP_CLIENT = okhttp3.OkHttpClient.Builder()
+            .connectionPool(ConnectionPool(10, 1, TimeUnit.MINUTES))
+            .build()
     }
 }
