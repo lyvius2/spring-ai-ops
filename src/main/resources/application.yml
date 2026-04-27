@@ -11,14 +11,14 @@ spring:
   data:
     redis:
       port: 6379
-      timeout: 2m
-      connect-timeout: 10s
+      timeout: 3s
+      connect-timeout: 2s
       lettuce:
         pool:
           enabled: true
-          max-active: 10
-          max-idle: 10
-          min-idle: 2
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   jackson:
     serialization:
       write-dates-as-timestamps: false

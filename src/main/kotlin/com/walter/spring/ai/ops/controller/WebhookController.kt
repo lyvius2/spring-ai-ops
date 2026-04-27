@@ -43,7 +43,7 @@ class WebhookController(
         @Parameter(description = "Application name to associate this alert with (optional)")
         @PathVariable application: String?
     ): GrafanaAlertingResponse {
-        if (request.isResolved()) {
+        if (request.isResolved() || request.isNoData()) {
             return GrafanaAlertingResponse.of(AlertingStatus.RESOLVED)
         }
         CompletableFuture.runAsync({ incidentAnalyzeFacade.analyzeFiring(request, application) }, executor)

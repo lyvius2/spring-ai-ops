@@ -37,6 +37,10 @@ data class GrafanaAlertingRequest(
 ) {
     fun isFiring(): Boolean = status == "firing"
     fun isResolved(): Boolean = status == "resolved"
+    fun isNoData(): Boolean = alerts.asSequence()
+        .mapNotNull { it.labels["alertname"] }
+        .all { it == "DatasourceNoData" }
+
     fun createAlertSectionPrompt(): String {
         val alert = this.alerts.firstOrNull { it.isFiring() } ?: this.alerts.firstOrNull()
         val request = this
