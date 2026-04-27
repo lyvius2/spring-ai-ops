@@ -14,10 +14,10 @@ import java.util.concurrent.Semaphore
 class VirtualThreadConfig {
 
     @Bean(TaskExecutionAutoConfiguration.APPLICATION_TASK_EXECUTOR_BEAN_NAME)
-    fun applicationTaskExecutor(): AsyncTaskExecutor {
+    fun applicationTaskExecutor(@Value("\${app.async.virtual.executor-concurrency-limit:200}") concurrencyLimit: Int): AsyncTaskExecutor {
         val executor = SimpleAsyncTaskExecutor("vt-")
         executor.setVirtualThreads(true)
-        // concurrencyLimit intentionally not set (-1 = unlimited)
+        executor.concurrencyLimit = concurrencyLimit
         return executor
     }
 
