@@ -23,7 +23,6 @@ fun StringRedisTemplate.zSetRangeAllDesc(key: String): List<String> =
     runCatching {
         opsForZSet().reverseRange(key, 0, -1)?.toList() ?: emptyList()
     }.getOrElse { e ->
-        log.warn("ZSet read failed for key '{}' — deleting stale key and returning empty list. cause: {}", key, e.message)
-        delete(key)
+        log.warn("ZSet read failed for key '{}' — returning empty list. cause: {}", key, e.message)
         emptyList()
     }

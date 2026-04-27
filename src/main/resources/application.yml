@@ -17,8 +17,10 @@ spring:
         pool:
           enabled: true
           max-active: 8
-          max-idle: 8
-          min-idle: 0
+          max-idle: 4
+          min-idle: 1
+          max-wait: 2s
+        shutdown-timeout: 100ms
   jackson:
     serialization:
       write-dates-as-timestamps: false
