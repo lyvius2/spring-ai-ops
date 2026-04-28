@@ -30,7 +30,9 @@ class ApplicationService(
             redisTemplate.delete(REDIS_KEY_APPLICATIONS)
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
         }
-        saveGitUrl(name, gitUrl)
+        if (gitUrl != null) {
+            saveGitUrl(name, gitUrl)
+        }
     }
 
     fun removeApp(name: String) {
@@ -69,6 +71,8 @@ class ApplicationService(
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, newName)
             redisTemplate.delete("$REDIS_KEY_APP_GIT$oldName")
         }
-        saveGitUrl(newName, gitUrl)
+        if (gitUrl != null) {
+            saveGitUrl(newName, gitUrl)
+        }
     }
 }

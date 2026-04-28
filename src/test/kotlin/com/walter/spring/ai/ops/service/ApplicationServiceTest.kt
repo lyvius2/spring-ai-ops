@@ -145,8 +145,8 @@ class ApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("gitUrl이 null인 경우 git 키 삭제 (opsForValue 호출 없음)")
-    fun addApp_deletesGitKey_whenGitUrlIsNull() {
+    @DisplayName("gitUrl이 null인 경우 기존 git URL을 덮어쓰지 않음 (saveGitUrl 미호출)")
+    fun givenGitUrlIsNull_whenAddApp_thenExistingGitUrlIsPreserved() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         val applicationService = ApplicationService(redisTemplate)
@@ -154,8 +154,9 @@ class ApplicationServiceTest {
         // when
         applicationService.addApp("app1", null)
 
-        // then
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+        // then — saveGitUrl이 호출되지 않으므로 git 키에 대한 delete/set 없음
+        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}app1")
+        verify(redisTemplate, never()).opsForValue()
     }
 
     // ── removeApp ─────────────────────────────────────────────────────────────
@@ -282,5 +283,36 @@ class ApplicationServiceTest {
         assertThrows<IllegalArgumentException> {
             applicationService.updateApp("oldApp", "newApp", "git@github.com:owner/repo.git")
         }
+    }
+
+    @Test
+    @DisplayName("이름이 동일하고 gitUrl이 null인 경우 기존 git URL을 덮어쓰지 않음")
+    fun givenSameNameAndGitUrlNull_whenUpdateApp_thenExistingGitUrlIsPreserved() {
+        // given
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        applicationService.updateApp("app1", "app1", null)
+
+        // then — 이름이 같으므로 Set 변경 없고, gitUrl이 null이므로 saveGitUrl 미호출
+        verify(redisTemplate, never()).opsForSet()
+        verify(redisTemplate, never()).opsForValue()
+        verify(redisTemplate, never()).delete(anyString())
+    }
+
+    @Test
+    @DisplayName("이름이 변경되고 gitUrl이 null인 경우 새 앱의 git URL을 삭제하지 않음")
+    fun givenNameChangedAndGitUrlNull_whenUpdateApp_thenNewAppGitUrlIsPreserved() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate)
+
+        // when
+        applicationService.updateApp("oldApp", "newApp", null)
+
+        // then — 이름 변경으로 oldApp git 키는 삭제되지만, newApp git 키는 건드리지 않음
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
+        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}newApp")
+        verify(redisTemplate, never()).opsForValue()
     }
 }
