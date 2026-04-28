@@ -314,6 +314,7 @@ POST /webhook/grafana[/{application}]
 ### 사전 요구사항
 
 - JDK 21 이상
+- Redis에 저장되는 인증 정보를 암호화하기 위한 비어 있지 않은 `CRYPTO_SECRET_KEY`
 - OpenAI, Anthropic API 키 (하나 이상)
 - Grafana 장애 분석용 접근 가능한 Loki 서버
 - (선택) Prometheus 메트릭 조회용 Prometheus 서버 URL
@@ -407,10 +408,10 @@ feign:
 
 Redis에 저장되는 API 키와 액세스 토큰은 **AES-256-GCM** 방식으로 암호화되어 보관됩니다.
 
-암호화를 활성화하려면 환경 변수 또는 `application.yml`에 시크릿 키를 설정합니다:
+`crypto.secret-key`는 필수입니다. 값이 비어 있으면 애플리케이션은 보안 설정 오류를 크게 로그로 남기고 시작 과정에서 종료됩니다.
 
 ```bash
-# 환경 변수 (운영 환경 권장)
+# 환경 변수 권장
 export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
 ```
 
@@ -423,10 +424,8 @@ crypto:
 | 상황 | 동작 |
 |---|---|
 | `crypto.secret-key` 설정됨 | Redis에 저장되는 모든 민감 값이 AES-256-GCM으로 암호화됨 |
-| `crypto.secret-key` 미설정 | 값이 평문으로 저장됨 — 애플리케이션 기동 시 경고 로그 출력 |
+| `crypto.secret-key` 미설정 | 애플리케이션 시작 실패 및 요청 처리 전 종료 |
 | 키를 변경한 경우 | 기존 암호화 값 복호화 불가 — UI에서 API 키를 재입력하면 새 키로 재암호화됨 |
-
-> **운영 환경 권고사항**: 반드시 `CRYPTO_SECRET_KEY`를 설정하세요. 미설정 시 Redis에 저장된 API 키가 평문으로 보관됩니다.
 
 ### 실행
 

@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.util
 
 import org.assertj.core.api.Assertions
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -79,33 +80,13 @@ class CryptoProviderTest {
         Assertions.assertThat(result).isNull()
     }
 
-    // ── 키 미설정 시 평문 fallback ────────────────────────────────────────────
+    // ── 키 미설정 시 시작 실패 ────────────────────────────────────────────────
 
     @Test
-    @DisplayName("secret-key가 빈 문자열이면 encrypt는 평문을 그대로 반환한다")
-    fun givenBlankKey_whenEncrypt_thenReturnsPlaintext() {
-        // given
-        val service = CryptoProvider("")
-        val plaintext = "my-token"
-
-        // when
-        val result = service.encrypt(plaintext)
-
-        // then
-        Assertions.assertThat(result).isEqualTo(plaintext)
-    }
-
-    @Test
-    @DisplayName("secret-key가 빈 문자열이면 decrypt는 입력값을 그대로 반환한다")
-    fun givenBlankKey_whenDecrypt_thenReturnsInputAsIs() {
-        // given
-        val service = CryptoProvider("")
-        val value = "plain-stored-value"
-
-        // when
-        val result = service.decrypt(value)
-
-        // then
-        Assertions.assertThat(result).isEqualTo(value)
+    @DisplayName("secret-key가 빈 문자열이면 CryptoProvider 생성에 실패한다")
+    fun givenBlankKey_whenCreateCryptoProvider_thenThrowsException() {
+        assertThatThrownBy { CryptoProvider("") }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("crypto.secret-key")
     }
 }

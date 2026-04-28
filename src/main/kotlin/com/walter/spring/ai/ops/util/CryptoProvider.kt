@@ -23,18 +23,36 @@ class CryptoProvider(
         private const val GCM_TAG_BITS = 128
     }
 
-    private val aesKey: SecretKey? by lazy {
+    init {
         if (secretKeyString.isBlank()) {
-            log.warn("crypto.secret-key is not configured — sensitive values stored in Redis will be kept as plaintext. In production, make sure to set the CRYPTO_SECRET_KEY environment variable.")
-            null
-        } else {
-            val keyBytes = MessageDigest.getInstance("SHA-256").digest(secretKeyString.toByteArray(Charsets.UTF_8))
-            SecretKeySpec(keyBytes, "AES")
+            log.error(
+                """
+
+                ====================================================================================================
+                FATAL SECURITY CONFIGURATION ERROR
+                ====================================================================================================
+                crypto.secret-key is not configured.
+
+                Spring AI Ops encrypts Redis-stored API keys and access tokens with AES-256-GCM.
+                Starting without crypto.secret-key would risk storing sensitive values as plaintext.
+
+                Set the CRYPTO_SECRET_KEY environment variable or configure crypto.secret-key in application.yml.
+                The application will now stop.
+                ====================================================================================================
+
+                """.trimIndent()
+            )
+            throw IllegalStateException("Missing required security property: crypto.secret-key")
         }
     }
 
+    private val aesKey: SecretKey by lazy {
+        val keyBytes = MessageDigest.getInstance("SHA-256").digest(secretKeyString.toByteArray(Charsets.UTF_8))
+        SecretKeySpec(keyBytes, "AES")
+    }
+
     fun encrypt(plaintext: String): String {
-        val key = aesKey ?: return plaintext
+        val key = aesKey
         val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance(ALGORITHM)
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
@@ -43,7 +61,7 @@ class CryptoProvider(
     }
 
     fun decrypt(encrypted: String): String? {
-        val key = aesKey ?: return encrypted
+        val key = aesKey
         return runCatching {
             val combined = Base64.getDecoder().decode(encrypted)
             check(combined.size > IV_LENGTH) { "Ciphertext is too short" }

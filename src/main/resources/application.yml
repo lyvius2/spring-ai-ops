@@ -88,7 +88,7 @@ gitlab:
   access-token: ${GITLAB_ACCESS_TOKEN:}         # Set your GitLab access token for authentication
 
 crypto:
-  secret-key: ${CRYPTO_SECRET_KEY:}  # AES-256-GCM key for encrypting Redis-stored credentials. Must be set in production.
+  secret-key: ${CRYPTO_SECRET_KEY:}  # Required. App startup fails if blank. AES-256-GCM key for Redis-stored credentials.
 
 analysis:
   data-retention-hours: 120 # Set the number of hours to retain analysis data: Default is 120 (5 days)

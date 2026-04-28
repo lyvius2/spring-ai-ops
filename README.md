@@ -343,6 +343,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 ### Prerequisites
 
 - JDK 21+
+- A non-empty `CRYPTO_SECRET_KEY` value for encrypting Redis-stored credentials
 - An API key for at least one LLM provider (OpenAI, Anthropic)
 - A running Loki instance for Grafana error analysis
 - (Optional) A running Prometheus instance for metric queries
@@ -436,10 +437,10 @@ The application includes Spring Boot Actuator and `micrometer-tracing-bridge-ote
 
 API keys and access tokens saved to Redis are encrypted at rest using **AES-256-GCM**.
 
-To enable encryption, set the secret key via environment variable or `application.yml`:
+`crypto.secret-key` is required. If it is blank, the application logs a fatal security configuration error and stops during startup.
 
 ```bash
-# Environment variable (recommended for production)
+# Environment variable (recommended)
 export CRYPTO_SECRET_KEY=your-strong-secret-passphrase
 ```
 
@@ -452,10 +453,8 @@ crypto:
 | Situation | Behaviour |
 |---|---|
 | `crypto.secret-key` is set | All values written to Redis are AES-256-GCM encrypted |
-| `crypto.secret-key` is blank | Values are stored as plaintext — a warning is logged on startup |
+| `crypto.secret-key` is blank | Startup fails and the application exits before serving requests |
 | Secret key changes after values are stored | Existing encrypted values cannot be decrypted; re-enter API keys via the UI to re-encrypt them with the new key |
-
-> **Production recommendation**: Always set `CRYPTO_SECRET_KEY` in production environments. Without it, API keys stored in Redis remain in plaintext.
 
 **LLM key auto-configuration behaviour**
 
