@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.media.Schema
 data class AppUpdateRequest(
     @Schema(description = "Application name", example = "my-service", required = true)
     val name: String,
-    @Schema(description = "Git repository URL to link (optional)", example = "https://github.com/org/repo", nullable = true)
-    val gitUrl: String? = null
+    @Schema(description = "Git repository URL to link (optional, HTTP/HTTPS only)", example = "https://github.com/org/repo", nullable = true)
+    val gitUrl: String? = null,
+    @Schema(description = "Deploy branch — the branch deployed to production (optional). Requires gitUrl.", example = "main", nullable = true)
+    val deployBranch: String? = null,
 )

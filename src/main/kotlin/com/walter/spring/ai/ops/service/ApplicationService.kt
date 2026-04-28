@@ -1,14 +1,17 @@
 package com.walter.spring.ai.ops.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
+import com.walter.spring.ai.ops.service.dto.AppGitConfig
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
 @Service
 class ApplicationService(
-    private val redisTemplate: StringRedisTemplate
+    private val redisTemplate: StringRedisTemplate,
+    private val objectMapper: ObjectMapper,
 ) {
     private val log = LoggerFactory.getLogger(ApplicationService::class.java)
 
@@ -22,7 +25,7 @@ class ApplicationService(
         }
     }
 
-    fun addApp(name: String, gitUrl: String? = null) {
+    fun addApp(name: String, gitUrl: String? = null, deployBranch: String? = null) {
         runCatching {
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
         }.getOrElse { e ->
@@ -30,8 +33,8 @@ class ApplicationService(
             redisTemplate.delete(REDIS_KEY_APPLICATIONS)
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
         }
-        if (gitUrl != null) {
-            saveGitUrl(name, gitUrl)
+        if (gitUrl != null || deployBranch != null) {
+            saveGitConfig(name, gitUrl, deployBranch)
         }
     }
 
@@ -40,8 +43,16 @@ class ApplicationService(
         redisTemplate.delete("$REDIS_KEY_APP_GIT$name")
     }
 
-    fun getGitUrl(name: String): String? {
-        return redisTemplate.opsForValue().get("$REDIS_KEY_APP_GIT$name")
+    fun getGitUrl(name: String): String? = getGitConfig(name)?.gitUrl
+
+    fun getGitConfig(name: String): AppGitConfig? {
+        val value = redisTemplate.opsForValue().get("$REDIS_KEY_APP_GIT$name") ?: return null
+        return runCatching {
+            objectMapper.readValue(value, AppGitConfig::class.java)
+        }.getOrElse { e ->
+            log.warn("Failed to parse git config for app '{}' — returning null. cause: {}", name, e.message)
+            null
+        }
     }
 
     fun getGitRepoByAppName(appName: String): String {
@@ -49,13 +60,20 @@ class ApplicationService(
             ?: throw IllegalStateException("Git repository URL is not configured for application '$appName'")
     }
 
-    fun saveGitUrl(name: String, gitUrl: String?) {
+    fun saveGitConfig(name: String, gitUrl: String?, deployBranch: String?) {
+        if (!deployBranch.isNullOrBlank() && gitUrl.isNullOrBlank()) {
+            throw IllegalArgumentException("Git Repository URL is required when Deploy Branch is specified.")
+        }
         val key = "$REDIS_KEY_APP_GIT$name"
         if (gitUrl.isNullOrBlank()) {
             redisTemplate.delete(key)
         } else {
             validateGitUrl(gitUrl)
-            redisTemplate.opsForValue().set(key, gitUrl)
+            val config = AppGitConfig(
+                gitUrl = gitUrl,
+                deployBranch = deployBranch.takeIf { !it.isNullOrBlank() }
+            )
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(config))
         }
     }
 
@@ -65,14 +83,12 @@ class ApplicationService(
         }
     }
 
-    fun updateApp(oldName: String, newName: String, gitUrl: String?) {
+    fun updateApp(oldName: String, newName: String, gitUrl: String?, deployBranch: String?) {
         if (oldName != newName) {
             redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, oldName)
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, newName)
             redisTemplate.delete("$REDIS_KEY_APP_GIT$oldName")
         }
-        if (gitUrl != null) {
-            saveGitUrl(newName, gitUrl)
-        }
+        saveGitConfig(newName, gitUrl, deployBranch)
     }
 }

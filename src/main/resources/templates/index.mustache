@@ -113,6 +113,11 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                 <input type="text" id="add-app-git-input" class="form-input"
                        placeholder="https://github.com/owner/repo.git" autocomplete="off" />
             </div>
+            <div class="form-group">
+                <label class="form-label" for="add-app-branch-input">Deploy Branch <span style="color:#999;font-weight:400;">(optional — requires Git URL)</span></label>
+                <input type="text" id="add-app-branch-input" class="form-input"
+                       placeholder="main" autocomplete="off" />
+            </div>
             <button class="btn-primary" id="add-app-save-btn" onclick="saveApp()">Add</button>
             <div class="alert alert-success" id="add-app-alert-success">Application registered successfully.</div>
             <div class="alert alert-error"   id="add-app-alert-error"></div>
@@ -137,6 +142,11 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                 <label class="form-label" for="edit-app-git-input">Git Repository URL <span style="color:#999;font-weight:400;">(optional, HTTP/HTTPS only)</span></label>
                 <input type="text" id="edit-app-git-input" class="form-input"
                        placeholder="https://github.com/owner/repo.git" autocomplete="off" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="edit-app-branch-input">Deploy Branch <span style="color:#999;font-weight:400;">(optional — requires Git URL)</span></label>
+                <input type="text" id="edit-app-branch-input" class="form-input"
+                       placeholder="main" autocomplete="off" />
             </div>
             <button class="btn-primary" id="edit-app-save-btn" onclick="saveEditApp()">Save</button>
             <div class="alert alert-success" id="edit-app-alert-success">Application updated successfully.</div>

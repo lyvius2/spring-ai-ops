@@ -29,10 +29,10 @@ class ApplicationController(
         return applicationService.getApps()
     }
 
-    @Operation(summary = "Get application config (name, git URL)")
+    @Operation(summary = "Get application config (name, git URL, deploy branch)")
     @GetMapping("/{name}")
     fun getApp(@Parameter(description = "Application name", required = true) @PathVariable name: String): AppGitResponse {
-        return AppGitResponse(name, applicationService.getGitUrl(name))
+        return AppGitResponse.of(name, applicationService.getGitConfig(name))
     }
 
     @Operation(
@@ -42,18 +42,18 @@ class ApplicationController(
     @PostMapping
     fun addApp(@RequestBody request: AppUpdateRequest): AppUpdateResponse {
         return try {
-            applicationService.addApp(request.name, request.gitUrl)
+            applicationService.addApp(request.name, request.gitUrl, request.deployBranch)
             AppUpdateResponse.success()
         } catch (e: Exception) {
             AppUpdateResponse.failure(e)
         }
     }
 
-    @Operation(summary = "Update application name and/or git URL")
+    @Operation(summary = "Update application name, git URL, and/or deploy branch")
     @PutMapping("/{name}")
     fun updateApp(@Parameter(description = "Current application name", required = true) @PathVariable name: String, @RequestBody request: AppUpdateRequest): AppUpdateResponse {
         return try {
-            applicationService.updateApp(name, request.name, request.gitUrl)
+            applicationService.updateApp(name, request.name, request.gitUrl, request.deployBranch)
             AppUpdateResponse.success()
         } catch (e: Exception) {
             AppUpdateResponse.failure(e)

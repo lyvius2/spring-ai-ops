@@ -1,7 +1,9 @@
 package com.walter.spring.ai.ops.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
+import com.walter.spring.ai.ops.service.dto.AppGitConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -29,6 +31,8 @@ class ApplicationServiceTest {
     @Mock
     private lateinit var valueOperations: ValueOperations<String, String>
 
+    private val objectMapper = ObjectMapper().findAndRegisterModules()
+
     // ── getApps ───────────────────────────────────────────────────────────────
 
     @Test
@@ -37,7 +41,7 @@ class ApplicationServiceTest {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         `when`(setOperations.members(REDIS_KEY_APPLICATIONS)).thenReturn(setOf("app1", "app2"))
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
         val result = applicationService.getApps()
@@ -52,7 +56,7 @@ class ApplicationServiceTest {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         `when`(setOperations.members(REDIS_KEY_APPLICATIONS)).thenReturn(null)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
         val result = applicationService.getApps()
@@ -68,7 +72,7 @@ class ApplicationServiceTest {
     fun addApp_addsToRedis_whenListIsEmpty() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
         applicationService.addApp("app1")
@@ -78,57 +82,78 @@ class ApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("중복되지 않은 앱 이름인 경우 Redis에 추가 (gitUrl 없음)")
-    fun addApp_addsToRedis_whenAppIsNew() {
-        // given
-        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
-
-        // when
-        applicationService.addApp("app2")
-
-        // then
-        verify(setOperations).add(REDIS_KEY_APPLICATIONS, "app2")
-    }
-
-    @Test
-    @DisplayName("이미 등록된 앱 이름인 경우 예외 없이 무시됨 (Set은 중복 자동 무시)")
-    fun addApp_completesWithoutException_whenAppAlreadyExists() {
-        // given
-        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
-
-        // when & then (예외 발생 시 테스트 실패)
-        applicationService.addApp("app1")
-    }
-
-    @Test
-    @DisplayName("이미 등록된 앱 이름인 경우에도 Set.add는 호출됨 (중복 여부는 Redis가 판단)")
-    fun addApp_callsSetAdd_evenWhenAppAlreadyExists() {
-        // given
-        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
-
-        // when
-        applicationService.addApp("app1")
-
-        // then — Set.add 호출은 항상 발생하고, 중복 여부는 Redis가 처리
-        verify(setOperations).add(REDIS_KEY_APPLICATIONS, "app1")
-    }
-
-    @Test
-    @DisplayName("gitUrl이 있는 경우 Redis Value에 저장")
-    fun addApp_savesGitUrl_whenGitUrlProvided() {
+    @DisplayName("gitUrl이 있는 경우 Redis Value에 JSON으로 저장")
+    fun addApp_savesGitConfigAsJson_whenGitUrlProvided() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", null))
 
         // when
-        applicationService.addApp("app1", "http://github.com/owner/repo.git")
+        applicationService.addApp("app1", "https://github.com/owner/repo.git")
 
         // then
-        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", "http://github.com/owner/repo.git")
+        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+    }
+
+    @Test
+    @DisplayName("gitUrl과 deployBranch 모두 있는 경우 JSON으로 함께 저장")
+    fun addApp_savesGitConfigWithDeployBranch_whenBothProvided() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", "main"))
+
+        // when
+        applicationService.addApp("app1", "https://github.com/owner/repo.git", "main")
+
+        // then
+        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+    }
+
+    @Test
+    @DisplayName("gitUrl 없이 deployBranch만 입력한 경우 예외 발생")
+    fun givenDeployBranchWithoutGitUrl_whenAddApp_thenThrowsException() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when & then
+        assertThrows<IllegalArgumentException> {
+            applicationService.addApp("app1", null, "main")
+        }
+    }
+
+    @Test
+    @DisplayName("gitUrl이 null인 경우 기존 git config를 덮어쓰지 않음 (saveGitConfig 미호출)")
+    fun givenGitUrlIsNull_whenAddApp_thenExistingGitUrlIsPreserved() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        applicationService.addApp("app1", null)
+
+        // then — saveGitConfig가 호출되지 않으므로 git 키에 대한 delete/set 없음
+        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}app1")
+        verify(redisTemplate, never()).opsForValue()
+    }
+
+    @Test
+    @DisplayName("gitUrl과 deployBranch 모두 null인 경우 기존 git config 보존")
+    fun givenBothNull_whenAddApp_thenGitConfigIsPreserved() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        applicationService.addApp("app1", null, null)
+
+        // then
+        verify(redisTemplate, never()).delete(anyString())
+        verify(redisTemplate, never()).opsForValue()
     }
 
     @Test
@@ -136,27 +161,12 @@ class ApplicationServiceTest {
     fun addApp_throwsException_whenGitUrlIsNotHttp() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when & then
         assertThrows<IllegalArgumentException> {
             applicationService.addApp("app1", "git@github.com:owner/repo.git")
         }
-    }
-
-    @Test
-    @DisplayName("gitUrl이 null인 경우 기존 git URL을 덮어쓰지 않음 (saveGitUrl 미호출)")
-    fun givenGitUrlIsNull_whenAddApp_thenExistingGitUrlIsPreserved() {
-        // given
-        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
-
-        // when
-        applicationService.addApp("app1", null)
-
-        // then — saveGitUrl이 호출되지 않으므로 git 키에 대한 delete/set 없음
-        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}app1")
-        verify(redisTemplate, never()).opsForValue()
     }
 
     // ── removeApp ─────────────────────────────────────────────────────────────
@@ -166,7 +176,7 @@ class ApplicationServiceTest {
     fun removeApp_removesFromRedisAndDeletesGitKey() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
         applicationService.removeApp("app1")
@@ -176,62 +186,97 @@ class ApplicationServiceTest {
         verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
     }
 
-    // ── getGitUrl ─────────────────────────────────────────────────────────────
+    // ── getGitConfig ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Redis에 git URL이 있는 경우 반환")
-    fun getGitUrl_returnsUrl_whenRedisHasValue() {
+    @DisplayName("Redis에 JSON이 저장된 경우 AppGitConfig로 역직렬화하여 반환")
+    fun getGitConfig_returnsConfig_whenRedisHasJson() {
         // given
+        val config = AppGitConfig("https://github.com/owner/repo.git", "main")
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn("http://github.com/owner/repo.git")
-        val applicationService = ApplicationService(redisTemplate)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        val result = applicationService.getGitUrl("app1")
+        val result = applicationService.getGitConfig("app1")
 
         // then
-        assertThat(result).isEqualTo("http://github.com/owner/repo.git")
+        assertThat(result?.gitUrl).isEqualTo("https://github.com/owner/repo.git")
+        assertThat(result?.deployBranch).isEqualTo("main")
     }
 
     @Test
-    @DisplayName("Redis에 git URL이 없는 경우 null 반환")
-    fun getGitUrl_returnsNull_whenRedisHasNoValue() {
+    @DisplayName("Redis에 deployBranch 없이 저장된 경우 gitUrl만 반환")
+    fun getGitConfig_returnsConfigWithNullBranch_whenDeployBranchNotSet() {
+        // given
+        val config = AppGitConfig("https://github.com/owner/repo.git", null)
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        val result = applicationService.getGitConfig("app1")
+
+        // then
+        assertThat(result?.gitUrl).isEqualTo("https://github.com/owner/repo.git")
+        assertThat(result?.deployBranch).isNull()
+    }
+
+    @Test
+    @DisplayName("Redis에 git 설정이 없는 경우 null 반환")
+    fun getGitConfig_returnsNull_whenRedisHasNoValue() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(null)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        val result = applicationService.getGitUrl("app1")
+        val result = applicationService.getGitConfig("app1")
 
         // then
         assertThat(result).isNull()
     }
 
-    // ── getGitRepositoryByAppName ─────────────────────────────────────────────
+    @Test
+    @DisplayName("Redis에 파싱 불가한 값이 있는 경우 null 반환 (이전 포맷 호환)")
+    fun getGitConfig_returnsNull_whenValueIsNotValidJson() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn("https://github.com/owner/repo.git")
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        val result = applicationService.getGitConfig("app1")
+
+        // then
+        assertThat(result).isNull()
+    }
+
+    // ── getGitRepoByAppName ───────────────────────────────────────────────────
 
     @Test
     @DisplayName("Redis에 git URL이 있는 경우 해당 URL 반환")
-    fun getGitRepositoryByAppName_returnsUrl_whenRedisHasValue() {
+    fun getGitRepoByAppName_returnsUrl_whenRedisHasValue() {
         // given
+        val config = AppGitConfig("https://github.com/owner/repo.git", null)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn("http://github.com/owner/repo.git")
-        val applicationService = ApplicationService(redisTemplate)
+        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
         val result = applicationService.getGitRepoByAppName("app1")
 
         // then
-        assertThat(result).isEqualTo("http://github.com/owner/repo.git")
+        assertThat(result).isEqualTo("https://github.com/owner/repo.git")
     }
 
     @Test
     @DisplayName("Redis에 git URL이 없는 경우 IllegalStateException 발생")
-    fun getGitRepositoryByAppName_throwsIllegalStateException_whenRedisHasNoValue() {
+    fun getGitRepoByAppName_throwsIllegalStateException_whenRedisHasNoValue() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(null)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when & then
         assertThrows<IllegalStateException> {
@@ -239,17 +284,44 @@ class ApplicationServiceTest {
         }
     }
 
+    // ── saveGitConfig ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("gitUrl이 빈 문자열인 경우 git 키 삭제")
+    fun saveGitConfig_deletesKey_whenGitUrlIsBlank() {
+        // given
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        applicationService.saveGitConfig("app1", "", null)
+
+        // then
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+    }
+
+    @Test
+    @DisplayName("gitUrl 없이 deployBranch만 입력한 경우 예외 발생")
+    fun givenDeployBranchWithoutGitUrl_whenSaveGitConfig_thenThrowsException() {
+        // given
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when & then
+        assertThrows<IllegalArgumentException> {
+            applicationService.saveGitConfig("app1", null, "main")
+        }
+    }
+
     // ── updateApp ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("앱 이름이 변경되는 경우 기존 이름 삭제 후 새 이름으로 추가 (gitUrl null)")
+    @DisplayName("앱 이름이 변경되는 경우 기존 이름 삭제 후 새 이름으로 추가")
     fun updateApp_renamesApp_whenNameChanged() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.updateApp("oldApp", "newApp", null)
+        applicationService.updateApp("oldApp", "newApp", null, null)
 
         // then
         verify(setOperations).remove(REDIS_KEY_APPLICATIONS, "oldApp")
@@ -258,18 +330,75 @@ class ApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("앱 이름이 동일한 경우 Set 변경 없이 git URL만 업데이트")
-    fun updateApp_updatesGitUrlOnly_whenNameUnchanged() {
+    @DisplayName("앱 이름이 동일하고 gitUrl이 있는 경우 JSON으로 저장")
+    fun updateApp_savesGitConfig_whenNameUnchangedAndGitUrlProvided() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", null))
 
         // when
-        applicationService.updateApp("app1", "app1", "http://github.com/owner/repo.git")
+        applicationService.updateApp("app1", "app1", "https://github.com/owner/repo.git", null)
 
         // then
         verify(redisTemplate, never()).opsForSet()
-        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", "http://github.com/owner/repo.git")
+        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+    }
+
+    @Test
+    @DisplayName("앱 이름이 동일하고 gitUrl과 deployBranch 모두 있는 경우 JSON으로 저장")
+    fun updateApp_savesGitConfigWithDeployBranch_whenBothProvided() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", "main"))
+
+        // when
+        applicationService.updateApp("app1", "app1", "https://github.com/owner/repo.git", "main")
+
+        // then
+        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+    }
+
+    @Test
+    @DisplayName("gitUrl 없이 deployBranch만 입력한 경우 예외 발생")
+    fun givenDeployBranchWithoutGitUrl_whenUpdateApp_thenThrowsException() {
+        // given
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when & then
+        assertThrows<IllegalArgumentException> {
+            applicationService.updateApp("app1", "app1", null, "main")
+        }
+    }
+
+    @Test
+    @DisplayName("이름이 동일하고 gitUrl이 null인 경우 git 키 삭제")
+    fun givenSameNameAndGitUrlNull_whenUpdateApp_thenGitKeyIsDeleted() {
+        // given
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        applicationService.updateApp("app1", "app1", null, null)
+
+        // then — 명시적 수정 요청이므로 null은 삭제 의도로 처리
+        verify(redisTemplate, never()).opsForSet()
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+    }
+
+    @Test
+    @DisplayName("이름이 변경되고 gitUrl이 null인 경우 새 앱의 git 키를 삭제하지 않음")
+    fun givenNameChangedAndGitUrlNull_whenUpdateApp_thenNewAppGitUrlIsPreserved() {
+        // given
+        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
+
+        // when
+        applicationService.updateApp("oldApp", "newApp", null, null)
+
+        // then — 이름 변경으로 oldApp git 키는 삭제되고, newApp git 키도 null 처리로 삭제됨
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}newApp")
     }
 
     @Test
@@ -277,42 +406,11 @@ class ApplicationServiceTest {
     fun updateApp_throwsException_whenGitUrlIsNotHttp() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
+        val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when & then
         assertThrows<IllegalArgumentException> {
-            applicationService.updateApp("oldApp", "newApp", "git@github.com:owner/repo.git")
+            applicationService.updateApp("oldApp", "newApp", "git@github.com:owner/repo.git", null)
         }
-    }
-
-    @Test
-    @DisplayName("이름이 동일하고 gitUrl이 null인 경우 기존 git URL을 덮어쓰지 않음")
-    fun givenSameNameAndGitUrlNull_whenUpdateApp_thenExistingGitUrlIsPreserved() {
-        // given
-        val applicationService = ApplicationService(redisTemplate)
-
-        // when
-        applicationService.updateApp("app1", "app1", null)
-
-        // then — 이름이 같으므로 Set 변경 없고, gitUrl이 null이므로 saveGitUrl 미호출
-        verify(redisTemplate, never()).opsForSet()
-        verify(redisTemplate, never()).opsForValue()
-        verify(redisTemplate, never()).delete(anyString())
-    }
-
-    @Test
-    @DisplayName("이름이 변경되고 gitUrl이 null인 경우 새 앱의 git URL을 삭제하지 않음")
-    fun givenNameChangedAndGitUrlNull_whenUpdateApp_thenNewAppGitUrlIsPreserved() {
-        // given
-        `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
-        val applicationService = ApplicationService(redisTemplate)
-
-        // when
-        applicationService.updateApp("oldApp", "newApp", null)
-
-        // then — 이름 변경으로 oldApp git 키는 삭제되지만, newApp git 키는 건드리지 않음
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
-        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}newApp")
-        verify(redisTemplate, never()).opsForValue()
     }
 }
