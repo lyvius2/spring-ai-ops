@@ -68,10 +68,10 @@ resilience4j:
 
 ai:
   open-ai:
-    model: gpt-4o-mini                  # Set OpenAI Model : Default is gpt-4o-mini
+    model: gpt-4o-mini                  # Set OpenAI Model: Default is gpt-4o-mini
     api-key: ${AI_OPEN_AI_API_KEY:}      # Set your OpenAI API key for authentication
   anthropic:
-    model: claude-sonnet-4-6            # Set Anthropic Model : Default is claude-sonnet-4-6
+    model: claude-sonnet-4-6            # Set Anthropic Model: Default is claude-sonnet-4-6
     api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
     max-tokens: 8192                    # Max output tokens for Anthropic model : Default is 8192
 
@@ -82,7 +82,7 @@ loki:
 github:
   url: ${GITHUB_URL:https://api.github.com}     # Set your GitHub API URL (e.g., https://api.github.com)
   access-token: ${GITHUB_ACCESS_TOKEN:}         # Set your GitHub access token for authentication
-  api-version: ${GITHUB_API_VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28) : Default is 2022-11-28
+  api-version: ${GITHUB_API_VERSION:2022-11-28} # Set GitHub API version (e.g., 2022-11-28): Default is 2022-11-28
 gitlab:
   url: ${GITLAB_URL:https://gitlab.com/api/v4}  # Set your GitLab URL (e.g., https://gitlab.com/api/v4)
   access-token: ${GITLAB_ACCESS_TOKEN:}         # Set your GitLab access token for authentication
@@ -91,13 +91,13 @@ crypto:
   secret-key: ${CRYPTO_SECRET_KEY:}  # AES-256-GCM key for encrypting Redis-stored credentials. Must be set in production.
 
 analysis:
-  data-retention-hours: 120 # Set the number of hours to retain analysis data : Default is 120 (5 days)
-  maximum-view-count: 5     # Set the maximum number of views to retain per analysis (0 means unlimited) : Default is 5
-  result-language: ${ANALYSIS_RESULT_LANGUAGE:en}   # Set the language for analysis results (e.g., en for English) : Default is en
+  data-retention-hours: 120 # Set the number of hours to retain analysis data: Default is 120 (5 days)
+  maximum-view-count: 5     # Set the maximum number of views to retain per analysis (0 means unlimited): Default is 5
+  result-language: ${ANALYSIS_RESULT_LANGUAGE:en}   # Set the language for analysis results (e.g., en for English): Default is en
   code-risk:
-    token-threshold: 27000          # Max tokens for single-call analysis; larger bundles use map-reduce : Default is 27000
-    map-reduce-concurrency: 3       # Max simultaneous chunk analysis calls in map phase : Default is 3
-    map-reduce-delay-ms: 1000       # Delay (ms) after each chunk call before releasing the concurrency slot : Default is 1000
+    token-threshold: 27000          # Max tokens for single-call analysis; larger bundles use map-reduce: Default is 27000
+    map-reduce-concurrency: 3       # Max simultaneous chunk analysis calls in map phase: Default is 3
+    map-reduce-delay-ms: 1000       # Delay (ms) after each chunk call before releasing the concurrency slot: Default is 1000
 
 app:
   async:
@@ -136,6 +136,12 @@ management:
   tracing:
     sampling:
       probability: 1.0
+  otlp:
+    tracing:
+      transport: http
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://127.0.0.1:4318/v1/traces}  # Set your OTLP endpoint
+      export:
+        enabled: false                                                          # Set to true to enable OTLP export
 
 logging:
   level:
