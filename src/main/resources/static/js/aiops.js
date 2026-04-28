@@ -724,6 +724,7 @@ const appCommitLists       = {};   // { appName: CodeReviewRecord[] }    newest-
 const appSelectedCommitIdx = {};   // { appName: number }
 const appCodeRiskLists     = {};   // { appName: CodeRiskRecord[] }       newest-first
 const appSelectedRiskIdx   = {};   // { appName: number }
+const appRiskFilePage      = {};   // { appName: number }  current file-page (0-based)
 let stompClient = null;
 
 // ── Analysis Running Indicator ────────────────────────────────────────────────
@@ -912,6 +913,7 @@ async function handleCodeRiskRecord(record) {
 
     await loadCodeRiskList(appName);
     appSelectedRiskIdx[appName] = 0;
+    appRiskFilePage[appName] = 0;
 
     const branch = record.branch || 'default';
     if (record.isSuccess) {
@@ -1725,7 +1727,9 @@ function buildSnippetHtml(issue) {
         </div>`;
 }
 
-function renderRiskIssuesSection(issues) {
+const RISK_FILE_PAGE_SIZE = 10;
+
+function renderRiskIssuesSection(issues, appName) {
     if (!issues || issues.length === 0) return '';
 
     // Group by file
@@ -1736,7 +1740,14 @@ function renderRiskIssuesSection(issues) {
         byFile[key].push(issue);
     }
 
-    const fileRows = Object.entries(byFile).map(([file, fileIssues]) => {
+    const allFileEntries = Object.entries(byFile);
+    const totalFiles = allFileEntries.length;
+    const totalPages = Math.ceil(totalFiles / RISK_FILE_PAGE_SIZE);
+    const currentPage = Math.min(appRiskFilePage[appName] ?? 0, totalPages - 1);
+    const pageStart = currentPage * RISK_FILE_PAGE_SIZE;
+    const pageEntries = allFileEntries.slice(pageStart, pageStart + RISK_FILE_PAGE_SIZE);
+
+    const fileRows = pageEntries.map(([file, fileIssues]) => {
         const items = fileIssues.map(issue => {
             const sev = severityClass(issue.severity);
             const lineText = issue.line ? `Line ${escHtml(issue.line)}` : '';
@@ -1774,11 +1785,24 @@ function renderRiskIssuesSection(issues) {
     const mediumCount = issues.filter(i => i.severity?.toLowerCase() === 'medium').length;
     const lowCount    = issues.filter(i => i.severity?.toLowerCase() === 'low').length;
 
+    const paginationHtml = totalPages > 1 ? `
+        <div class="risk-file-pagination">
+            <button class="risk-page-btn" onclick="goToRiskFilePage('${escHtml(appName)}', ${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>&#8249;</button>
+            <span class="risk-page-info">${pageStart + 1}–${Math.min(pageStart + RISK_FILE_PAGE_SIZE, totalFiles)} / ${totalFiles} files</span>
+            <button class="risk-page-btn" onclick="goToRiskFilePage('${escHtml(appName)}', ${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>&#8250;</button>
+        </div>` : '';
+
     return `
         <div class="analysis-layer">
-            <div class="layer-header">Issues by File (${issues.length} total)<span class="layer-header-severity-counts">🔴 HIGH : ${highCount} 🟠 MEDIUM : ${mediumCount} 🟡 LOW : ${lowCount}</span></div>
+            <div class="layer-header">Issues by File (${totalFiles} files · ${issues.length} total)<span class="layer-header-severity-counts">🔴 HIGH : ${highCount} 🟠 MEDIUM : ${mediumCount} 🟡 LOW : ${lowCount}</span></div>
             <div style="padding:10px 12px;">${fileRows}</div>
+            ${paginationHtml}
         </div>`;
+}
+
+function goToRiskFilePage(appName, page) {
+    appRiskFilePage[appName] = page;
+    renderCodeRiskContent(appName);
 }
 
 function renderCodeRiskContent(appName) {
@@ -1807,7 +1831,7 @@ function renderCodeRiskContent(appName) {
                 <span style="color:#999; margin-left:8px;">(${formatOccupiedAt(rec.analyzedAt)})</span>
             </div>
         </div>
-        ${renderRiskIssuesSection(rec.issues)}
+        ${renderRiskIssuesSection(rec.issues, appName)}
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis Result<span class="layer-header-disclaimer">* AI-generated results may not always be accurate. Results may vary between analyses.</span></div>
             <div class="analysis-text markdown-body" style="padding:14px;">${renderMarkdown(rec.analyzedResult || '')}</div>
@@ -1825,6 +1849,7 @@ function renderCodeRiskContent(appName) {
 
 function selectCodeRiskRecord(appName, idx) {
     appSelectedRiskIdx[appName] = idx;
+    appRiskFilePage[appName] = 0;
     renderCodeRiskContent(appName);
 }
 
