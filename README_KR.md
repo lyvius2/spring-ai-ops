@@ -1,4 +1,4 @@
-# Spring AI Ops — 한국어 문서
+# Spring AI Ops
 
 AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
 
@@ -317,6 +317,7 @@ POST /webhook/grafana[/{application}]
 - OpenAI, Anthropic API 키 (하나 이상)
 - Grafana 장애 분석용 접근 가능한 Loki 서버
 - (선택) Prometheus 메트릭 조회용 Prometheus 서버 URL
+- (선택) Trace 전송을 받을 OTLP 호환 백엔드 또는 OpenTelemetry Collector
 - 코드 리뷰 기능 사용 시 GitHub 또는 GitLab Personal Access Token
 
 ### 설정
@@ -363,6 +364,17 @@ app:
       executor-concurrency-limit: 200  # Virtual Thread 기반 비동기 작업의 최대 동시 실행 수
       llm-max-concurrency: 20          # 동시 LLM API 호출 허용 수 (Semaphore)
 
+management:
+  tracing:
+    sampling:
+      probability: 1.0  # Trace 샘플링 비율; 로컬/개발 환경에서는 전체 수집
+  otlp:
+    tracing:
+      transport: http
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+      export:
+        enabled: false  # true로 변경하면 OTLP endpoint로 trace 전송
+
 resilience4j:
   timelimiter:
     configs:
@@ -386,6 +398,10 @@ feign:
 ```
 
 동일한 설정에 대해 property 값과 Redis 값이 모두 있으면 Redis 값이 우선 적용됩니다.
+
+**Tracing 전송**
+
+이 애플리케이션은 Spring Boot Actuator와 `micrometer-tracing-bridge-otel`을 사용하므로 서버 요청과 계측된 클라이언트 호출을 OpenTelemetry trace로 변환할 수 있습니다. Trace를 외부로 전송하려면 `management.otlp.tracing.export.enabled=true`로 변경하고, `management.otlp.tracing.endpoint`를 OpenTelemetry Collector, Tempo, Jaeger 등 OTLP 호환 수신 endpoint로 지정하세요. 기본 HTTP endpoint는 `http://127.0.0.1:4318/v1/traces`입니다. gRPC를 사용할 경우 `management.otlp.tracing.transport`와 Collector endpoint를 함께 맞춰야 합니다.
 
 ### 민감 정보 암호화
 

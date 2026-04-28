@@ -346,6 +346,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 - An API key for at least one LLM provider (OpenAI, Anthropic)
 - A running Loki instance for Grafana error analysis
 - (Optional) A running Prometheus instance for metric queries
+- (Optional) An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
 - A GitHub or GitLab personal access token if you want code review
 
 ### Configuration
@@ -392,6 +393,17 @@ app:
       executor-concurrency-limit: 200  # Max concurrent async tasks using virtual threads
       llm-max-concurrency: 20          # Max simultaneous in-flight LLM API calls (Semaphore)
 
+management:
+  tracing:
+    sampling:
+      probability: 1.0  # Trace sampling rate; 1.0 exports all sampled traces in local/dev
+  otlp:
+    tracing:
+      transport: http
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+      export:
+        enabled: false  # Set to true to send traces to the OTLP endpoint
+
 resilience4j:
   timelimiter:
     configs:
@@ -415,6 +427,10 @@ feign:
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
+
+**Tracing export**
+
+The application includes Spring Boot Actuator and `micrometer-tracing-bridge-otel`, so server requests and instrumented client calls can be converted into OpenTelemetry traces. Set `management.otlp.tracing.export.enabled=true` and point `management.otlp.tracing.endpoint` to your OpenTelemetry Collector, Tempo, Jaeger, or another OTLP-compatible receiver. The default HTTP endpoint is `http://127.0.0.1:4318/v1/traces`; for gRPC, change `management.otlp.tracing.transport` and use the matching collector endpoint.
 
 ### Sensitive Value Encryption
 
