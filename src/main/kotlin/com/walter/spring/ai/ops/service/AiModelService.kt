@@ -27,6 +27,7 @@ import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import java.nio.file.Path
 import java.util.concurrent.Semaphore
 
 @Service
@@ -243,12 +244,12 @@ class AiModelService(
         }
     }
 
-    fun executeAnalyzeFiring(alertSection: String, logSection: String, metricSection: String = ""): String {
+    fun executeAnalyzeFiring(alertSection: String, logSection: String, metricSection: String = "", sourcePath: Path? = null): String {
         val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert in analyzing application errors and logs. " +
-                    "Analyze the provided Grafana alert context and application logs, " +
-                    "identify the root cause, and give clear, actionable recommendations. " +
+                    "Analyze the provided Grafana alert context, application logs, metrics, and related source context when available, " +
+                    "identify the root cause, related code locations, and give clear, actionable recommendations. " +
                     "Do not state unverifiable facts as certainties; express them as possibilities."
         )
         val userMessage = UserMessage(
@@ -261,10 +262,18 @@ class AiModelService(
                     append(metricSection)
                     appendLine()
                 }
-                appendLine("Based on the above alert${if (metricSection.isNotBlank()) ", metrics," else ""} and logs, please provide in markdown format:")
+                if (sourcePath != null) {
+                    appendLine("## Related source snippets")
+                    appendLine("(Source repository checkout is available. Stack-trace based source snippets will be added in the next implementation step.)")
+                    appendLine()
+                }
+                appendLine("Based on the above alert${if (metricSection.isNotBlank()) ", metrics," else ""} logs${if (sourcePath != null) ", and related source context" else ""}, please provide in markdown format:")
                 appendLine("1. Root cause analysis")
                 appendLine("2. Affected components")
-                appendLine("3. Recommended actions to resolve the issue")
+                appendLine("3. Related source files and line numbers")
+                appendLine("4. Why the related code may have caused the incident")
+                appendLine("5. Concrete fix guidance")
+                appendLine("6. Recommended tests or verification steps")
                 if (resultLanguage != "en") {
                     appendLine(languageOptions)
                 }

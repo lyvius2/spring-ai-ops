@@ -13,19 +13,22 @@ import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
+import com.walter.spring.ai.ops.service.RepositoryService
+import com.walter.spring.ai.ops.service.dto.AppGitConfig
 import org.springframework.core.task.AsyncTaskExecutor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mock
 import org.mockito.Mockito
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import java.nio.file.Files
 
 @Suppress("UNCHECKED_CAST")
 private fun <T> anyObject(): T = Mockito.any() as T
@@ -40,6 +43,7 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var githubService: GithubService
     @Mock private lateinit var gitlabService: GitlabService
     @Mock private lateinit var aiModelService: AiModelService
+    @Mock private lateinit var repositoryService: RepositoryService
     @Mock private lateinit var messageService: MessageService
     @Mock private lateinit var taskExecutor: AsyncTaskExecutor
 
@@ -49,7 +53,7 @@ class ObservabilityFacadeTest {
     fun setUp() {
         incidentAnalyzeFacade = ObservabilityFacade(
             applicationService, grafanaService, lokiService, prometheusService,
-            githubService, gitlabService, aiModelService, messageService,
+            githubService, gitlabService, aiModelService, repositoryService, messageService,
             taskExecutor,
         )
     }
@@ -101,15 +105,16 @@ class ObservabilityFacadeTest {
     /** firing 경로에서 공통으로 필요한 서비스 Mock 설정 */
     private fun stubHappyPath(request: GrafanaAlertingRequest) {
         // Run tasks synchronously on the calling thread for deterministic test execution
-        `when`(taskExecutor.execute(Mockito.any())).thenAnswer { invocation ->
+        doAnswer { invocation ->
             (invocation.arguments[0] as Runnable).run()
-        }
+            null
+        }.`when`(taskExecutor).execute(Mockito.any())
         `when`(grafanaService.convertLogInquiry(request))
             .thenReturn(LokiQueryInquiry(query = "{job=\"test-app\"}", start = "0", end = "0"))
         `when`(lokiService.executeLogQuery(anyObject()))
             .thenReturn(LokiQueryResult())
         `when`(prometheusService.isConfigured()).thenReturn(false)
-        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject()))
+        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), anyObject()))
             .thenReturn("Root cause: timeout in PaymentService")
     }
 
@@ -154,6 +159,28 @@ class ObservabilityFacadeTest {
 
         // then
         verify(lokiService).executeLogQuery(anyObject())
+    }
+
+    @Test
+    @DisplayName("Git 설정이 유효하면 checkout 결과를 소스 섹션으로 LLM 분석에 연결함")
+    fun analyzeFiring_connectsCheckoutSourcePathToAnalyzePrompt_whenGitConfigIsValid() {
+        // given
+        val request = createRequest()
+        val sourcePath = Files.createTempDirectory("incident-source-context-test")
+        stubHappyPath(request)
+        `when`(applicationService.getGitConfig("my-app"))
+            .thenReturn(AppGitConfig("https://example.com/test.git", "main"))
+        `when`(repositoryService.cloneRepository("my-app", "https://example.com/test.git", "main"))
+            .thenReturn(sourcePath)
+        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), sourcePath))
+            .thenReturn("Root cause with source context")
+
+        // when
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
+
+        // then
+        verify(repositoryService).cloneRepository("my-app", "https://example.com/test.git", "main")
+        verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), sourcePath)
     }
 
 

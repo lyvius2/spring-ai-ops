@@ -21,9 +21,11 @@ import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
+import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.util.toISO8601
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
@@ -37,6 +39,7 @@ class ObservabilityFacade(
     private val githubService: GithubService,
     private val gitlabService: GitlabService,
     private val aiModelService: AiModelService,
+    private val repositoryService: RepositoryService,
     private val messageService: MessageService,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
@@ -56,29 +59,49 @@ class ObservabilityFacade(
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(targetApplication)
 
-            val logFuture = CompletableFuture.supplyAsync({
-                lokiService.executeLogQuery(grafanaService.convertLogInquiry(request))
-            }, executor)
-            val metricFuture = CompletableFuture.supplyAsync({
-                if (prometheusService.isConfigured()) {
-                    prometheusService.executeMetricQuery(grafanaService.convertMetricInquiry(request))
-                } else {
-                    null
-                }
-            }, executor)
+            val logFuture = CompletableFuture.supplyAsync({ executeFindLog(request) }, executor)
+            val metricFuture = CompletableFuture.supplyAsync({ executeFindMetric(request) }, executor)
+            val checkoutFuture = CompletableFuture.supplyAsync({ getSourcePath(targetApplication) }, executor)
 
             val logResults: LokiQueryResult = logFuture.get()
             val metricResults: PrometheusQueryResult? = metricFuture.get()
+            val sourcePath: Path? = checkoutFuture.get()
 
             val analyzeResults = aiModelService.executeAnalyzeFiring(
                 request.createAlertSectionPrompt(),
                 logResults.createLogSectionPrompt(),
                 metricResults?.createMetricSectionPrompt() ?: "",
+                sourcePath,
             )
             val record = createAnalyzeFiringRecord(request, targetApplication, logResults, metricResults, analyzeResults)
             grafanaService.saveAnalyzeFiringRecord(record)
             messageService.pushFiring(record)
         }.onFailure { log.error("Failed to analyze Firing : {}", it.message, it) }
+    }
+
+    private fun executeFindLog(request: GrafanaAlertingRequest): LokiQueryResult {
+        val lokiQueryRequest = grafanaService.convertLogInquiry(request)
+        return lokiService.executeLogQuery(lokiQueryRequest)
+    }
+
+    private fun executeFindMetric(request: GrafanaAlertingRequest): PrometheusQueryResult? =
+        if (prometheusService.isConfigured()) {
+            prometheusService.executeMetricQuery(grafanaService.convertMetricInquiry(request))
+        } else {
+            null
+        }
+
+    private fun getSourcePath(targetApplication: String): Path? {
+        val appConfig = applicationService.getGitConfig(targetApplication)
+        return if (appConfig != null && appConfig.isValidConfig()) {
+            repositoryService.cloneRepository(
+                appName = targetApplication,
+                gitUrl = appConfig.gitUrl!!,
+                branch = appConfig.deployBranch!!
+            )
+        } else {
+            null
+        }
     }
 
     private fun recordAuditLog(request: GrafanaAlertingRequest) {
