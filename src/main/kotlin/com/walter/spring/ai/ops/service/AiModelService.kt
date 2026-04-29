@@ -27,7 +27,6 @@ import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
-import java.nio.file.Path
 import java.util.concurrent.Semaphore
 
 @Service
@@ -244,7 +243,7 @@ class AiModelService(
         }
     }
 
-    fun executeAnalyzeFiring(alertSection: String, logSection: String, metricSection: String = "", sourcePath: Path? = null): String {
+    fun executeAnalyzeFiring(alertSection: String, logSection: String, metricSection: String = "", sourceSection: String = ""): String {
         val model = chatModel ?: return ""
         val systemMessage = SystemMessage(
             "You are an expert in analyzing application errors and logs. " +
@@ -262,12 +261,11 @@ class AiModelService(
                     append(metricSection)
                     appendLine()
                 }
-                if (sourcePath != null) {
-                    appendLine("## Related source snippets")
-                    appendLine("(Source repository checkout is available. Stack-trace based source snippets will be added in the next implementation step.)")
+                if (sourceSection.isNotBlank()) {
+                    append(sourceSection)
                     appendLine()
                 }
-                appendLine("Based on the above alert${if (metricSection.isNotBlank()) ", metrics," else ""} logs${if (sourcePath != null) ", and related source context" else ""}, please provide in markdown format:")
+                appendLine("Based on the above alert${if (metricSection.isNotBlank()) ", metrics," else ""} logs${if (sourceSection.isNotBlank()) ", and related source context" else ""}, please provide in markdown format:")
                 appendLine("1. Root cause analysis")
                 appendLine("2. Affected components")
                 appendLine("3. Related source files and line numbers")

@@ -4,17 +4,19 @@ import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlert
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
-import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GrafanaService
+import com.walter.spring.ai.ops.service.IncidentSourceContextService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.AppGitConfig
+import com.walter.spring.ai.ops.service.dto.IncidentSourceContext
+import com.walter.spring.ai.ops.service.dto.SourceSnippet
 import org.springframework.core.task.AsyncTaskExecutor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -44,6 +46,7 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var gitlabService: GitlabService
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var repositoryService: RepositoryService
+    @Mock private lateinit var incidentSourceContextService: IncidentSourceContextService
     @Mock private lateinit var messageService: MessageService
     @Mock private lateinit var taskExecutor: AsyncTaskExecutor
 
@@ -53,7 +56,7 @@ class ObservabilityFacadeTest {
     fun setUp() {
         incidentAnalyzeFacade = ObservabilityFacade(
             applicationService, grafanaService, lokiService, prometheusService,
-            githubService, gitlabService, aiModelService, repositoryService, messageService,
+            githubService, gitlabService, aiModelService, repositoryService, incidentSourceContextService, messageService,
             taskExecutor,
         )
     }
@@ -114,6 +117,8 @@ class ObservabilityFacadeTest {
         `when`(lokiService.executeLogQuery(anyObject()))
             .thenReturn(LokiQueryResult())
         `when`(prometheusService.isConfigured()).thenReturn(false)
+        `when`(incidentSourceContextService.createContext(anyObject(), anyObject()))
+            .thenReturn(IncidentSourceContext(emptyList(), emptyList(), emptyList()))
         `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), anyObject()))
             .thenReturn("Root cause: timeout in PaymentService")
     }
@@ -162,17 +167,32 @@ class ObservabilityFacadeTest {
     }
 
     @Test
-    @DisplayName("Git 설정이 유효하면 checkout 결과를 소스 섹션으로 LLM 분석에 연결함")
-    fun analyzeFiring_connectsCheckoutSourcePathToAnalyzePrompt_whenGitConfigIsValid() {
+    @DisplayName("Git 설정이 유효하면 checkout 결과로 source context를 생성하고 LLM 분석에 연결함")
+    fun givenValidGitConfig_whenAnalyzeFiring_thenConnectsSourceContextSectionToAnalyzePrompt() {
         // given
         val request = createRequest()
         val sourcePath = Files.createTempDirectory("incident-source-context-test")
+        val sourceContext = IncidentSourceContext(
+            frames = emptyList(),
+            snippets = listOf(
+                SourceSnippet(
+                    filePath = "src/main/kotlin/com/example/FooService.kt",
+                    startLine = 1,
+                    endLine = 3,
+                    focusLine = 2,
+                    content = ">>    2 | error(\"failed\")",
+                )
+            ),
+            unresolvedFrames = emptyList(),
+        )
         stubHappyPath(request)
         `when`(applicationService.getGitConfig("my-app"))
             .thenReturn(AppGitConfig("https://example.com/test.git", "main"))
         `when`(repositoryService.cloneRepository("my-app", "https://example.com/test.git", "main"))
             .thenReturn(sourcePath)
-        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), sourcePath))
+        `when`(incidentSourceContextService.createContext(anyObject(), Mockito.eq(sourcePath)))
+            .thenReturn(sourceContext)
+        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), Mockito.contains("Related source snippets")))
             .thenReturn("Root cause with source context")
 
         // when
@@ -180,7 +200,8 @@ class ObservabilityFacadeTest {
 
         // then
         verify(repositoryService).cloneRepository("my-app", "https://example.com/test.git", "main")
-        verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), sourcePath)
+        verify(incidentSourceContextService).createContext(anyObject(), Mockito.eq(sourcePath))
+        verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), Mockito.contains("Related source snippets"))
     }
 
 

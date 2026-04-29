@@ -18,6 +18,7 @@ import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GitRemoteService
 import com.walter.spring.ai.ops.service.GrafanaService
+import com.walter.spring.ai.ops.service.IncidentSourceContextService
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
@@ -40,6 +41,7 @@ class ObservabilityFacade(
     private val gitlabService: GitlabService,
     private val aiModelService: AiModelService,
     private val repositoryService: RepositoryService,
+    private val incidentSourceContextService: IncidentSourceContextService,
     private val messageService: MessageService,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
@@ -66,12 +68,14 @@ class ObservabilityFacade(
             val logResults: LokiQueryResult = logFuture.get()
             val metricResults: PrometheusQueryResult? = metricFuture.get()
             val sourcePath: Path? = checkoutFuture.get()
+            val sourceContext = incidentSourceContextService.createContext(logResults, sourcePath)
+            val sourceSection = sourceContext.createSourceSectionPrompt()
 
             val analyzeResults = aiModelService.executeAnalyzeFiring(
                 request.createAlertSectionPrompt(),
                 logResults.createLogSectionPrompt(),
                 metricResults?.createMetricSectionPrompt() ?: "",
-                sourcePath,
+                sourceSection,
             )
             val record = createAnalyzeFiringRecord(request, targetApplication, logResults, metricResults, analyzeResults)
             grafanaService.saveAnalyzeFiringRecord(record)
