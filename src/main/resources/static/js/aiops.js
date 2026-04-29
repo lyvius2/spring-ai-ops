@@ -830,7 +830,10 @@ async function handleFiringRecord(record) {
     const appName = record.application;
 
     // API에서 최신 목록을 가져온 후 렌더링
-    await loadFiringList(appName);
+    await Promise.all([
+        loadFiringList(appName),
+        loadCodeRiskList(appName),
+    ]);
     appSelectedFiringIdx[appName] = 0;
 
     // Always show notification
@@ -843,13 +846,21 @@ async function handleFiringRecord(record) {
     if (existing) {
         if (selectedApp === appName) {
             // 이미 선택된 앱: 레이어와 목록만 in-place 업데이트
+            syncCodeRiskTabVisibility(appName);
             const layersEl = document.getElementById('exception-layers');
-            if (layersEl) layersEl.innerHTML = renderAnalysisLayers(appName, record);
+            if (layersEl) {
+                layersEl.innerHTML = renderAnalysisLayers(appName, record);
+                applyHighlighting(layersEl);
+            } else {
+                renderAppDetailFromLocal(appName);
+            }
             const tbody = document.getElementById('firing-list-body');
             if (tbody) tbody.innerHTML = renderFiringListRows(appName);
+            switchToTab('exception');
         } else {
             // 다른 앱이 선택 중: 렌더링 완료 후 앱 활성화
             renderAppDetailFromLocal(appName);
+            switchToTab('exception');
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             existing.classList.add('active');
             selectedApp = appName;
@@ -859,6 +870,7 @@ async function handleFiringRecord(record) {
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
+            switchToTab('exception');
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
@@ -1687,10 +1699,12 @@ function openSourceSuggestionModal(index) {
 
     const originalCodeEl = document.getElementById('source-suggestion-original-code');
     const suggestedCodeEl = document.getElementById('source-suggestion-suggested-code');
-    originalCodeEl.textContent = originalCode || '(No original code provided)';
-    suggestedCodeEl.textContent = suggestionCode || '(No suggested code provided)';
+    originalCodeEl.removeAttribute('data-highlighted');
+    suggestedCodeEl.removeAttribute('data-highlighted');
     originalCodeEl.className = language ? `language-${language}` : '';
     suggestedCodeEl.className = language ? `language-${language}` : '';
+    originalCodeEl.textContent = originalCode || '(No original code provided)';
+    suggestedCodeEl.textContent = suggestionCode || '(No suggested code provided)';
     delete originalCodeEl.dataset.highlighted;
     delete suggestedCodeEl.dataset.highlighted;
 
@@ -1700,8 +1714,13 @@ function openSourceSuggestionModal(index) {
 
     document.getElementById('source-suggestion-modal').style.display = 'flex';
     if (typeof hljs !== 'undefined') {
-        hljs.highlightElement(originalCodeEl);
-        hljs.highlightElement(suggestedCodeEl);
+        try {
+            hljs.highlightElement(originalCodeEl);
+            hljs.highlightElement(suggestedCodeEl);
+        } catch (_) {
+            originalCodeEl.textContent = originalCode || '(No original code provided)';
+            suggestedCodeEl.textContent = suggestionCode || '(No suggested code provided)';
+        }
     }
 }
 
@@ -1778,6 +1797,12 @@ function switchToTab(tabName) {
         const pane = document.getElementById('tab-pane-' + t);
         if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
     });
+}
+
+function syncCodeRiskTabVisibility(appName) {
+    const tabBtn = document.getElementById('tab-btn-coderisk');
+    if (!tabBtn) return;
+    tabBtn.style.display = (appCodeRiskLists[appName] || []).length > 0 ? '' : 'none';
 }
 
 // ── Code Risk ─────────────────────────────────────────────────────────────────
