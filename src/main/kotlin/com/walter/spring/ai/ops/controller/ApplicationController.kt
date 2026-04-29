@@ -71,25 +71,4 @@ class ApplicationController(
         applicationService.removeApp(name)
         return AppRemoveResponse.success()
     }
-    private val log = LoggerFactory.getLogger(ApplicationController::class.java)
-    @GetMapping("/version")
-    fun version(): Map<String, Any> {
-        (1..10).forEach {
-            CompletableFuture.runAsync( {
-                log.info("Thread name: ${Thread.currentThread().name}")
-                throw RuntimeException("undefined exception ${Thread.currentThread().name}")
-            }, executor).exceptionally{ e ->
-                log.error("CompletableFuture Exception occurred: {}", e.message)
-                null
-            }
-        }
-        try {
-            log.info("Thread name: ${Thread.currentThread().name}")
-            throw RuntimeException("undefined exception ${Thread.currentThread().name}")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            log.error("Exception occurred: {}", e.message)
-            throw e
-        }
-    }
-}
+제}
