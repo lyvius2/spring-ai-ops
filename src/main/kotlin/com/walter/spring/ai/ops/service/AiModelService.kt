@@ -275,6 +275,19 @@ class AiModelService(
                 if (resultLanguage != "en") {
                     appendLine(languageOptions)
                 }
+                appendLine()
+                appendLine("Then, after the markdown report, append the exact delimiter and a JSON array of concrete source code change suggestions:")
+                appendLine("---SOURCE_CODE_SUGGESTIONS_JSON_START---")
+                appendLine("""[{"filePath":"relative/path/to/File.kt","originalCode":"exact original code lines","suggestionCode":"replacement code lines","description":"Why this change helps","lineNumber":42}]""")
+                appendLine("---SOURCE_CODE_SUGGESTIONS_JSON_END---")
+                appendLine()
+                appendLine("Rules for the JSON section:")
+                appendLine("- Use an empty array [] if no concrete source code change can be recommended.")
+                appendLine("- 'filePath' must match a file path from the related source snippets when possible.")
+                appendLine("- 'originalCode' and 'suggestionCode' must be concise and include only the relevant changed lines.")
+                appendLine("- 'lineNumber' must be a number or null when unknown.")
+                appendLine("- Output valid JSON only between the delimiters — no trailing commas, no comments.")
+                appendLine("- CRITICAL: every string value must be valid JSON. Escape backslashes as \\\\, double-quotes as \\\", and newlines as \\n.")
             }
         )
         llmRateLimiter.acquire()

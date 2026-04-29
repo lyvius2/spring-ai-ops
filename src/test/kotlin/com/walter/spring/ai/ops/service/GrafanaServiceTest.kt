@@ -90,6 +90,7 @@ class GrafanaServiceTest {
         LokiQueryResult(),
         null,
         "analysis result",
+        emptyList(),
         LocalDateTime.of(2026, 4, 12, 10, 1, 0),
     )
 

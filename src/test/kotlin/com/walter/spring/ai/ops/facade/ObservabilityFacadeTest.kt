@@ -4,6 +4,8 @@ import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlert
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
+import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
+import com.walter.spring.ai.ops.record.SourceCodeSuggestion
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
@@ -17,6 +19,8 @@ import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.AppGitConfig
 import com.walter.spring.ai.ops.service.dto.IncidentSourceContext
 import com.walter.spring.ai.ops.service.dto.SourceSnippet
+import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
+import org.assertj.core.api.Assertions.assertThat
 import org.springframework.core.task.AsyncTaskExecutor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -48,6 +52,7 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var repositoryService: RepositoryService
     @Mock private lateinit var incidentSourceContextService: IncidentSourceContextService
     @Mock private lateinit var messageService: MessageService
+    @Mock private lateinit var codeAnalysisResultHandler: CodeAnalysisResultHandler
     @Mock private lateinit var taskExecutor: AsyncTaskExecutor
 
     private lateinit var incidentAnalyzeFacade: ObservabilityFacade
@@ -57,6 +62,7 @@ class ObservabilityFacadeTest {
         incidentAnalyzeFacade = ObservabilityFacade(
             applicationService, grafanaService, lokiService, prometheusService,
             githubService, gitlabService, aiModelService, repositoryService, incidentSourceContextService, messageService,
+            codeAnalysisResultHandler,
             taskExecutor,
         )
     }
@@ -188,7 +194,7 @@ class ObservabilityFacadeTest {
         stubHappyPath(request)
         `when`(applicationService.getGitConfig("my-app"))
             .thenReturn(AppGitConfig("https://example.com/test.git", "main"))
-        `when`(repositoryService.cloneRepository("my-app", "https://example.com/test.git", "main"))
+        `when`(repositoryService.cloneRepository("my-app", "https://example.com/test.git", "main", null))
             .thenReturn(sourcePath)
         `when`(incidentSourceContextService.createContext(anyObject(), Mockito.eq(sourcePath)))
             .thenReturn(sourceContext)
@@ -199,9 +205,51 @@ class ObservabilityFacadeTest {
         incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
-        verify(repositoryService).cloneRepository("my-app", "https://example.com/test.git", "main")
+        verify(repositoryService).cloneRepository("my-app", "https://example.com/test.git", "main", null)
         verify(incidentSourceContextService).createContext(anyObject(), Mockito.eq(sourcePath))
         verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), Mockito.contains("Related source snippets"))
+    }
+
+    @Test
+    @DisplayName("GitHub 저장소이면 GitHub token을 checkout에 전달함")
+    fun givenGithubGitConfig_whenAnalyzeFiring_thenPassesGithubTokenToCheckout() {
+        // given
+        val request = createRequest()
+        val sourcePath = Files.createTempDirectory("incident-source-context-github-test")
+        stubHappyPath(request)
+        `when`(applicationService.getGitConfig("my-app"))
+            .thenReturn(AppGitConfig("https://github.com/owner/repo.git", "main"))
+        `when`(githubService.getToken()).thenReturn("github-token")
+        `when`(repositoryService.cloneRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token"))
+            .thenReturn(sourcePath)
+
+        // when
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
+
+        // then
+        verify(githubService).getToken()
+        verify(repositoryService).cloneRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token")
+    }
+
+    @Test
+    @DisplayName("GitLab 저장소이면 GitLab token을 checkout에 전달함")
+    fun givenGitlabGitConfig_whenAnalyzeFiring_thenPassesGitlabTokenToCheckout() {
+        // given
+        val request = createRequest()
+        val sourcePath = Files.createTempDirectory("incident-source-context-gitlab-test")
+        stubHappyPath(request)
+        `when`(applicationService.getGitConfig("my-app"))
+            .thenReturn(AppGitConfig("https://gitlab.com/owner/repo.git", "main"))
+        `when`(gitlabService.getToken()).thenReturn("gitlab-token")
+        `when`(repositoryService.cloneRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token"))
+            .thenReturn(sourcePath)
+
+        // when
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
+
+        // then
+        verify(gitlabService).getToken()
+        verify(repositoryService).cloneRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token")
     }
 
 
@@ -217,6 +265,53 @@ class ObservabilityFacadeTest {
 
         // then
         verify(grafanaService).saveAnalyzeFiringRecord(anyObject())
+    }
+
+    @Test
+    @DisplayName("LLM 응답에 source code suggestion JSON이 있으면 분석 레코드에 매핑함")
+    fun givenAnalyzeResponseWithSuggestionJson_whenAnalyzeFiring_thenMapsSuggestionsToRecord() {
+        // given
+        val request = createRequest()
+        val rawResponse = """
+            ## Root cause
+            NPE in FooService.
+            ---SOURCE_CODE_SUGGESTIONS_JSON_START---
+            [{"filePath":"src/main/kotlin/FooService.kt","originalCode":"return foo.name","suggestionCode":"return foo?.name ?: \"\"","description":"Avoid null dereference","lineNumber":42}]
+            ---SOURCE_CODE_SUGGESTIONS_JSON_END---
+        """.trimIndent()
+        val sanitizedJson = """[{"filePath":"src/main/kotlin/FooService.kt","originalCode":"return foo.name","suggestionCode":"return foo?.name ?: \"\"","description":"Avoid null dereference","lineNumber":42}]"""
+        stubHappyPath(request)
+        `when`(aiModelService.executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), anyObject()))
+            .thenReturn(rawResponse)
+        `when`(codeAnalysisResultHandler.sanitizeControlChars(sanitizedJson))
+            .thenReturn(sanitizedJson)
+        `when`(codeAnalysisResultHandler.parseJsonArray(sanitizedJson, SourceCodeSuggestion::class.java))
+            .thenReturn(
+                listOf(
+                    SourceCodeSuggestion(
+                        "src/main/kotlin/FooService.kt",
+                        "return foo.name",
+                        "return foo?.name ?: \"\"",
+                        "Avoid null dereference",
+                        42,
+                    )
+                )
+            )
+        var savedRecord: AnalyzeFiringRecord? = null
+        doAnswer { invocation ->
+            savedRecord = invocation.arguments[0] as AnalyzeFiringRecord
+            null
+        }.`when`(grafanaService).saveAnalyzeFiringRecord(anyObject())
+
+        // when
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
+
+        // then
+        verify(grafanaService).saveAnalyzeFiringRecord(anyObject())
+        val record = requireNotNull(savedRecord)
+        assertThat(record.analyzeResults()).isEqualTo("## Root cause\nNPE in FooService.")
+        assertThat(record.sourceCodeSuggestions()).hasSize(1)
+        assertThat(record.sourceCodeSuggestions()[0].filePath()).isEqualTo("src/main/kotlin/FooService.kt")
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.record.CommitSummary
+import com.walter.spring.ai.ops.record.SourceCodeSuggestion
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
@@ -23,6 +24,7 @@ import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
 import com.walter.spring.ai.ops.service.RepositoryService
+import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
 import com.walter.spring.ai.ops.util.toISO8601
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -43,9 +45,15 @@ class ObservabilityFacade(
     private val repositoryService: RepositoryService,
     private val incidentSourceContextService: IncidentSourceContextService,
     private val messageService: MessageService,
+    private val codeAnalysisResultHandler: CodeAnalysisResultHandler,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
     private val log = LoggerFactory.getLogger(ObservabilityFacade::class.java)
+
+    companion object {
+        private const val SOURCE_CODE_SUGGESTIONS_START = "---SOURCE_CODE_SUGGESTIONS_JSON_START---"
+        private const val SOURCE_CODE_SUGGESTIONS_END = "---SOURCE_CODE_SUGGESTIONS_JSON_END---"
+    }
 
     private fun resolveGitServiceBySource(source: GitRemoteProvider): GitRemoteService = when (source) {
         GitRemoteProvider.GITHUB -> githubService
@@ -71,13 +79,14 @@ class ObservabilityFacade(
             val sourceContext = incidentSourceContextService.createContext(logResults, sourcePath)
             val sourceSection = sourceContext.createSourceSectionPrompt()
 
-            val analyzeResults = aiModelService.executeAnalyzeFiring(
+            val rawAnalyzeResults = aiModelService.executeAnalyzeFiring(
                 request.createAlertSectionPrompt(),
                 logResults.createLogSectionPrompt(),
                 metricResults?.createMetricSectionPrompt() ?: "",
                 sourceSection,
             )
-            val record = createAnalyzeFiringRecord(request, targetApplication, logResults, metricResults, analyzeResults)
+            val (analyzeResults, sourceCodeSuggestions) = parseAnalyzeFiringResponse(rawAnalyzeResults)
+            val record = createAnalyzeFiringRecord(request, targetApplication, logResults, metricResults, analyzeResults, sourceCodeSuggestions)
             grafanaService.saveAnalyzeFiringRecord(record)
             messageService.pushFiring(record)
         }.onFailure { log.error("Failed to analyze Firing : {}", it.message, it) }
@@ -98,13 +107,24 @@ class ObservabilityFacade(
     private fun getSourcePath(targetApplication: String): Path? {
         val appConfig = applicationService.getGitConfig(targetApplication)
         return if (appConfig != null && appConfig.isValidConfig()) {
+            val accessToken = resolveAccessToken(appConfig.gitUrl!!)
             repositoryService.cloneRepository(
                 appName = targetApplication,
-                gitUrl = appConfig.gitUrl!!,
-                branch = appConfig.deployBranch!!
+                gitUrl = appConfig.gitUrl,
+                branch = appConfig.deployBranch!!,
+                accessToken = accessToken,
             )
         } else {
             null
+        }
+    }
+
+    private fun resolveAccessToken(gitUrl: String): String? {
+        val lower = gitUrl.lowercase()
+        return when {
+            lower.contains("github") -> githubService.getToken()
+            lower.contains("gitlab") -> gitlabService.getToken()
+            else -> null
         }
     }
 
@@ -115,7 +135,14 @@ class ObservabilityFacade(
         }
     }
 
-    private fun createAnalyzeFiringRecord(request: GrafanaAlertingRequest, targetApplication: String, logResults: LokiQueryResult, metricResults: PrometheusQueryResult?, analyzeResults: String): AnalyzeFiringRecord {
+    private fun createAnalyzeFiringRecord(
+        request: GrafanaAlertingRequest,
+        targetApplication: String,
+        logResults: LokiQueryResult,
+        metricResults: PrometheusQueryResult?,
+        analyzeResults: String,
+        sourceCodeSuggestions: List<SourceCodeSuggestion>,
+    ): AnalyzeFiringRecord {
         return AnalyzeFiringRecord(
             request.alerts.first().startsAt.toISO8601(),
             targetApplication,
@@ -123,8 +150,30 @@ class ObservabilityFacade(
             logResults,
             metricResults,
             analyzeResults,
+            sourceCodeSuggestions,
             LocalDateTime.now(),
         )
+    }
+
+    private fun parseAnalyzeFiringResponse(raw: String): Pair<String, List<SourceCodeSuggestion>> {
+        val startIdx = raw.indexOf(SOURCE_CODE_SUGGESTIONS_START)
+        if (startIdx == -1) {
+            return Pair(raw.trim(), emptyList())
+        }
+
+        val markdown = raw.substring(0, startIdx).trim()
+        val afterStart = raw.substring(startIdx + SOURCE_CODE_SUGGESTIONS_START.length)
+        val endIdx = afterStart.indexOf(SOURCE_CODE_SUGGESTIONS_END)
+        val jsonText = (if (endIdx == -1) afterStart else afterStart.substring(0, endIdx)).trim()
+        val sanitized = codeAnalysisResultHandler.sanitizeControlChars(jsonText)
+
+        val suggestions = runCatching {
+            codeAnalysisResultHandler.parseJsonArray(sanitized, SourceCodeSuggestion::class.java)
+        }.getOrElse {
+            log.warn("Failed to parse source code suggestions JSON — attempting recovery: {}", it.message)
+            codeAnalysisResultHandler.recoverIssuesFromJson(sanitized, SourceCodeSuggestion::class.java)
+        }
+        return Pair(markdown, suggestions)
     }
 
     fun analyzeCodeDiffer(request: GithubPushRequest, application: String?) {

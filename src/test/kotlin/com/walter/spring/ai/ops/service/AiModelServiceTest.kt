@@ -217,6 +217,35 @@ class AiModelServiceTest {
         verify(mockChatModel).call(any(Prompt::class.java))
     }
 
+    @Test
+    @DisplayName("sourceSection이 있으면 프롬프트에 source context와 suggestion JSON 계약을 포함함")
+    fun givenSourceSection_whenExecuteAnalyzeFiring_thenPromptIncludesSourceContextAndSuggestionJsonContract() {
+        // given
+        injectChatModel(mockChatModel)
+        val response = mockChatResponse("analysis")
+        var capturedPrompt: Prompt? = null
+        given(mockChatModel.call(any(Prompt::class.java))).willAnswer { invocation ->
+            capturedPrompt = invocation.arguments[0] as Prompt
+            response
+        }
+
+        // when
+        aiModelService.executeAnalyzeFiring(
+            alertSection = "## Alert",
+            logSection = "## Logs",
+            sourceSection = "## Related source snippets\nFile: src/main/kotlin/FooService.kt",
+        )
+
+        // then
+        val promptText = requireNotNull(capturedPrompt).instructions.joinToString(System.lineSeparator()) { it.text }
+        assertThat(promptText).contains("## Related source snippets")
+        assertThat(promptText).contains("File: src/main/kotlin/FooService.kt")
+        assertThat(promptText).contains("---SOURCE_CODE_SUGGESTIONS_JSON_START---")
+        assertThat(promptText).contains("---SOURCE_CODE_SUGGESTIONS_JSON_END---")
+        assertThat(promptText).contains("filePath")
+        assertThat(promptText).contains("suggestionCode")
+    }
+
     // ── executeAnalyzeCodeDiffer ──────────────────────────────────────────────
 
     @Test
