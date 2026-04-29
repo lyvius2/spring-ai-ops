@@ -1,6 +1,6 @@
 # Spring AI Ops
 
-AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
+AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집합니다. 또한 등록된 애플리케이션 Git 저장소를 checkout하고, JVM stack trace와 관련된 소스 코드 snippet만 추출하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
 
 ---
 
@@ -38,7 +38,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 
 2. **자동 코드 리뷰** — GitHub 또는 GitLab push webhook이 수신되면 커밋 diff를 가져와 LLM에게 정확성·보안·성능·코드 품질 관점의 자동 코드 리뷰를 수행합니다.
 
-3. **인시던트 인텔리전스** — Grafana 알림이 발생하면 알림 레이블로 Loki 스트림 셀렉터를 만들고, 같은 레이블과 시간 구간을 사용해 Prometheus 범위 조회도 병렬로 수행할 수 있습니다. 알림 컨텍스트, 로그 라인, 메트릭 시계열을 함께 LLM에 전달하여 보다 풍부한 근본 원인 분석 결과를 대시보드에 실시간으로 스트리밍합니다.
+3. **인시던트 인텔리전스** — Grafana 알림이 발생하면 알림 레이블로 Loki 스트림 셀렉터를 만들고, 같은 레이블과 시간 구간을 사용해 Prometheus 범위 조회도 병렬로 수행할 수 있습니다. 동시에 등록된 소스 저장소를 checkout하고, Loki 로그에서 JVM stack trace를 파싱해 관련 소스 파일과 라인 주변 snippet을 추출합니다. LLM은 알림, 로그, 메트릭, 소스 컨텍스트를 함께 분석하여 근본 원인 보고서와 구조화된 소스 수정 권고안을 반환합니다.
 
 모든 분석 결과는 STOMP WebSocket을 통해 실시간으로 브라우저에 전달됩니다.
 
@@ -54,7 +54,8 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 |---|---|
 | **정적 코드 위험 분석** | Git 저장소를 클론하여 AI 기반 전체 코드베이스 리뷰 수행 — 보안 취약점, 코드 품질 이슈, 개선 권고사항. 코드베이스 크기에 따라 단일 호출 또는 맵-리듀스 전략 자동 선택 |
 | **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
-| **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 + Prometheus 메트릭 시계열(선택) → 근본 원인, 영향 범위, 조치 방법 |
+| **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 + Prometheus 메트릭 시계열(선택) + stack trace 관련 소스 snippet → 근본 원인, 영향 범위, 관련 파일, 조치 방법 |
+| **소스 수정 권고안** | 장애 분석 결과에 구조화된 소스 수정 권고안(`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) 포함. AI Analysis 하단에서 파일 경로를 클릭하면 원본 코드와 수정 제안을 좌우 비교 popup으로 확인하고 복사 가능 |
 | **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
 | **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI / Anthropic 전환 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
@@ -83,6 +84,8 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 │  ApplicationController    ├─ GitlabService       ──► Redis          │
 │  FiringController         ├─ LokiService         ──► Loki API       │
 │  CommitController         ├─ PrometheusService   ──► Prometheus API │
+│                           ├─ RepositoryService   ──► Git clone      │
+│                           ├─ IncidentSourceContextService           │
 │                           ├─ GithubConnector     ──► GitHub API     │
 │                           ├─ GitlabConnector     ──► GitLab API     │
 │                           └─ AiModelService      ──► LLM API       │
@@ -231,13 +234,25 @@ POST /webhook/grafana[/{application}]
         │    같은 알림 레이블로 메트릭 셀렉터 구성
         │    해당 시간 구간에 매칭되는 시계열 전체 반환
         │
+        ├─ 등록된 소스 저장소 병렬 checkout  ── 선택사항
+        │    설정된 deploy branch 사용
+        │    GitHub/GitLab 토큰이 있으면 인증에 사용
+        │
+        ├─ Loki 로그에서 JVM stack trace 파싱
+        │    애플리케이션 frame을 소스 파일로 resolve
+        │    stack trace lineNumber 주변의 focused snippet 추출
+        │    전체 저장소를 LLM에 전달하지 않음
+        │
         ├─ LLM 분석 요청
         │    알림 컨텍스트
         │    + Loki 로그 라인   (있는 경우)
         │    + Prometheus 메트릭 데이터  (있는 경우)
-        │    → 근본 원인 / 영향 범위 / 조치 방법
+        │    + 관련 소스 snippet  (있는 경우)
+        │    → 근본 원인 / 영향 범위 / 관련 파일
+        │      / 구체적 수정 가이드 / 소스 수정 권고안 JSON
         │
         ├─ AnalyzeFiringRecord를 Redis에 저장 (key: firing:{application})
+        │    Markdown 분석 결과와 구조화된 sourceCodeSuggestions 포함
         │
         └─ WebSocket /topic/firing 으로 결과 Push
                 │
@@ -250,6 +265,10 @@ POST /webhook/grafana[/{application}]
 > **Prometheus는 선택사항**: `prometheus.url`이 설정되지 않으면 Loki 로그만으로 분석을 진행합니다. 오류가 발생하지 않습니다.
 
 > **Loki는 필수입니다**: 현재 Grafana 장애 분석 파이프라인은 항상 Loki 조회를 시도합니다. Grafana 웹훅 분석을 사용하려면 먼저 `loki.url`을 설정해야 합니다.
+
+> **소스 컨텍스트는 제한적으로 전송됩니다**: 장애 소스 분석은 stack trace frame을 기준으로 관련 라인 주변의 작은 snippet만 추출합니다. 전체 저장소를 LLM에 보내지 않습니다.
+
+> **장애 소스 checkout 인증**: 등록된 저장소 URL이 GitHub 또는 GitLab이면 설정된 Git Remote token을 자동으로 사용합니다. token은 선택사항이며, public 저장소는 token 없이 checkout할 수 있습니다.
 
 ---
 
@@ -284,7 +303,7 @@ POST /webhook/grafana[/{application}]
 ---
 
 ### AI 기반 장애 분석
-*LLM이 Grafana 알림 컨텍스트와 Loki 로그, 그리고 설정된 경우 Prometheus 메트릭 시계열까지 함께 분석하여 근본 원인, 영향 범위, 조치 방법을 대시보드로 실시간 전송합니다.*
+*LLM이 Grafana 알림 컨텍스트와 Loki 로그, 선택적으로 Prometheus 메트릭 시계열, 그리고 JVM stack trace에서 resolve된 focused source snippet을 함께 분석합니다. 구조화된 소스 수정 권고안은 AI Analysis 하단에 표시되며, 파일 경로를 클릭하면 원본 코드와 수정 제안을 좌우 비교 popup으로 확인할 수 있습니다.*
 
 ![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
 

@@ -2,7 +2,7 @@
 
 [한국어(Korean) 문서](README_KR.md)  
   
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs and, when a Prometheus URL is configured, also fetches Prometheus metrics over the same alert window before sending the combined context to the LLM. Results are delivered to a live dashboard via WebSocket.  
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs, optionally fetches Prometheus metrics over the same alert window, checks out the registered application source repository, and sends focused stack-trace-related source snippets to the LLM. Results are delivered to a live dashboard via WebSocket.  
 
 ---
 
@@ -41,7 +41,7 @@ Spring AI Ops bridges your monitoring and version-control toolchain with large l
 
 2. **Automated Code Review** — When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review covering correctness, security, performance, and code quality.
 
-3. **Incident Intelligence** — When Grafana fires an alert, the application builds a Loki stream selector from alert labels, queries matching logs, and in parallel optionally queries Prometheus range data using the same alert labels and time window. The alert context, log lines, and metric series are sent together to an LLM to produce a richer root-cause analysis, streamed to the dashboard in real time.
+3. **Incident Intelligence** — When Grafana fires an alert, the application builds a Loki stream selector from alert labels, queries matching logs, optionally queries Prometheus range data, and checks out the registered source repository in parallel. JVM stack traces are parsed from the logs, resolved to source files, and converted into focused snippets around the failing lines. The LLM receives alert, log, metric, and source context, then returns a root-cause report plus structured source code change suggestions.
 
 All results are pushed to connected browsers in real time via STOMP WebSocket.
 
@@ -57,7 +57,8 @@ No relational database is used. Redis serves as the sole persistence layer — s
 |---|---|
 | **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
-| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) → root cause, affected components, and recommended actions |
+| **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) + stack-trace-related source snippets → root cause, affected components, source file references, and recommended actions |
+| **Source Fix Suggestions** | Incident analysis can return structured source code suggestions (`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) shown at the bottom of the AI Analysis panel with a side-by-side popup and copy action |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
@@ -86,6 +87,8 @@ No relational database is used. Redis serves as the sole persistence layer — s
 │  ApplicationController    ├─ GitlabService       ──► Redis           │
 │  FiringController         ├─ LokiService         ──► Loki API        │
 │  CommitController         ├─ PrometheusService   ──► Prometheus API  │
+│                           ├─ RepositoryService   ──► Git clone       │
+│                           ├─ IncidentSourceContextService            │
 │                           ├─ GithubConnector     ──► GitHub API      │
 │                           ├─ GitlabConnector     ──► GitLab API      │
 │                           └─ AiModelService      ──► LLM API        │
@@ -245,14 +248,26 @@ POST /webhook/grafana[/{application}]
         │    Reuses the same alert labels to build the metric selector
         │    and returns all matching series for the alert window
         │
+        ├─ Clone registered source repository in parallel  ── OPTIONAL
+        │    Uses the configured deploy branch
+        │    Uses GitHub/GitLab token authentication when available
+        │
+        ├─ Parse JVM stack traces from Loki log text
+        │    Resolve application frames to source files
+        │    Extract focused snippets around stack trace line numbers
+        │    Does not send the full repository to the LLM
+        │
         ├─ Call LLM
         │    System: expert in application errors and logs
         │    User:   alert context
         │            + Loki log lines   (if available)
         │            + Prometheus metric data  (if available)
-        │            → root cause / affected components / recommended actions
+        │            + related source snippets  (if available)
+        │            → root cause / affected components / related files
+        │              / concrete fix guidance / source code suggestions JSON
         │
         ├─ Save AnalyzeFiringRecord to Redis  (key: firing:{application})
+        │    Includes markdown analysis and structured sourceCodeSuggestions
         │
         └─ Push to /topic/firing via WebSocket
                 │
@@ -265,6 +280,10 @@ POST /webhook/grafana[/{application}]
 > **Prometheus is optional**: If `prometheus.url` is not set, the analysis proceeds with Loki logs only. No errors are raised.
 
 > **Loki is required for error analysis**: The current Grafana alert pipeline always attempts a Loki query. Configure `loki.url` before using Grafana webhook analysis.
+
+> **Source context is focused**: Incident source analysis uses stack trace frames to extract small nearby snippets only. The full repository is not sent to the LLM.
+
+> **Git authentication for incident source checkout**: If the registered repository URL points to GitHub or GitLab, the configured Git remote token is used automatically when available. The token is optional; public repositories can be cloned without it.
 
 ---
 
@@ -299,7 +318,7 @@ POST /webhook/grafana[/{application}]
 ---
 
 ### AI-Powered Error Analysis
-*The LLM analyzes the Grafana alert context together with Loki logs and, when configured, Prometheus metric series, then streams a root-cause analysis — including affected components and recommended actions — directly to the dashboard.*
+*The LLM analyzes the Grafana alert context together with Loki logs, optional Prometheus metric series, and focused source snippets resolved from JVM stack traces. Structured source code suggestions appear at the bottom of the AI Analysis panel; clicking a file path opens a popup with original code on the left and the suggested replacement on the right.*
 
 ![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
 
