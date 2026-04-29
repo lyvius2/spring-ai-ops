@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 class SourceSnippetTest {
 
     @Test
-    @DisplayName("SourceSnippet은 파일 경로와 라인 범위, 포커스 라인, 내용을 보관함")
+    @DisplayName("SourceSnippet은 파일 경로와 line 범위, 포커스 라인, 내용을 보관함")
     fun givenSourceSnippetValues_whenCreatingDto_thenStoresAllValues() {
         // given
         val filePath = "src/main/kotlin/com/example/FooService.kt"
