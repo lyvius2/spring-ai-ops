@@ -43,15 +43,6 @@ class StackTraceParser {
             .toList()
     }
 
-    private fun MatchResult.toStackTraceFrame(): StackTraceFrame {
-        return StackTraceFrame(
-            className = groupValues[1],
-            methodName = groupValues[2],
-            fileName = groupValues[3].takeIf { it != "Unknown Source" && it != "Native Method" },
-            lineNumber = groupValues.getOrNull(4)?.takeIf { it.isNotBlank() }?.toIntOrNull(),
-        )
-    }
-
     private fun isExternalLibraryFrame(frame: StackTraceFrame): Boolean {
         return excludedClassPrefixes.any { prefix -> frame.className.startsWith(prefix) }
     }

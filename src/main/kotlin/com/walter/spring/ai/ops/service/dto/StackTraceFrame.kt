@@ -11,4 +11,12 @@ data class StackTraceFrame(
 
     val simpleClassName: String
         get() = className.substringAfterLast('.').substringBefore('$')
+
+    fun candidateFileNames(): List<String> {
+        return buildList {
+            fileName?.takeIf { it.endsWith(".kt") || it.endsWith(".java") }?.let { add(it) }
+            add("${simpleClassName}.kt")
+            add("${simpleClassName}.java")
+        }.distinct()
+    }
 }
