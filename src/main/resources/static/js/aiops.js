@@ -725,6 +725,7 @@ async function saveEditApp() {
 
 const appFiringLists       = {};   // { appName: AnalyzeFiringRecord[] }  newest-first
 const appSelectedFiringIdx = {};   // { appName: number }
+let activeSourceSuggestion = null;
 const appCommitLists       = {};   // { appName: CodeReviewRecord[] }    newest-first
 const appSelectedCommitIdx = {};   // { appName: number }
 const appCodeRiskLists     = {};   // { appName: CodeRiskRecord[] }       newest-first
@@ -1214,7 +1215,28 @@ function renderAnalysisLayers(appName, record) {
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
             <div class="analysis-text markdown-body">${renderMarkdown(record.analyzeResults)}</div>
+            ${renderSourceCodeSuggestions(record.sourceCodeSuggestions)}
         </div>`;
+}
+
+function renderSourceCodeSuggestions(suggestions) {
+    const items = Array.isArray(suggestions) ? suggestions.filter(Boolean) : [];
+    if (items.length === 0) return '';
+
+    return `<div class="source-suggestion-list">
+        <div class="source-suggestion-list-title">Source Code Suggestions</div>
+        ${items.map((suggestion, idx) => {
+            const filePath = suggestion.filePath || 'Unknown file';
+            const line = suggestion.lineNumber == null ? '' : `:${suggestion.lineNumber}`;
+            const description = suggestion.description ? `<div class="source-suggestion-summary">${escHtml(suggestion.description)}</div>` : '';
+            return `<div class="source-suggestion-item">
+                <button class="source-suggestion-link" data-suggestion-idx="${idx}" title="${escHtml(filePath)}">
+                    ${escHtml(filePath)}${escHtml(line)}
+                </button>
+                ${description}
+            </div>`;
+        }).join('')}
+    </div>`;
 }
 
 function extractLogStatus(log) {
@@ -1595,6 +1617,12 @@ function renderAppDetailFromLocal(appName) {
 }
 
 document.addEventListener('click', async function (e) {
+    const sourceSuggestionLink = e.target.closest('.source-suggestion-link[data-suggestion-idx]');
+    if (sourceSuggestionLink) {
+        openSourceSuggestionModal(parseInt(sourceSuggestionLink.dataset.suggestionIdx, 10));
+        return;
+    }
+
     // Tab switching
     const btn = e.target.closest('.tab-btn');
     if (btn) {
@@ -1633,6 +1661,114 @@ document.addEventListener('click', async function (e) {
         selectCodeRiskRecord(selectedApp, parseInt(riskRow.dataset.idx, 10));
     }
 });
+
+function getSelectedFiringRecord() {
+    if (!selectedApp) return null;
+    const list = appFiringLists[selectedApp] || [];
+    return list[appSelectedFiringIdx[selectedApp] ?? 0] || null;
+}
+
+function openSourceSuggestionModal(index) {
+    const record = getSelectedFiringRecord();
+    const suggestions = Array.isArray(record?.sourceCodeSuggestions) ? record.sourceCodeSuggestions : [];
+    const suggestion = suggestions[index];
+    if (!suggestion) return;
+
+    activeSourceSuggestion = suggestion;
+
+    const filePath = suggestion.filePath || 'Unknown file';
+    const line = suggestion.lineNumber == null ? '' : `:${suggestion.lineNumber}`;
+    const originalCode = suggestion.originalCode || '';
+    const suggestionCode = suggestion.suggestionCode || '';
+    const language = inferSourceLanguage(filePath);
+
+    document.getElementById('source-suggestion-title').textContent = `${filePath}${line}`;
+    document.getElementById('source-suggestion-description').textContent = suggestion.description || '';
+
+    const originalCodeEl = document.getElementById('source-suggestion-original-code');
+    const suggestedCodeEl = document.getElementById('source-suggestion-suggested-code');
+    originalCodeEl.textContent = originalCode || '(No original code provided)';
+    suggestedCodeEl.textContent = suggestionCode || '(No suggested code provided)';
+    originalCodeEl.className = language ? `language-${language}` : '';
+    suggestedCodeEl.className = language ? `language-${language}` : '';
+    delete originalCodeEl.dataset.highlighted;
+    delete suggestedCodeEl.dataset.highlighted;
+
+    const copyBtn = document.getElementById('source-suggestion-copy-btn');
+    copyBtn.textContent = 'Copy';
+    copyBtn.disabled = !suggestionCode;
+
+    document.getElementById('source-suggestion-modal').style.display = 'flex';
+    if (typeof hljs !== 'undefined') {
+        hljs.highlightElement(originalCodeEl);
+        hljs.highlightElement(suggestedCodeEl);
+    }
+}
+
+function closeSourceSuggestionModal() {
+    activeSourceSuggestion = null;
+    document.getElementById('source-suggestion-modal').style.display = 'none';
+}
+
+async function copySourceSuggestionCode() {
+    const code = activeSourceSuggestion?.suggestionCode || '';
+    if (!code) return;
+
+    const copyBtn = document.getElementById('source-suggestion-copy-btn');
+    try {
+        await writeClipboardText(code);
+        copyBtn.textContent = 'Copied';
+        setTimeout(() => {
+            if (document.getElementById('source-suggestion-modal').style.display === 'flex') {
+                copyBtn.textContent = 'Copy';
+            }
+        }, 1200);
+    } catch (e) {
+        copyBtn.textContent = 'Copy failed';
+        setTimeout(() => {
+            if (document.getElementById('source-suggestion-modal').style.display === 'flex') {
+                copyBtn.textContent = 'Copy';
+            }
+        }, 1400);
+    }
+}
+
+async function writeClipboardText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '0';
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+        document.execCommand('copy');
+    } finally {
+        document.body.removeChild(textArea);
+    }
+}
+
+function inferSourceLanguage(filePath) {
+    const lower = String(filePath || '').toLowerCase();
+    if (lower.endsWith('.kt') || lower.endsWith('.kts')) return 'kotlin';
+    if (lower.endsWith('.java')) return 'java';
+    if (lower.endsWith('.js') || lower.endsWith('.jsx')) return 'javascript';
+    if (lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript';
+    if (lower.endsWith('.py')) return 'python';
+    if (lower.endsWith('.go')) return 'go';
+    if (lower.endsWith('.rb')) return 'ruby';
+    if (lower.endsWith('.cs')) return 'csharp';
+    if (lower.endsWith('.xml')) return 'xml';
+    if (lower.endsWith('.json')) return 'json';
+    if (lower.endsWith('.yml') || lower.endsWith('.yaml')) return 'yaml';
+    return '';
+}
 
 function switchToTab(tabName) {
     document.querySelectorAll('.tab-btn').forEach(b => {
