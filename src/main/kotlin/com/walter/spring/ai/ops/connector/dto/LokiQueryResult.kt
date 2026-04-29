@@ -9,6 +9,15 @@ data class LokiQueryResult(
     val data: LokiData? = null,
     val errorMessage: String = "",
 ) {
+    fun rawLogText(): String {
+        return data?.result
+            ?.asSequence()
+            ?.flatMap { stream -> stream.values.asSequence() }
+            ?.mapNotNull { entry -> entry.getOrNull(1) }
+            ?.joinToString(System.lineSeparator())
+            ?: ""
+    }
+
     fun createLogSectionPrompt(): String {
         val logResults = this
         val logSection = buildString {
