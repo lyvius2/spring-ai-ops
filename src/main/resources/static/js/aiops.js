@@ -1690,8 +1690,8 @@ function openSourceSuggestionModal(index) {
 
     const filePath = suggestion.filePath || 'Unknown file';
     const line = suggestion.lineNumber == null ? '' : `:${suggestion.lineNumber}`;
-    const originalCode = suggestion.originalCode || '';
-    const suggestionCode = suggestion.suggestionCode || '';
+    const originalCode = normalizeSourceSuggestionCode(suggestion.originalCode || '');
+    const suggestionCode = normalizeSourceSuggestionCode(suggestion.suggestionCode || '');
     const language = inferSourceLanguage(filePath);
 
     document.getElementById('source-suggestion-title').textContent = `${filePath}${line}`;
@@ -1729,8 +1729,24 @@ function closeSourceSuggestionModal() {
     document.getElementById('source-suggestion-modal').style.display = 'none';
 }
 
+function normalizeSourceSuggestionCode(code) {
+    const text = String(code || '');
+    const hasRealLineBreak = /\r|\n/.test(text);
+    const hasEscapedLineBreak = /\\r\\n|\\n|\\r/.test(text);
+    if (!hasEscapedLineBreak || hasRealLineBreak) {
+        return text;
+    }
+
+    return text
+        .replace(/\\r\\n/g, '\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\n')
+        .replace(/\\t/g, '    ')
+        .replace(/\\"/g, '"');
+}
+
 async function copySourceSuggestionCode() {
-    const code = activeSourceSuggestion?.suggestionCode || '';
+    const code = normalizeSourceSuggestionCode(activeSourceSuggestion?.suggestionCode || '');
     if (!code) return;
 
     const copyBtn = document.getElementById('source-suggestion-copy-btn');
