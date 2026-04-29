@@ -71,4 +71,4 @@ class ApplicationController(
         applicationService.removeApp(name)
         return AppRemoveResponse.success()
     }
-제}
+}
