@@ -121,6 +121,17 @@ class RepositoryServiceTest {
         ).thenReturn(1L)
     }
 
+    private fun stubBusyRepositoryLock(lockKey: String) {
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOps)
+        `when`(
+            valueOps.setIfAbsent(
+                Mockito.eq(lockKey),
+                anyObject(),
+                Mockito.eq(Duration.ofMillis(1_000)),
+            ),
+        ).thenReturn(false)
+    }
+
     private fun captureLastRepositoryStatus(applicationName: String, expectedWriteCount: Int): RepositoryStatus {
         val captor = ArgumentCaptor.forClass(String::class.java)
         verify(valueOps, times(expectedWriteCount)).set(Mockito.eq("$REDIS_KEY_REPOSITORY_STATUS_PREFIX$applicationName"), captor.capture())
@@ -222,6 +233,69 @@ class RepositoryServiceTest {
         assertThatThrownBy {
             service.cloneRepository("test-app", invalidUrl)
         }.isInstanceOf(Exception::class.java)
+    }
+
+    // ── prepareRepository ─────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("persistent storage가 비활성화되어 있으면 임시 디렉터리에 clone한다")
+    fun givenPersistentStorageDisabled_whenPrepareRepository_thenClonesIntoTemporaryDirectory() {
+        // given
+        val gitUrl = remoteRepoDir.toUri().toString()
+
+        // when
+        val result = service.prepareRepository("test-app", gitUrl, "feature")
+        tempDirs.add(result)
+
+        // then
+        assertThat(result.fileName.toString()).contains("repository-scan-test-app")
+        Git.open(result.toFile()).use { git ->
+            assertThat(git.repository.branch).isEqualTo("feature")
+        }
+    }
+
+    @Test
+    @DisplayName("persistent repository 준비가 성공하면 persistent path를 반환한다")
+    fun givenPersistentStorageEnabled_whenPrepareRepository_thenReturnsPersistentPath() {
+        // given
+        val storageRoot = Files.createTempDirectory("prepare-persistent-test").also { tempDirs.add(it) }
+        val persistentService = createPersistentRepositoryService(storageRoot)
+        val gitUrl = remoteRepoDir.toUri().toString()
+        stubRepositoryLock("${REDIS_KEY_REPOSITORY_LOCK_PREFIX}test-app")
+
+        // when
+        val result = persistentService.prepareRepository("test-app", gitUrl, "feature")
+
+        // then
+        assertThat(result.startsWith(storageRoot.toAbsolutePath().normalize())).isTrue()
+        Git.open(result.toFile()).use { git ->
+            assertThat(git.repository.branch).isEqualTo("feature")
+        }
+    }
+
+    @Test
+    @DisplayName("persistent repository 준비가 실패하면 임시 clone으로 fallback한다")
+    fun givenPersistentPreparationFails_whenPrepareRepository_thenFallsBackToTemporaryClone() {
+        // given
+        val storageRoot = Files.createTempDirectory("prepare-fallback-test").also { tempDirs.add(it) }
+        val persistentService = createPersistentRepositoryService(storageRoot)
+        val gitUrl = remoteRepoDir.toUri().toString()
+        val branch = Git.open(remoteRepoDir.toFile()).use { it.repository.branch }
+        stubBusyRepositoryLock("${REDIS_KEY_REPOSITORY_LOCK_PREFIX}test-app")
+
+        // when
+        val result = persistentService.prepareRepository("test-app", gitUrl, branch)
+        tempDirs.add(result)
+
+        // then
+        assertThat(result.startsWith(storageRoot.toAbsolutePath().normalize())).isFalse()
+        assertThat(result.fileName.toString()).contains("repository-scan-test-app")
+        Git.open(result.toFile()).use { git ->
+            assertThat(git.repository.branch).isEqualTo(branch)
+        }
+        val status = captureLastRepositoryStatus("test-app", expectedWriteCount = 2)
+        assertThat(status.cloneStatus).isEqualTo(RepositoryCloneStatus.FAILED)
+        assertThat(status.lastError).contains("Failed to acquire Redis lock")
     }
 
     // ── preparePersistentRepository ───────────────────────────────────────────

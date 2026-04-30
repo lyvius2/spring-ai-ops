@@ -112,6 +112,17 @@ class RepositoryService(
         return tempDir
     }
 
+    fun prepareRepository(appName: String, gitUrl: String, branch: String = "", accessToken: String? = null): Path {
+        val persistentPath = try {
+            if (branch.isBlank()) null
+            else preparePersistentRepository(appName, gitUrl, branch, accessToken)
+        } catch (e: Exception) {
+            log.error("Persistent repository preparation failed. Falling back to temporary clone — app: {}, branch: {}, cause: {}", appName, branch, e.message)
+            null
+        }
+        return persistentPath ?: cloneRepository(appName, gitUrl, branch, accessToken)
+    }
+
     fun preparePersistentRepository(appName: String, gitUrl: String, branch: String, accessToken: String? = null): Path? {
         val repositoryPath = repositoryProperties.resolvePersistentRepositoryPath(appName, gitUrl) ?: return null
         require(branch.isNotBlank()) { "Branch is required for persistent repository preparation." }
