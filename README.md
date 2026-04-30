@@ -29,6 +29,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
 - [API Reference](#api-reference)
 - [API Documentation (Swagger)](#api-documentation-swagger)
 - [Package Structure](#package-structure)
+- [Changelog](#changelog)
 - [License](#license)
 
 ---
@@ -59,6 +60,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
 | **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) + stack-trace-related source snippets → root cause, affected components, source file references, and recommended actions |
 | **Source Fix Suggestions** | Incident analysis can return structured source code suggestions (`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) shown at the bottom of the AI Analysis panel with a side-by-side popup and copy action |
+| **Persistent Repository Storage** | Optionally keep registered application repositories under `repository.local-path` to avoid repeated fresh checkouts; Redis locks protect branch switch/reset operations and failures fall back to temporary clones |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
@@ -87,7 +89,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 │  ApplicationController    ├─ GitlabService       ──► Redis           │
 │  FiringController         ├─ LokiService         ──► Loki API        │
 │  CommitController         ├─ PrometheusService   ──► Prometheus API  │
-│                           ├─ RepositoryService   ──► Git clone       │
+│                           ├─ RepositoryService   ──► Git cache       │
 │                           ├─ IncidentSourceContextService            │
 │                           ├─ GithubConnector     ──► GitHub API      │
 │                           ├─ GitlabConnector     ──► GitLab API      │
@@ -123,8 +125,9 @@ POST /api/code-risk
         │
         ├─ Resolve access token (GitHub or GitLab token from Redis)
         │
-        ├─ Clone repository via JGit (with token auth if available)
-        │    specified branch, or default branch if blank
+        ├─ Prepare repository via JGit (with token auth if available)
+        │    persistent sync when repository.stored=true, otherwise temporary clone
+        │    requested branch is fetched, checked out, and hard-reset to origin/{branch}
         │
         ├─ Collect source files and build a code bundle
         │
@@ -153,6 +156,8 @@ POST /api/code-risk
 ```
 
 > **Note**: Analysis progress (cloning, chunk status, consolidation) is streamed to the dashboard in real time via WebSocket. If the LLM returns a rate-limit error (429) mid-analysis, the facade stops and returns partial results gathered up to that point.
+
+> **Persistent repository storage**: If `repository.stored=true` and `repository.local-path` is valid, Code Risk analysis reuses a local persistent repository and synchronizes the requested branch before analysis. If sync fails, analysis falls back to a temporary clone.
 
 > **Git Authentication**: The access token configured under Git Remote Configuration (GitHub or GitLab) is used automatically for private repository cloning. No additional setup is required.
 
@@ -248,8 +253,10 @@ POST /webhook/grafana[/{application}]
         │    Reuses the same alert labels to build the metric selector
         │    and returns all matching series for the alert window
         │
-        ├─ Clone registered source repository in parallel  ── OPTIONAL
+        ├─ Prepare registered source repository in parallel  ── OPTIONAL
+        │    Runs only when a deploy branch is configured
         │    Uses the configured deploy branch
+        │    persistent sync when repository.stored=true, otherwise temporary clone
         │    Uses GitHub/GitLab token authentication when available
         │
         ├─ Parse JVM stack traces from Loki log text
@@ -282,6 +289,8 @@ POST /webhook/grafana[/{application}]
 > **Loki is required for error analysis**: The current Grafana alert pipeline always attempts a Loki query. Configure `loki.url` before using Grafana webhook analysis.
 
 > **Source context is focused**: Incident source analysis uses stack trace frames to extract small nearby snippets only. The full repository is not sent to the LLM.
+
+> **Deploy branch is required for source snippets**: If the registered application has no `deployBranch`, Grafana alert analysis skips source checkout, snippet extraction, and source code suggestions. It does not fall back to the repository default branch.
 
 > **Git authentication for incident source checkout**: If the registered repository URL points to GitHub or GitLab, the configured Git remote token is used automatically when available. The token is optional; public repositories can be cloned without it.
 
@@ -413,6 +422,14 @@ app:
       executor-concurrency-limit: 200  # Max concurrent async tasks using virtual threads
       llm-max-concurrency: 20          # Max simultaneous in-flight LLM API calls (Semaphore)
 
+repository:
+  stored: false                         # true = keep application repositories under repository.local-path
+  local-path: ${REPOSITORY_LOCAL_PATH:./data/repository}
+  lock:
+    ttl-ms: 30000                       # Redis lock TTL for repository mutation operations
+    wait-timeout-ms: 15000              # Max time to wait for another worker's repository lock
+    retry-interval-ms: 1000             # Retry delay while waiting for the repository lock
+
 management:
   tracing:
     sampling:
@@ -447,6 +464,16 @@ feign:
 ```
 
 If both a property value and a Redis value exist for the same setting, the Redis value takes precedence.
+
+**Persistent repository storage**
+
+`repository.stored=false` keeps the legacy behavior: each Code Risk analysis or Grafana source snippet extraction clones into a temporary directory.
+
+When `repository.stored=true` and `repository.local-path` is valid, Spring AI Ops stores each registered application repository under a deterministic path inside `repository.local-path`. App registration/update returns after Redis metadata is saved, then a background virtual-thread task prepares the repository. Code Risk analysis and Grafana source snippet extraction reuse the persistent working copy by acquiring a Redis lock, running `fetch -> checkout/switch branch -> reset --hard origin/{branch}`, and then releasing the lock.
+
+If persistent preparation fails, analysis falls back to a temporary clone. Background checkout failures are sent to the dashboard through `/topic/alert`. If a configured deploy branch is invalid during app save, the repository default branch is checked out for storage initialization and the saved deploy branch is cleared.
+
+Use a secure local path with enough disk space. Rename/delete operations remove only paths that resolve safely under `repository.local-path`.
 
 **Tracing export**
 
@@ -571,6 +598,7 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 | `/topic/commit` | `CodeReviewRecord` | LLM code review completes |
 | `/topic/analysis/status` | `String` | Static analysis progress update (clone / chunk / consolidate) |
 | `/topic/analysis/result` | `CodeRiskRecord` | Static analysis completes |
+| `/topic/alert` | `AlertMessage` | Background repository checkout needs user attention |
 
 ---
 
@@ -598,8 +626,10 @@ com.walter.spring.ai.ops
 │   ├── ConnectionStatus.kt        # SUCCESS / READY / FAILURE
 │   ├── GitRemoteProvider.kt       # GITHUB / GITLAB enum
 │   ├── LlmProvider.kt             # OPEN_AI / ANTHROPIC enum with product name & key
+│   ├── AlertMessageType.kt        # Typed frontend alert payload categories
 │   └── RedisKeyConstants.kt       # Centralised Redis key constants
 ├── config/
+│   ├── RepositoryProperties.kt    # Persistent repository storage settings and path safety
 │   ├── CsrfTokenProvider.kt       # Generates a startup-time CSRF token for same-origin protection
 │   ├── CsrfTokenInterceptor.kt    # Validates X-CSRF-Token header on /api/code-risk/**
 │   ├── EmbeddedRedisConfig.kt     # Auto-start embedded Redis (local profile)
@@ -634,8 +664,9 @@ com.walter.spring.ai.ops
 │   ├── RateLimitHitEvent.kt       # Published by AiModelService on 429 response
 │   └── RateLimitHitEventListener.kt  # Forwards rate-limit event to MessageService
 ├── facade/
+│   ├── ApplicationFacade.kt       # Orchestrates app registry changes and background repository checkout
 │   ├── ObservabilityFacade.kt     # Orchestrates firing analysis & code review
-│   └── CodeRiskFacade.kt          # Orchestrates static code risk analysis (clone → analyze → save)
+│   └── CodeRiskFacade.kt          # Orchestrates static code risk analysis (prepare repository → analyze → save)
 ├── record/
 │   ├── AnalyzeFiringRecord.java   # Grafana analysis result (Java record)
 │   ├── CodeReviewRecord.java      # Code review result (Java record)
@@ -653,11 +684,12 @@ com.walter.spring.ai.ops
 │   ├── LokiService.kt             # Loki log query execution
 │   ├── PrometheusService.kt       # Prometheus metric query execution
 │   ├── MessageService.kt          # WebSocket push for all topics (firing, commit, analysis)
-│   ├── RepositoryService.kt       # Git clone, source file collection, record persistence for code-risk
+│   ├── RepositoryService.kt       # Git clone/cache, source file collection, record persistence for code-risk
 │   └── dto/CodeChunk.kt           # Bundle chunk for map-reduce analysis
 └── util/
     ├── CodeAnalysisResultHandler.kt  # JSON parsing, sanitisation, and recovery for LLM issue output
     ├── CryptoProvider.kt          # AES encryption/decryption for stored API keys
+    ├── RedisLockManager.kt        # Token-based Redis locks for repository working tree mutations
     ├── RedisExtensions.kt         # zSetPushWithTtl / zSetRangeAllDesc helpers
     ├── StringExtentions.kt        # toISO8601 helper
     └── URIExtentions.kt           # URI builder helpers
@@ -669,6 +701,8 @@ com.walter.spring.ai.ops
 
 | Date | Description |
 |---|---|
+| 2026-04-30 | Added optional persistent repository storage — registered repositories can be kept under `repository.local-path`, synchronized under a Redis lock, reused by Code Risk and Grafana source snippet flows, and cleaned up on app rename/delete |
+| 2026-04-29 | Added source code suggestion support for Grafana alert analysis — stack-trace-related snippets are sent to the LLM, structured `sourceCodeSuggestions` are stored with firing records, and the UI renders original/suggested code side by side |
 | 2026-04-26 | Added Prometheus metric query to Grafana alert analysis — `PrometheusService` fetches `query_range` data alongside Loki logs and sends both to the LLM; Prometheus is optional (`prometheus.url` may be left blank) |
 | 2026-04-22 | Added CSRF token same-origin protection for `/api/code-risk/**` — token embedded in HTML meta tag, validated via `X-CSRF-Token` header |
 | 2026-04-22 | Added `<think>` block stripping in `AiModelService` to remove chain-of-thought output from models that emit it (e.g. DeepSeek, QwQ) |

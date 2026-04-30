@@ -13,8 +13,8 @@ import java.util.UUID
 class RedisLockManager(
     private val redisTemplate: StringRedisTemplate,
     @Value("\${repository.lock.ttl-ms:30000}") private val defaultLockTtlMs: Long = 30_000,
-    @Value("\${repository.lock.wait-timeout-ms:10000}") private val defaultWaitTimeoutMs: Long = 10_000,
-    @Value("\${repository.lock.retry-interval-ms:100}") private val defaultRetryIntervalMs: Long = 100,
+    @Value("\${repository.lock.wait-timeout-ms:15000}") private val defaultWaitTimeoutMs: Long = 15_000,
+    @Value("\${repository.lock.retry-interval-ms:1000}") private val defaultRetryIntervalMs: Long = 1_000,
 ) {
     companion object {
         private val UNLOCK_SCRIPT = DefaultRedisScript(

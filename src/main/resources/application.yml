@@ -110,8 +110,8 @@ repository:
   local-path: ${REPOSITORY_LOCAL_PATH:./data/repository}  # Local path to store source code when repository.stored is true. Ensure this directory is secure and has sufficient storage.
   lock:
     ttl-ms: 30000                     # Redis repository lock TTL in milliseconds. Prevents stale locks when a worker stops unexpectedly.
-    wait-timeout-ms: 10000            # Maximum time to wait for an existing repository lock before failing.
-    retry-interval-ms: 100            # Delay between repository lock acquisition retries.
+    wait-timeout-ms: 15000            # Maximum time to wait for an existing repository lock before failing.
+    retry-interval-ms: 1000           # Delay between repository lock acquisition retries.
 
 springdoc:
   swagger-ui:
