@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
@@ -190,6 +191,44 @@ class ApplicationFacadeTest {
         // then
         verify(applicationService).updateApp("old-app", "new-app", gitUrl, "main")
         verify(repositoryService).preparePersistentRepository("new-app", gitUrl, "main", "github-token")
+    }
+
+    @Test
+    @DisplayName("앱 이름 변경 시 기존 persistent repository를 삭제한 뒤 새 설정을 저장한다")
+    fun givenRenamedAppWithExistingGitConfig_whenUpdateApp_thenDeletesPreviousPersistentRepositoryBeforeSavingNewConfig() {
+        // given
+        val oldGitUrl = "https://github.com/org/old-repo.git"
+        val newGitUrl = "https://github.com/org/new-repo.git"
+        `when`(applicationService.getGitConfig("old-app")).thenReturn(AppGitConfig(oldGitUrl, "main"))
+        `when`(repositoryService.deletePersistentRepository("old-app", oldGitUrl)).thenReturn(true)
+        `when`(githubService.getToken()).thenReturn("github-token")
+        `when`(repositoryService.preparePersistentRepository("new-app", newGitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/new-repo"))
+
+        // when
+        applicationFacade.updateApp("old-app", "new-app", newGitUrl, "main")
+
+        // then
+        val ordered = inOrder(repositoryService, applicationService)
+        ordered.verify(repositoryService).deletePersistentRepository("old-app", oldGitUrl)
+        ordered.verify(applicationService).updateApp("old-app", "new-app", newGitUrl, "main")
+        verify(repositoryService).preparePersistentRepository("new-app", newGitUrl, "main", "github-token")
+    }
+
+    @Test
+    @DisplayName("앱 삭제 시 Redis metadata 삭제 후 persistent repository를 삭제한다")
+    fun givenAppWithGitConfig_whenRemoveApp_thenDeletesPersistentRepositoryAfterRemovingAppMetadata() {
+        // given
+        val gitUrl = "https://github.com/org/repo.git"
+        `when`(applicationService.getGitConfig("my-app")).thenReturn(AppGitConfig(gitUrl, "main"))
+        `when`(repositoryService.deletePersistentRepository("my-app", gitUrl)).thenReturn(true)
+
+        // when
+        applicationFacade.removeApp("my-app")
+
+        // then
+        val ordered = inOrder(applicationService, repositoryService)
+        ordered.verify(applicationService).removeApp("my-app")
+        ordered.verify(repositoryService).deletePersistentRepository("my-app", gitUrl)
     }
 
     @Test

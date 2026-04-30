@@ -384,6 +384,41 @@ class RepositoryServiceTest {
         assertThat(status.lastError).isNotBlank()
     }
 
+    // ── deletePersistentRepository ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("persistent storage가 비활성화되어 있으면 repository 삭제를 수행하지 않는다")
+    fun givenPersistentStorageDisabled_whenDeletePersistentRepository_thenReturnsFalse() {
+        // given
+        val gitUrl = remoteRepoDir.toUri().toString()
+
+        // when
+        val result = service.deletePersistentRepository("test-app", gitUrl)
+
+        // then
+        assertThat(result).isFalse()
+    }
+
+    @Test
+    @DisplayName("persistent repository 삭제 시 lock 안에서 디렉터리와 status metadata를 제거한다")
+    fun givenPersistentRepositoryExists_whenDeletePersistentRepository_thenDeletesDirectoryAndStatus() {
+        // given
+        val storageRoot = Files.createTempDirectory("persistent-delete-test").also { tempDirs.add(it) }
+        val persistentService = createPersistentRepositoryService(storageRoot)
+        val gitUrl = remoteRepoDir.toUri().toString()
+        stubRepositoryLock("${REDIS_KEY_REPOSITORY_LOCK_PREFIX}test-app")
+        val repositoryPath = persistentService.preparePersistentRepository("test-app", gitUrl, "feature")!!
+        assertThat(repositoryPath).exists()
+
+        // when
+        val result = persistentService.deletePersistentRepository("test-app", gitUrl)
+
+        // then
+        assertThat(result).isTrue()
+        assertThat(Files.exists(repositoryPath)).isFalse()
+        verify(redisTemplate).delete("${REDIS_KEY_REPOSITORY_STATUS_PREFIX}test-app")
+    }
+
     // ── collectSourceFiles ────────────────────────────────────────────────────
 
     @Test

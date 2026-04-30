@@ -34,12 +34,29 @@ class ApplicationFacade(
     }
 
     fun updateApp(oldName: String, newName: String, gitUrl: String?, deployBranch: String?) {
+        val previousConfig = applicationService.getGitConfig(oldName)
+        val previousGitUrl = previousConfig?.gitUrl
+        previousGitUrl
+            ?.takeIf { shouldDeletePreviousRepository(oldName, newName, it, gitUrl) }
+            ?.let { repositoryService.deletePersistentRepository(oldName, it) }
         applicationService.updateApp(oldName, newName, gitUrl, deployBranch)
         checkoutSourceCodeInBackground(newName, gitUrl, deployBranch)
     }
 
     fun removeApp(name: String) {
+        val previousConfig = applicationService.getGitConfig(name)
         applicationService.removeApp(name)
+        val previousGitUrl = previousConfig?.gitUrl
+        if (!previousGitUrl.isNullOrBlank()) {
+            repositoryService.deletePersistentRepository(name, previousGitUrl)
+        }
+    }
+
+    private fun shouldDeletePreviousRepository(oldName: String, newName: String, previousGitUrl: String?, newGitUrl: String?): Boolean {
+        if (previousGitUrl.isNullOrBlank()) {
+            return false
+        }
+        return oldName != newName || previousGitUrl != newGitUrl
     }
 
     private fun checkoutSourceCodeInBackground(appName: String, gitUrl: String?, deployBranch: String?) {

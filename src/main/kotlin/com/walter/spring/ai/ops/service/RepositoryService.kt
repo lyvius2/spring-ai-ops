@@ -137,6 +137,15 @@ class RepositoryService(
         }.getOrThrow()
     }
 
+    fun deletePersistentRepository(appName: String, gitUrl: String): Boolean {
+        val repositoryPath = repositoryProperties.resolvePersistentRepositoryPath(appName, gitUrl) ?: return false
+        redisLockManager.withLock(redisLockManager.repositoryLockKey(appName)) {
+            deletePersistentRepositoryDirectory(repositoryPath)
+            redisTemplate.delete("$REDIS_KEY_REPOSITORY_STATUS_PREFIX$appName")
+        }
+        return true
+    }
+
     private fun preparePersistentRepositoryUnderLock(repositoryPath: Path, gitUrl: String, branch: String, accessToken: String?): Path {
         Files.createDirectories(repositoryPath.parent)
         if (!Files.exists(repositoryPath) || !isGitRepository(repositoryPath)) {
