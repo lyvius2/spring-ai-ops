@@ -226,32 +226,60 @@ class GithubServiceTest {
     }
 
     @Test
-    @DisplayName("before가 전부 0이면 getCommit API 호출 (신규 브랜치 첫 push)")
-    fun givenEmptyShaBase_whenExecuteInquiryDiffer_thenCallsGetCommit() {
+    @DisplayName("before가 전부 0이면 push에 포함된 모든 commit을 조회")
+    fun givenEmptyShaBase_whenExecuteInquiryDiffer_thenCallsGetCommitForAllPushedCommits() {
         // given
         val service = buildService()
-        val inquiry = GitDifferInquiry("owner", "repo", GitRemoteService.EMPTY_SHA, "head-sha")
-        val expected = GithubCompareResult(files = listOf(GithubFile(filename = "README.md", status = "added")))
-        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(expected)
+        val inquiry = GitDifferInquiry("owner", "repo", GitRemoteService.EMPTY_SHA, "head-sha", listOf("first-sha", "head-sha"))
+        given(githubConnector.getCommit("owner", "repo", "first-sha")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "README.md", status = "added"))),
+        )
+        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "added"))),
+        )
 
         // when
         val result = service.executeInquiryDiffer(inquiry)
 
         // then
+        verify(githubConnector).getCommit("owner", "repo", "first-sha")
         verify(githubConnector).getCommit("owner", "repo", "head-sha")
-        assertThat(result).isEqualTo(expected)
+        assertThat((result as GithubCompareResult).files.map { it.filename }).containsExactly("README.md", "src/Main.kt")
     }
 
     @Test
-    @DisplayName("compare 결과 files가 비어있으면 getCommit으로 fallback (250 커밋 제한)")
-    fun givenCompareReturnsEmptyFiles_whenExecuteInquiryDiffer_thenFallsBackToGetCommit() {
+    @DisplayName("push commit이 여러 개이면 모든 commit을 조회")
+    fun givenMultiplePushedCommits_whenExecuteInquiryDiffer_thenCallsGetCommitForAllPushedCommits() {
         // given
         val service = buildService()
-        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha", listOf("first-sha", "head-sha"))
+        given(githubConnector.getCommit("owner", "repo", "first-sha")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "README.md", status = "added"))),
+        )
+        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified"))),
+        )
+
+        // when
+        val result = service.executeInquiryDiffer(inquiry)
+
+        // then
+        verify(githubConnector).getCommit("owner", "repo", "first-sha")
+        verify(githubConnector).getCommit("owner", "repo", "head-sha")
+        assertThat((result as GithubCompareResult).files.map { it.filename }).containsExactly("README.md", "src/Main.kt")
+    }
+
+    @Test
+    @DisplayName("compare 결과 files가 비어있으면 head commit으로 fallback")
+    fun givenCompareReturnsEmptyFiles_whenExecuteInquiryDiffer_thenFallsBackToHeadCommit() {
+        // given
+        val service = buildService()
+        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha", listOf("head-sha"))
         val emptyCompareResult = GithubCompareResult(files = emptyList())
-        val fallbackResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified")))
         given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(emptyCompareResult)
-        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(fallbackResult)
+        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified"))),
+        )
 
         // when
         val result = service.executeInquiryDiffer(inquiry)
@@ -259,20 +287,20 @@ class GithubServiceTest {
         // then
         verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
         verify(githubConnector).getCommit("owner", "repo", "head-sha")
-        assertThat((result as GithubCompareResult).files).hasSize(1)
-        assertThat(result.files[0].filename).isEqualTo("src/Main.kt")
+        assertThat((result as GithubCompareResult).files.map { it.filename }).containsExactly("src/Main.kt")
     }
 
     @Test
-    @DisplayName("compare가 errorMessage를 반환하면 getCommit으로 fallback 함")
-    fun givenCompareReturnsErrorMessage_whenExecuteInquiryDiffer_thenFallsBackToGetCommit() {
+    @DisplayName("compare가 errorMessage를 반환하면 head commit으로 fallback")
+    fun givenCompareReturnsErrorMessage_whenExecuteInquiryDiffer_thenFallsBackToHeadCommit() {
         // given
         val service = buildService()
-        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha")
+        val inquiry = GitDifferInquiry("owner", "repo", "base-sha", "head-sha", listOf("head-sha"))
         val errorResult = GithubCompareResult(files = emptyList(), errorMessage = "[404] Not Found")
-        val fallbackResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified")))
         given(githubConnector.compare("owner", "repo", "base-sha...head-sha")).willReturn(errorResult)
-        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(fallbackResult)
+        given(githubConnector.getCommit("owner", "repo", "head-sha")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified"))),
+        )
 
         // when
         val result = service.executeInquiryDiffer(inquiry)
@@ -280,8 +308,7 @@ class GithubServiceTest {
         // then
         verify(githubConnector).compare("owner", "repo", "base-sha...head-sha")
         verify(githubConnector).getCommit("owner", "repo", "head-sha")
-        assertThat((result as GithubCompareResult).files).hasSize(1)
-        assertThat(result.files[0].filename).isEqualTo("src/Main.kt")
+        assertThat((result as GithubCompareResult).files.map { it.filename }).containsExactly("src/Main.kt")
     }
 
     @Test
@@ -290,7 +317,9 @@ class GithubServiceTest {
         // given
         val service = buildService()
         val inquiry = GitDifferInquiry("walter", "my-repo", "abc123", "def456")
-        given(githubConnector.compare("walter", "my-repo", "abc123...def456")).willReturn(GithubCompareResult())
+        given(githubConnector.compare("walter", "my-repo", "abc123...def456")).willReturn(
+            GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified"))),
+        )
 
         // when
         service.executeInquiryDiffer(inquiry)

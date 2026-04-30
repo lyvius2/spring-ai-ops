@@ -7,6 +7,7 @@ data class GitDifferInquiry(
     val repo: String,
     val base: String,
     val head: String,
+    val commitShas: List<String> = emptyList(),
 ) {
     val projectPath: String get() = "$owner/$repo"
     companion object {
@@ -15,7 +16,7 @@ data class GitDifferInquiry(
             repo = request.repository.name,
             base = request.before,
             head = request.after,
+            commitShas = request.commits.mapNotNull { it.id.takeIf(String::isNotBlank) },
         )
     }
 }
-
