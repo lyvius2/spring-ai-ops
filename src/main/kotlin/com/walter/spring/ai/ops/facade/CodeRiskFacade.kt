@@ -43,7 +43,7 @@ class CodeRiskFacade(
     fun analyze(appName: String, branch: String) {
         val gitRepoUrl = applicationService.getGitRepoByAppName(appName)
         val accessToken = resolveAccessToken(gitRepoUrl)
-        val sourcePath = repositoryService.cloneRepository(appName, gitRepoUrl, branch, accessToken)
+        val sourcePath = repositoryService.prepareRepository(appName, gitRepoUrl, branch, accessToken)
         val files = repositoryService.collectSourceFiles(sourcePath)
         val bundle = repositoryService.buildBundle(sourcePath, files)
         val tokenCount = aiModelService.estimateTokenCount(bundle)

@@ -88,8 +88,8 @@ class CodeRiskFacadeTest {
         `when`(applicationService.getGitRepoByAppName(appName)).thenReturn(gitUrl)
         `when`(githubService.getToken()).thenReturn("gh-token")
         `when`(gitlabService.getToken()).thenReturn("gl-token")
-        `when`(repositoryService.cloneRepository(appName, gitUrl, "main", "gh-token")).thenReturn(sourcePath)
-        `when`(repositoryService.cloneRepository(appName, gitUrl, "main", "gl-token")).thenReturn(sourcePath)
+        `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gh-token")).thenReturn(sourcePath)
+        `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gl-token")).thenReturn(sourcePath)
         `when`(repositoryService.collectSourceFiles(sourcePath)).thenReturn(files)
         `when`(repositoryService.buildBundle(sourcePath, files)).thenReturn("bundle")
         `when`(aiModelService.estimateTokenCount("bundle")).thenReturn(tokenCount)
@@ -159,18 +159,18 @@ class CodeRiskFacadeTest {
     }
 
     @Test
-    @DisplayName("cloneRepository에서 예외 발생 시 analyze에서 예외가 전파됨")
-    fun givenCloneRepositoryThrows_whenAnalyze_thenExceptionPropagates() {
-        // given — cloneRepository is outside CompletableFuture, so exception propagates directly
+    @DisplayName("prepareRepository에서 예외 발생 시 analyze에서 예외가 전파됨")
+    fun givenPrepareRepositoryThrows_whenAnalyze_thenExceptionPropagates() {
+        // given — prepareRepository is outside CompletableFuture, so exception propagates directly
         `when`(applicationService.getGitRepoByAppName("my-app")).thenReturn(githubUrl)
         `when`(githubService.getToken()).thenReturn("gh-token")
-        `when`(repositoryService.cloneRepository("my-app", githubUrl, "main", "gh-token"))
-            .thenThrow(RuntimeException("Clone failed"))
+        `when`(repositoryService.prepareRepository("my-app", githubUrl, "main", "gh-token"))
+            .thenThrow(RuntimeException("Repository preparation failed"))
 
         // when / then
         assertThatThrownBy { facade.analyze("my-app", "main") }
             .isInstanceOf(RuntimeException::class.java)
-            .hasMessage("Clone failed")
+            .hasMessage("Repository preparation failed")
     }
 
     @Test
@@ -203,7 +203,7 @@ class CodeRiskFacadeTest {
 
         `when`(applicationService.getGitRepoByAppName("my-app")).thenReturn(githubUrl)
         `when`(githubService.getToken()).thenReturn("gh-token")
-        `when`(repositoryService.cloneRepository("my-app", githubUrl, "main", "gh-token")).thenReturn(sourcePath)
+        `when`(repositoryService.prepareRepository("my-app", githubUrl, "main", "gh-token")).thenReturn(sourcePath)
         `when`(repositoryService.collectSourceFiles(sourcePath)).thenReturn(files)
         `when`(repositoryService.buildBundle(sourcePath, files)).thenReturn("bundle")
         `when`(aiModelService.estimateTokenCount("bundle")).thenReturn(50000)
@@ -234,4 +234,3 @@ class CodeRiskFacadeTest {
         assertThat(result).isEmpty()
     }
 }
-
