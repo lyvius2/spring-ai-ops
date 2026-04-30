@@ -105,6 +105,10 @@ app:
       executor-concurrency-limit: 200 # Max concurrent tasks for async operations using virtual threads.
       llm-max-concurrency: 20         # Max simultaneous in-flight LLM API calls (Semaphore) within the executor capacity.
 
+repository:
+  stored: false                       # If set to true, source code will be saved to the path specified in repository.local-path when a Git Remote URL is registered. The stored source code will be used for analysis.
+  local-path: ${REPOSITORY_LOCAL_PATH:./data/repository}  # Local path to store source code when repository.stored is true. Ensure this directory is secure and has sufficient storage.
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
