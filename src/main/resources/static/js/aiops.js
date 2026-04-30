@@ -816,6 +816,9 @@ function connectWebSocket() {
         stompClient.subscribe('/topic/analysis/result', function (message) {
             handleCodeRiskRecord(JSON.parse(message.body));
         });
+        stompClient.subscribe('/topic/alert', function (message) {
+            showAlertLayer(JSON.parse(message.body));
+        });
     }, function () {
         stompClient = null;
         setTimeout(connectWebSocket, 5000);
@@ -1559,6 +1562,49 @@ function showCommitNotification(appName) {
     notif.textContent = `Code Review completed for ${appName}.`;
     container.appendChild(notif);
     setTimeout(() => notif.remove(), 4500);
+}
+
+function showAlertLayer(alert) {
+    const content = buildAlertLayerContent(alert);
+    document.getElementById('websocket-alert-title').textContent = content.title;
+    document.getElementById('websocket-alert-message').textContent = content.body;
+    document.getElementById('websocket-alert-modal').style.display = 'flex';
+}
+
+function closeAlertLayer() {
+    document.getElementById('websocket-alert-modal').style.display = 'none';
+}
+
+function buildAlertLayerContent(alert) {
+    const type = alert?.type || '';
+    const appName = alert?.applicationName || 'the application';
+    const exceptionMessage = alert?.exceptionMessage || 'No exception message was provided.';
+
+    if (type === 'INVALID_DEPLOY_BRANCH_FALLBACK') {
+        const branch = alert?.deployBranch || '(blank)';
+        return {
+            title: 'Invalid deploy branch',
+            body:
+                `The saved deploy branch "${branch}" for ${appName} is invalid.\n` +
+                'The source code was checked out from the repository default branch instead, and the saved deploy branch has been cleared.\n\n' +
+                `Exception: ${exceptionMessage}`,
+        };
+    }
+
+    if (type === 'SOURCE_CHECKOUT_FAILED') {
+        return {
+            title: 'Source code checkout failed',
+            body:
+                `Source code checkout failed for ${appName}.\n` +
+                'Check that the Git repository URL and branch are correct, the GitHub/GitLab token is valid, and the application has disk permissions.\n\n' +
+                `Exception: ${exceptionMessage}`,
+        };
+    }
+
+    return {
+        title: 'Alert',
+        body: exceptionMessage,
+    };
 }
 
 function buildAppDetailHtml(appName) {

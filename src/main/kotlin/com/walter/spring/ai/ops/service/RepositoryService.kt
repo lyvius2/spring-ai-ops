@@ -114,8 +114,7 @@ class RepositoryService(
 
     fun prepareRepository(appName: String, gitUrl: String, branch: String = "", accessToken: String? = null): Path {
         val persistentPath = try {
-            if (branch.isBlank()) null
-            else preparePersistentRepository(appName, gitUrl, branch, accessToken)
+            preparePersistentRepository(appName, gitUrl, branch, accessToken)
         } catch (e: Exception) {
             log.error("Persistent repository preparation failed. Falling back to temporary clone — app: {}, branch: {}, cause: {}", appName, branch, e.message)
             null
@@ -125,7 +124,6 @@ class RepositoryService(
 
     fun preparePersistentRepository(appName: String, gitUrl: String, branch: String, accessToken: String? = null): Path? {
         val repositoryPath = repositoryProperties.resolvePersistentRepositoryPath(appName, gitUrl) ?: return null
-        require(branch.isNotBlank()) { "Branch is required for persistent repository preparation." }
         saveRepositoryStatus(RepositoryStatus.running(appName, repositoryPath))
 
         return runCatching {
@@ -163,7 +161,7 @@ class RepositoryService(
             .setURI(gitUrl)
             .setDirectory(repositoryPath.toFile())
             .setCloneAllBranches(false)
-            .setBranch(branch)
+            .apply { if (branch.isNotBlank()) setBranch(branch) }
             .apply {
                 if (!accessToken.isNullOrBlank()) {
                     setCredentialsProvider(UsernamePasswordCredentialsProvider("oauth2", accessToken))
@@ -186,16 +184,19 @@ class RepositoryService(
                 }
                 .call()
 
-            val localBranchExists = git.repository.refDatabase.findRef(branch) != null
-            val checkout = git.checkout().setName(branch)
+            val targetBranch = branch.ifBlank { git.repository.branch }
+            require(targetBranch.isNotBlank()) { "Unable to resolve branch for persistent repository sync." }
+
+            val localBranchExists = git.repository.refDatabase.findRef(targetBranch) != null
+            val checkout = git.checkout().setName(targetBranch)
             if (!localBranchExists) {
-                checkout.setCreateBranch(true).setStartPoint("origin/$branch")
+                checkout.setCreateBranch(true).setStartPoint("origin/$targetBranch")
             }
             checkout.call()
 
             git.reset()
                 .setMode(ResetCommand.ResetType.HARD)
-                .setRef("origin/$branch")
+                .setRef("origin/$targetBranch")
                 .call()
         }
     }

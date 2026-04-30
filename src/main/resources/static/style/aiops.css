@@ -1694,6 +1694,12 @@ body {
 .notification-commit    { border-left-color: #1a56c4; }
 .notification-analysis  { border-left-color: #27ae60; }
 
+/* ── WebSocket Alert Modal ── */
+.alert-layer-message {
+    white-space: pre-wrap;
+    text-align: left;
+}
+
 /* ── Analysis Running Indicator (bottom-left) ── */
 .analysis-running-indicator {
     position: fixed;
