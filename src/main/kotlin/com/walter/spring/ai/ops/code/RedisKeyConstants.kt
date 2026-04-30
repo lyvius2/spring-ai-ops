@@ -15,5 +15,6 @@ class RedisKeyConstants {
         const val REDIS_KEY_COMMIT_PREFIX = "commit:"
         const val REDIS_KEY_FIRING_PREFIX = "firing:"
         const val REDIS_KEY_CODE_RISK_PREFIX = "code:"
+        const val REDIS_KEY_REPOSITORY_LOCK_PREFIX = "lock:repository:"
     }
 }
