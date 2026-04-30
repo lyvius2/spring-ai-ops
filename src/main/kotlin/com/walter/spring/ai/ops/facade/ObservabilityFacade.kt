@@ -64,7 +64,7 @@ class ObservabilityFacade(
         if (request.isResolved()) {
             return
         }
-        recordAuditLog(request)
+        log.info("Grafana webhook received — status: {}, alerts: {}, title: {}", request.status, request.alerts.size, request.title)
         runCatching {
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(targetApplication)
@@ -125,13 +125,6 @@ class ObservabilityFacade(
             lower.contains("github") -> githubService.getToken()
             lower.contains("gitlab") -> gitlabService.getToken()
             else -> null
-        }
-    }
-
-    private fun recordAuditLog(request: GrafanaAlertingRequest) {
-        log.info("Grafana webhook received — status: {}, alerts: {}, title: {}", request.status, request.alerts.size, request.title)
-        request.alerts.filter { it.isFiring() }.forEach { alert ->
-            log.info("Firing alert — name: {}, fingerprint: {}, lokiLabels: {}, startsAt: {}", alert.alertName(), alert.fingerprint, alert.lokiLabels(), alert.startsAt)
         }
     }
 
