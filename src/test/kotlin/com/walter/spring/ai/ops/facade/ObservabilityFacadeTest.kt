@@ -194,7 +194,7 @@ class ObservabilityFacadeTest {
         stubHappyPath(request)
         `when`(applicationService.getGitConfig("my-app"))
             .thenReturn(AppGitConfig("https://example.com/test.git", "main"))
-        `when`(repositoryService.cloneRepository("my-app", "https://example.com/test.git", "main", null))
+        `when`(repositoryService.prepareRepository("my-app", "https://example.com/test.git", "main", null))
             .thenReturn(sourcePath)
         `when`(incidentSourceContextService.createContext(anyObject(), Mockito.eq(sourcePath)))
             .thenReturn(sourceContext)
@@ -205,7 +205,7 @@ class ObservabilityFacadeTest {
         incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
-        verify(repositoryService).cloneRepository("my-app", "https://example.com/test.git", "main", null)
+        verify(repositoryService).prepareRepository("my-app", "https://example.com/test.git", "main", null)
         verify(incidentSourceContextService).createContext(anyObject(), Mockito.eq(sourcePath))
         verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), Mockito.contains("Related source snippets"))
     }
@@ -220,7 +220,7 @@ class ObservabilityFacadeTest {
         `when`(applicationService.getGitConfig("my-app"))
             .thenReturn(AppGitConfig("https://github.com/owner/repo.git", "main"))
         `when`(githubService.getToken()).thenReturn("github-token")
-        `when`(repositoryService.cloneRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token"))
+        `when`(repositoryService.prepareRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token"))
             .thenReturn(sourcePath)
 
         // when
@@ -228,7 +228,7 @@ class ObservabilityFacadeTest {
 
         // then
         verify(githubService).getToken()
-        verify(repositoryService).cloneRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token")
+        verify(repositoryService).prepareRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token")
     }
 
     @Test
@@ -241,7 +241,7 @@ class ObservabilityFacadeTest {
         `when`(applicationService.getGitConfig("my-app"))
             .thenReturn(AppGitConfig("https://gitlab.com/owner/repo.git", "main"))
         `when`(gitlabService.getToken()).thenReturn("gitlab-token")
-        `when`(repositoryService.cloneRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token"))
+        `when`(repositoryService.prepareRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token"))
             .thenReturn(sourcePath)
 
         // when
@@ -249,7 +249,24 @@ class ObservabilityFacadeTest {
 
         // then
         verify(gitlabService).getToken()
-        verify(repositoryService).cloneRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token")
+        verify(repositoryService).prepareRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token")
+    }
+
+    @Test
+    @DisplayName("deployBranch가 없으면 source checkout 없이 LLM 분석을 수행함")
+    fun givenMissingDeployBranch_whenAnalyzeFiring_thenSkipsSourceCheckout() {
+        // given
+        val request = createRequest()
+        stubHappyPath(request)
+        `when`(applicationService.getGitConfig("my-app"))
+            .thenReturn(AppGitConfig("https://example.com/test.git", null))
+
+        // when
+        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
+
+        // then
+        verify(repositoryService, never()).prepareRepository(anyObject(), anyObject(), anyObject(), anyObject())
+        verify(incidentSourceContextService).createContext(anyObject(), Mockito.isNull())
     }
 
 

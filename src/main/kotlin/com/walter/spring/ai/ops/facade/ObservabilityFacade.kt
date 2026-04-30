@@ -108,7 +108,7 @@ class ObservabilityFacade(
         val appConfig = applicationService.getGitConfig(targetApplication)
         return if (appConfig != null && appConfig.isValidConfig()) {
             val accessToken = resolveAccessToken(appConfig.gitUrl!!)
-            repositoryService.cloneRepository(
+            repositoryService.prepareRepository(
                 appName = targetApplication,
                 gitUrl = appConfig.gitUrl,
                 branch = appConfig.deployBranch!!,
