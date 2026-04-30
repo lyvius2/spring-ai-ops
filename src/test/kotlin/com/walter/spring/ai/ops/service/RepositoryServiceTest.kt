@@ -1,7 +1,13 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RepositoryCloneStatus
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_CODE_RISK_PREFIX
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOSITORY_LOCK_PREFIX
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOSITORY_STATUS_PREFIX
+import com.walter.spring.ai.ops.config.RepositoryProperties
+import com.walter.spring.ai.ops.service.dto.RepositoryStatus
+import com.walter.spring.ai.ops.util.RedisLockManager
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.eclipse.jgit.api.Git
@@ -10,22 +16,33 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentCaptor
 import org.mockito.Mock
-import org.mockito.Mockito.mock
+import org.mockito.Mockito
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 import org.springframework.data.redis.core.ZSetOperations
+import java.time.Duration
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDateTime
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
+
+@Suppress("UNCHECKED_CAST")
+private fun <T> anyObject(): T = Mockito.any() as T
 
 @ExtendWith(MockitoExtension::class)
 class RepositoryServiceTest {
 
     @Mock private lateinit var redisTemplate: StringRedisTemplate
     @Mock private lateinit var zSetOps: ZSetOperations<String, String>
+    @Mock private lateinit var valueOps: ValueOperations<String, String>
 
     private lateinit var service: RepositoryService
 
@@ -37,9 +54,17 @@ class RepositoryServiceTest {
 
     @BeforeEach
     fun setUp() {
+        val lockManager = RedisLockManager(
+            redisTemplate = redisTemplate,
+            defaultLockTtlMs = 1_000,
+            defaultWaitTimeoutMs = 0,
+            defaultRetryIntervalMs = 1,
+        )
         service = RepositoryService(
             redisTemplate = redisTemplate,
             objectMapper = ObjectMapper().findAndRegisterModules(),
+            repositoryProperties = RepositoryProperties(),
+            redisLockManager = lockManager,
             retentionHours = 120L,
             maximumViewCount = 5L,
         )
@@ -59,6 +84,47 @@ class RepositoryServiceTest {
             // Create a 'feature' branch
             git.branchCreate().setName("feature").call()
         }
+    }
+
+    private fun createPersistentRepositoryService(storageRoot: Path): RepositoryService {
+        val lockManager = RedisLockManager(
+            redisTemplate = redisTemplate,
+            defaultLockTtlMs = 1_000,
+            defaultWaitTimeoutMs = 0,
+            defaultRetryIntervalMs = 1,
+        )
+        return RepositoryService(
+            redisTemplate = redisTemplate,
+            objectMapper = ObjectMapper().findAndRegisterModules(),
+            repositoryProperties = RepositoryProperties(stored = true, localPath = storageRoot.toString()),
+            redisLockManager = lockManager,
+            retentionHours = 120L,
+            maximumViewCount = 5L,
+        )
+    }
+
+    private fun stubRepositoryLock(lockKey: String) {
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOps)
+        `when`(
+            valueOps.setIfAbsent(
+                Mockito.eq(lockKey),
+                anyObject(),
+                Mockito.eq(Duration.ofMillis(1_000)),
+            ),
+        ).thenReturn(true)
+        `when`(
+            redisTemplate.execute(
+                anyObject<RedisScript<Long>>(),
+                Mockito.eq(listOf(lockKey)),
+                anyObject<String>(),
+            ),
+        ).thenReturn(1L)
+    }
+
+    private fun captureLastRepositoryStatus(applicationName: String, expectedWriteCount: Int): RepositoryStatus {
+        val captor = ArgumentCaptor.forClass(String::class.java)
+        verify(valueOps, times(expectedWriteCount)).set(Mockito.eq("$REDIS_KEY_REPOSITORY_STATUS_PREFIX$applicationName"), captor.capture())
+        return ObjectMapper().findAndRegisterModules().readValue(captor.allValues.last(), RepositoryStatus::class.java)
     }
 
     @AfterEach
@@ -156,6 +222,92 @@ class RepositoryServiceTest {
         assertThatThrownBy {
             service.cloneRepository("test-app", invalidUrl)
         }.isInstanceOf(Exception::class.java)
+    }
+
+    // ── preparePersistentRepository ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("persistent storage가 비활성화되어 있으면 null을 반환한다")
+    fun givenPersistentStorageDisabled_whenPreparePersistentRepository_thenReturnsNull() {
+        // given
+        val gitUrl = remoteRepoDir.toUri().toString()
+
+        // when
+        val result = service.preparePersistentRepository("test-app", gitUrl, "master")
+
+        // then
+        assertThat(result).isNull()
+    }
+
+    @Test
+    @DisplayName("persistent repository가 없으면 지정된 localPath 하위에 clone한다")
+    fun givenNoPersistentRepository_whenPreparePersistentRepository_thenClonesIntoLocalPath() {
+        // given
+        val storageRoot = Files.createTempDirectory("persistent-repository-test").also { tempDirs.add(it) }
+        val persistentService = createPersistentRepositoryService(storageRoot)
+        val gitUrl = remoteRepoDir.toUri().toString()
+        stubRepositoryLock("${REDIS_KEY_REPOSITORY_LOCK_PREFIX}test-app")
+
+        // when
+        val result = persistentService.preparePersistentRepository("test-app", gitUrl, "feature")
+
+        // then
+        assertThat(result).isNotNull()
+        assertThat(result!!.startsWith(storageRoot.toAbsolutePath().normalize())).isTrue()
+        assertThat(result.resolve(".git")).isDirectory()
+        Git.open(result.toFile()).use { git ->
+            assertThat(git.repository.branch).isEqualTo("feature")
+        }
+        val status = captureLastRepositoryStatus("test-app", expectedWriteCount = 2)
+        assertThat(status.cloneStatus).isEqualTo(RepositoryCloneStatus.SUCCESS)
+        assertThat(status.localPath).isEqualTo(result.toString())
+        assertThat(status.lastSyncedAt).isNotNull()
+    }
+
+    @Test
+    @DisplayName("persistent repository가 있으면 fetch 후 origin branch로 hard reset한다")
+    fun givenExistingPersistentRepository_whenPreparePersistentRepository_thenFetchesAndResetsToOriginBranch() {
+        // given
+        val storageRoot = Files.createTempDirectory("persistent-sync-test").also { tempDirs.add(it) }
+        val persistentService = createPersistentRepositoryService(storageRoot)
+        val gitUrl = remoteRepoDir.toUri().toString()
+        stubRepositoryLock("${REDIS_KEY_REPOSITORY_LOCK_PREFIX}test-app")
+        val branch = Git.open(remoteRepoDir.toFile()).use { it.repository.branch }
+        val result = persistentService.preparePersistentRepository("test-app", gitUrl, branch)!!
+
+        Git.open(remoteRepoDir.toFile()).use { git ->
+            remoteRepoDir.resolve("Main.kt").toFile().writeText("fun main() = println(\"updated\")")
+            git.add().addFilepattern("Main.kt").call()
+            git.commit().setMessage("Update main")
+                .setAuthor("Test", "test@example.com")
+                .call()
+        }
+
+        // when
+        val syncedPath = persistentService.preparePersistentRepository("test-app", gitUrl, branch)
+
+        // then
+        assertThat(syncedPath).isEqualTo(result)
+        assertThat(result.resolve("Main.kt").toFile().readText()).contains("updated")
+    }
+
+    @Test
+    @DisplayName("persistent repository 준비에 실패하면 FAILED status를 저장하고 예외를 던진다")
+    fun givenInvalidBranch_whenPreparePersistentRepository_thenSavesFailedStatusAndThrowsException() {
+        // given
+        val storageRoot = Files.createTempDirectory("persistent-failure-test").also { tempDirs.add(it) }
+        val persistentService = createPersistentRepositoryService(storageRoot)
+        val gitUrl = remoteRepoDir.toUri().toString()
+        stubRepositoryLock("${REDIS_KEY_REPOSITORY_LOCK_PREFIX}test-app")
+
+        // when & then
+        assertThatThrownBy {
+            persistentService.preparePersistentRepository("test-app", gitUrl, "missing-branch")
+        }.isInstanceOf(Exception::class.java)
+        val status = captureLastRepositoryStatus("test-app", expectedWriteCount = 2)
+        assertThat(status.cloneStatus).isEqualTo(RepositoryCloneStatus.FAILED)
+        assertThat(status.localPath).isNotBlank()
+        assertThat(status.lastError).isNotBlank()
     }
 
     // ── collectSourceFiles ────────────────────────────────────────────────────
@@ -401,7 +553,20 @@ class RepositoryServiceTest {
     fun givenRecordsInRedis_whenGetCodeRiskRecords_thenReturnsList() {
         // given
         val objectMapper = ObjectMapper().findAndRegisterModules()
-        val innerService = RepositoryService(redisTemplate, objectMapper, 120L, 5L)
+        val lockManager = RedisLockManager(
+            redisTemplate = redisTemplate,
+            defaultLockTtlMs = 1_000,
+            defaultWaitTimeoutMs = 0,
+            defaultRetryIntervalMs = 1,
+        )
+        val innerService = RepositoryService(
+            redisTemplate = redisTemplate,
+            objectMapper = objectMapper,
+            repositoryProperties = RepositoryProperties(),
+            redisLockManager = lockManager,
+            retentionHours = 120L,
+            maximumViewCount = 5L,
+        )
         val json = """{"analyzedAt":"2026-04-20T10:00:00","application":"my-app","githubUrl":"https://github.com/owner/repo.git","branch":"main","analyzedResult":"ok"}"""
         `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)
         `when`(zSetOps.reverseRange("${REDIS_KEY_CODE_RISK_PREFIX}my-app", 0, -1)).thenReturn(linkedSetOf(json))
@@ -456,5 +621,79 @@ class RepositoryServiceTest {
 
         // then
         assertThat(result).isFalse()
+    }
+
+    // ── repository status ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("repository status를 Redis Value에 JSON으로 저장하고 반환한다")
+    fun givenRepositoryStatus_whenSaveRepositoryStatus_thenSavesJsonAndReturnsStatus() {
+        // given
+        val status = RepositoryStatus(
+            applicationName = "my-app",
+            cloneStatus = RepositoryCloneStatus.SUCCESS,
+            localPath = "/data/repository/my-app",
+            lastSyncedAt = LocalDateTime.of(2026, 4, 30, 10, 0),
+            lastError = null,
+        )
+        val expectedJson = ObjectMapper().findAndRegisterModules().writeValueAsString(status)
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOps)
+
+        // when
+        val result = service.saveRepositoryStatus(status)
+
+        // then
+        assertThat(result).isEqualTo(status)
+        verify(valueOps).set("${REDIS_KEY_REPOSITORY_STATUS_PREFIX}my-app", expectedJson)
+    }
+
+    @Test
+    @DisplayName("Redis에 repository status JSON이 있으면 역직렬화하여 반환한다")
+    fun givenRepositoryStatusJsonInRedis_whenGetRepositoryStatus_thenReturnsStatus() {
+        // given
+        val status = RepositoryStatus(
+            applicationName = "my-app",
+            cloneStatus = RepositoryCloneStatus.FAILED,
+            localPath = "/data/repository/my-app",
+            lastSyncedAt = null,
+            lastError = "Authentication failed",
+        )
+        val json = ObjectMapper().findAndRegisterModules().writeValueAsString(status)
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOps)
+        `when`(valueOps.get("${REDIS_KEY_REPOSITORY_STATUS_PREFIX}my-app")).thenReturn(json)
+
+        // when
+        val result = service.getRepositoryStatus("my-app")
+
+        // then
+        assertThat(result).isEqualTo(status)
+    }
+
+    @Test
+    @DisplayName("Redis에 repository status가 없으면 null을 반환한다")
+    fun givenNoRepositoryStatusInRedis_whenGetRepositoryStatus_thenReturnsNull() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOps)
+        `when`(valueOps.get("${REDIS_KEY_REPOSITORY_STATUS_PREFIX}my-app")).thenReturn(null)
+
+        // when
+        val result = service.getRepositoryStatus("my-app")
+
+        // then
+        assertThat(result).isNull()
+    }
+
+    @Test
+    @DisplayName("Redis의 repository status JSON이 잘못되면 null을 반환한다")
+    fun givenInvalidRepositoryStatusJsonInRedis_whenGetRepositoryStatus_thenReturnsNull() {
+        // given
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOps)
+        `when`(valueOps.get("${REDIS_KEY_REPOSITORY_STATUS_PREFIX}my-app")).thenReturn("{invalid-json")
+
+        // when
+        val result = service.getRepositoryStatus("my-app")
+
+        // then
+        assertThat(result).isNull()
     }
 }

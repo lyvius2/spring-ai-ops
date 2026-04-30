@@ -49,7 +49,7 @@ class RedisLockManagerTest {
         val lockKey = redisLockManager.repositoryLockKey(applicationName)
 
         // then
-        assertThat(lockKey).isEqualTo("lock:repository:my-service")
+        assertThat(lockKey).isEqualTo("repository:lock:my-service")
     }
 
     @Test
@@ -69,7 +69,7 @@ class RedisLockManagerTest {
     @DisplayName("lock이 비어 있으면 token과 TTL로 lock을 획득한다")
     fun givenFreeLock_whenAcquire_thenSetsTokenWithTtl() {
         // given
-        val lockKey = "lock:repository:my-service"
+        val lockKey = "repository:lock:my-service"
         val ttl = Duration.ofMillis(1_000)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.setIfAbsent(Mockito.eq(lockKey), anyObject(), Mockito.eq(ttl))).thenReturn(true)
@@ -89,7 +89,7 @@ class RedisLockManagerTest {
     @DisplayName("timeout 안에 lock을 획득하지 못하면 예외가 발생한다")
     fun givenBusyLock_whenAcquire_thenThrowsException() {
         // given
-        val lockKey = "lock:repository:my-service"
+        val lockKey = "repository:lock:my-service"
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(
             valueOperations.setIfAbsent(
@@ -103,14 +103,14 @@ class RedisLockManagerTest {
         assertThatThrownBy {
             redisLockManager.acquire(lockKey, waitTimeout = Duration.ZERO)
         }.isInstanceOf(IllegalStateException::class.java)
-            .hasMessage("Failed to acquire Redis lock 'lock:repository:my-service' within 0ms.")
+            .hasMessage("Failed to acquire Redis lock 'repository:lock:my-service' within 0ms.")
     }
 
     @Test
     @DisplayName("release는 token 비교 Lua script로 lock을 해제한다")
     fun givenOwnedLock_whenRelease_thenExecutesTokenBasedUnlockScript() {
         // given
-        val lock = RedisLock("lock:repository:my-service", "owner-token")
+        val lock = RedisLock("repository:lock:my-service", "owner-token")
         `when`(
             redisTemplate.execute(
                 anyObject<RedisScript<Long>>(),
@@ -135,7 +135,7 @@ class RedisLockManagerTest {
     @DisplayName("token이 맞지 않아 Redis script가 0을 반환하면 release는 false를 반환한다")
     fun givenUnownedLock_whenRelease_thenReturnsFalse() {
         // given
-        val lock = RedisLock("lock:repository:my-service", "old-token")
+        val lock = RedisLock("repository:lock:my-service", "old-token")
         `when`(
             redisTemplate.execute(
                 anyObject<RedisScript<Long>>(),
@@ -155,7 +155,7 @@ class RedisLockManagerTest {
     @DisplayName("withLock은 lock을 획득하고 block 결과를 반환한 뒤 release한다")
     fun givenSuccessfulBlock_whenWithLock_thenReturnsResultAndReleasesLock() {
         // given
-        val lockKey = "lock:repository:my-service"
+        val lockKey = "repository:lock:my-service"
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(
             valueOperations.setIfAbsent(
@@ -188,7 +188,7 @@ class RedisLockManagerTest {
     @DisplayName("withLock의 block이 실패해도 release를 수행하고 예외를 다시 던진다")
     fun givenFailingBlock_whenWithLock_thenReleasesLockAndRethrowsException() {
         // given
-        val lockKey = "lock:repository:my-service"
+        val lockKey = "repository:lock:my-service"
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(
             valueOperations.setIfAbsent(
