@@ -1566,9 +1566,14 @@ function showCommitNotification(appName) {
 
 function showAlertLayer(alert) {
     const content = buildAlertLayerContent(alert);
+    const modal = document.getElementById('websocket-alert-modal');
+    modal.classList.remove('alert-layer-warning', 'alert-layer-danger');
+    if (content.tone) {
+        modal.classList.add(`alert-layer-${content.tone}`);
+    }
     document.getElementById('websocket-alert-title').textContent = content.title;
     document.getElementById('websocket-alert-message').textContent = content.body;
-    document.getElementById('websocket-alert-modal').style.display = 'flex';
+    modal.style.display = 'flex';
 }
 
 function closeAlertLayer() {
@@ -1583,7 +1588,8 @@ function buildAlertLayerContent(alert) {
     if (type === 'INVALID_DEPLOY_BRANCH_FALLBACK') {
         const branch = alert?.deployBranch || '(blank)';
         return {
-            title: 'Invalid deploy branch',
+            title: '⚠️ Invalid deploy branch',
+            tone: 'warning',
             body:
                 `The saved deploy branch "${branch}" for ${appName} is invalid.\n` +
                 'The source code was checked out from the repository default branch instead, and the saved deploy branch has been cleared.\n\n' +
@@ -1593,16 +1599,18 @@ function buildAlertLayerContent(alert) {
 
     if (type === 'SOURCE_CHECKOUT_FAILED') {
         return {
-            title: 'Source code checkout failed',
+            title: '⚠️ Source code checkout failed',
+            tone: 'danger',
             body:
                 `Source code checkout failed for ${appName}.\n` +
                 'Check that the Git repository URL and branch are correct, the GitHub/GitLab token is valid, and the application has disk permissions.\n\n' +
-                `Exception: ${exceptionMessage}`,
+                `${exceptionMessage}`,
         };
     }
 
     return {
         title: 'Alert',
+        tone: '',
         body: exceptionMessage,
     };
 }
