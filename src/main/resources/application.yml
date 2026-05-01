@@ -107,7 +107,7 @@ app:
 
 repository:
   stored: false                       # If set to true, source code will be saved to the path specified in repository.local-path when a Git Remote URL is registered. The stored source code will be used for analysis.
-  local-path: ${REPOSITORY_LOCAL_PATH:./data/repository}  # Local path to store source code when repository.stored is true. Ensure this directory is secure and has sufficient storage.
+  local-path: ${REPOSITORY_LOCAL_PATH:./data/repository}  # The local path to store source code when repository.stored is true. Ensure this directory is secure and has sufficient storage.
   lock:
     ttl-ms: 30000                     # Redis repository lock TTL in milliseconds. Prevents stale locks when a worker stops unexpectedly.
     wait-timeout-ms: 15000            # Maximum time to wait for an existing repository lock before failing.

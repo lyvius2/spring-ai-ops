@@ -832,7 +832,7 @@ function showAnalysisStatus(text) {
 async function handleFiringRecord(record) {
     const appName = record.application;
 
-    // API에서 최신 목록을 가져온 후 렌더링
+    // Fetch the latest lists from the API, then render.
     await Promise.all([
         loadFiringList(appName),
         loadCodeRiskList(appName),
@@ -848,7 +848,7 @@ async function handleFiringRecord(record) {
 
     if (existing) {
         if (selectedApp === appName) {
-            // 이미 선택된 앱: 레이어와 목록만 in-place 업데이트
+            // Selected app: update only the layers and list in place.
             syncCodeRiskTabVisibility(appName);
             const layersEl = document.getElementById('exception-layers');
             if (layersEl) {
@@ -861,7 +861,7 @@ async function handleFiringRecord(record) {
             if (tbody) tbody.innerHTML = renderFiringListRows(appName);
             switchToTab('exception');
         } else {
-            // 다른 앱이 선택 중: 렌더링 완료 후 앱 활성화
+            // Different app selected: render, then activate this app.
             renderAppDetailFromLocal(appName);
             switchToTab('exception');
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
@@ -869,7 +869,7 @@ async function handleFiringRecord(record) {
             selectedApp = appName;
         }
     } else {
-        // 신규 앱: 추가 후 깜빡임이 끝나면 렌더링 완료 후 활성화
+        // New app: add it, then render and activate it after the highlight animation.
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
@@ -884,7 +884,7 @@ async function handleFiringRecord(record) {
 async function handleCommitRecord(record) {
     const appName = record.application;
 
-    // API에서 최신 목록을 가져온 후 렌더링
+    // Fetch the latest list from the API, then render.
     await loadCommitList(appName);
     appSelectedCommitIdx[appName] = 0;
 
@@ -903,10 +903,10 @@ async function handleCommitRecord(record) {
 
     if (existing) {
         if (selectedApp === appName) {
-            // 이미 선택된 앱: 기본 탭으로 전환 후 in-place 업데이트
+            // Selected app: switch to the default tab and update in place.
             switchToDefaultTab(appName);
         } else {
-            // 다른 앱이 선택 중: 렌더링 완료 후 기본 탭으로 전환 및 앱 활성화
+            // Different app selected: render, switch to the default tab, and activate this app.
             renderAppDetailFromLocal(appName);
             switchToDefaultTab(appName);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
@@ -914,7 +914,7 @@ async function handleCommitRecord(record) {
             selectedApp = appName;
         }
     } else {
-        // 신규 앱: 추가 후 깜빡임이 끝나면 렌더링 완료 후 기본 탭으로 전환 및 활성화
+        // New app: add it, then render, switch to the default tab, and activate it after the highlight animation.
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
@@ -1259,26 +1259,26 @@ function extractLogStatus(log) {
     const results = log?.data?.result;
     if (!results || !Array.isArray(results) || results.length === 0) return '—';
 
-    // ERROR 레벨 스트림을 우선 탐색
+    // Prefer streams with ERROR-level signals.
     for (const stream of results) {
         const meta  = stream.stream || {};
         const level = (meta.detected_level || meta.level || '').toLowerCase();
         if (level !== 'error' && level !== 'critical' && level !== 'fatal') continue;
 
-        // 로그 라인에서 XxxException / XxxError 패턴 추출
+        // Extract XxxException / XxxError patterns from log lines.
         for (const [, line] of (stream.values || [])) {
             const m = line.match(/\b([A-Z][a-zA-Z0-9]*(?:Exception|Error))\b/);
             if (m) return m[1];
         }
 
-        // logger 메타데이터의 마지막 세그먼트 사용 (e.g. c.w.l.a.c.GlobalExceptionHandler → GlobalExceptionHandler)
+        // Use the last logger metadata segment (e.g. c.w.l.a.c.GlobalExceptionHandler -> GlobalExceptionHandler).
         const logger = meta.logger || meta.service_name || '';
         if (logger) return logger.split('.').pop();
 
         return 'ERROR';
     }
 
-    // ERROR 스트림 없으면 전체 라인에서 Exception/Error 탐색
+    // If no ERROR stream exists, scan all lines for Exception/Error.
     for (const stream of results) {
         for (const [, line] of (stream.values || [])) {
             const m = line.match(/\b([A-Z][a-zA-Z0-9]*(?:Exception|Error))\b/);
@@ -1380,7 +1380,7 @@ function renderCommitUrlSection(record) {
             ? `<a class="compare-link" href="${compareUrl}" target="_blank" rel="noopener noreferrer">&#128279; ${providerLabel}</a>`
             : '';
         const rows = commits.map(c => {
-            const msg = escHtml((c.message || '—').split('\n')[0]); // 첫 번째 줄만 표시
+            const msg = escHtml((c.message || '—').split('\n')[0]); // Show only the first line.
             const url = escHtml(c.url || '');
             const sha = escHtml((c.id || c.sha || '').substring(0, 7));
             const linkAttr = url ? `href="${url}" target="_blank" rel="noopener noreferrer"` : '';
@@ -1646,7 +1646,7 @@ function buildAppDetailHtml(appName) {
     `;
 }
 
-// 수동 클릭 시: API에서 최신 목록을 가져온 후 렌더링
+// Manual click: fetch the latest lists from the API, then render.
 function showPanelLoading(elementId) {
     const el = document.getElementById(elementId);
     if (el) el.innerHTML = `
@@ -1675,7 +1675,7 @@ async function renderAppDetail(appName) {
     }
 }
 
-// WebSocket 수신 시: 로컬 상태로 즉시 렌더링 (API 호출 없음)
+// WebSocket receive: render immediately from local state without an API call.
 function renderAppDetailFromLocal(appName) {
     const panel = document.getElementById('app-detail-panel');
     panel.innerHTML = buildAppDetailHtml(appName);
@@ -2462,7 +2462,7 @@ function renderMarkdown(text) {
         }
 
         if (!line.trim()) {
-            // OL 내 blank line: 다음 non-blank 줄이 번호 항목이면 OL을 유지
+            // Blank line inside an OL: keep the OL if the next non-blank line is numbered.
             if (inOl) {
                 let j = i + 1;
                 while (j < lines.length && !lines[j].trim()) j++;
