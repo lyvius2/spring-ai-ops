@@ -5,6 +5,7 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_PROME
 import com.walter.spring.ai.ops.connector.PrometheusConnector
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryResult
+import com.walter.spring.ai.ops.util.MetricHandler
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -33,6 +34,9 @@ class PrometheusServiceTest {
     @Mock
     private lateinit var prometheusConnector: PrometheusConnector
 
+    @Mock
+    private lateinit var metricHandler: MetricHandler
+
     private var httpServer: com.sun.net.httpserver.HttpServer? = null
 
     @AfterEach
@@ -48,7 +52,7 @@ class PrometheusServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_PROMETHEUS_URL)).thenReturn(null)
-        val service = PrometheusService(redisTemplate, prometheusConnector, "")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "")
 
         // when
         val result = service.isConfigured()
@@ -63,7 +67,7 @@ class PrometheusServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_PROMETHEUS_URL)).thenReturn("http://prometheus:9090")
-        val service = PrometheusService(redisTemplate, prometheusConnector, "")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "")
 
         // when
         val result = service.isConfigured()
@@ -80,7 +84,7 @@ class PrometheusServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_PROMETHEUS_URL)).thenReturn("http://redis-prom:9090")
-        val service = PrometheusService(redisTemplate, prometheusConnector, "http://config-prom:9090")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "http://config-prom:9090")
 
         // when
         val result = service.getPrometheusUrl()
@@ -95,7 +99,7 @@ class PrometheusServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_PROMETHEUS_URL)).thenReturn(null)
-        val service = PrometheusService(redisTemplate, prometheusConnector, "http://config-prom:9090")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "http://config-prom:9090")
 
         // when
         val result = service.getPrometheusUrl()
@@ -111,7 +115,7 @@ class PrometheusServiceTest {
     fun givenBlankUrl_whenSetPrometheusUrl_thenSavesToRedisWithoutValidation() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        val service = PrometheusService(redisTemplate, prometheusConnector, "")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "")
 
         // when
         service.setPrometheusUrl("")
@@ -133,7 +137,7 @@ class PrometheusServiceTest {
         }
         val port = httpServer!!.address.port
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        val service = PrometheusService(redisTemplate, prometheusConnector, "")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "")
 
         // when
         service.setPrometheusUrl("http://localhost:$port")
@@ -147,7 +151,7 @@ class PrometheusServiceTest {
     fun givenUnreachableUrl_whenSetPrometheusUrl_thenThrowsAndDoesNotSave() {
         // given
         val closedPort = ServerSocket(0).use { it.localPort }
-        val service = PrometheusService(redisTemplate, prometheusConnector, "")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "")
 
         // when & then
         assertThatThrownBy { service.setPrometheusUrl("http://localhost:$closedPort") }
@@ -164,7 +168,7 @@ class PrometheusServiceTest {
         val inquiry = PrometheusQueryInquiry(query = "{job=\"api\"}", start = "1700000000", end = "1700003600")
         val expected = PrometheusQueryResult(status = "success")
         `when`(prometheusConnector.queryRange(inquiry)).thenReturn(expected)
-        val service = PrometheusService(redisTemplate, prometheusConnector, "")
+        val service = PrometheusService(redisTemplate, prometheusConnector, metricHandler, "")
 
         // when
         val result = service.executeMetricQuery(inquiry)

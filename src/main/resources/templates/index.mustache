@@ -361,7 +361,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
         <div class="app-layout">
             <div class="app-sidebar">
                 <div class="panel-header" style="display:flex; align-items:center; justify-content:space-between;">
-                    Applications
+                    <button type="button" class="panel-header-title" onclick="renderDefaultAppDetail()">Applications</button>
                     <button class="btn-add" onclick="openAddAppModal()">ADD</button>
                 </div>
                 <div id="app-list-container">

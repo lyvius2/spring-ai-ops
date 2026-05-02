@@ -411,6 +411,8 @@ function showMainSection() {
 // ── Application List ─────────────────────────────────────────────────────────
 
 let selectedApp = null;
+let prometheusAutoRefreshEnabled = true;
+let prometheusAutoRefreshTimer = null;
 
 async function loadApps() {
     const container = document.getElementById('app-list-container');
@@ -418,6 +420,7 @@ async function loadApps() {
         const res  = await fetch('/api/apps');
         const apps = await res.json();
         renderAppList(apps);
+        if (!selectedApp) renderDefaultAppDetail();
     } catch (e) {
         container.innerHTML =
             '<div class="list-placeholder list-error">Failed to load applications.</div>';
@@ -463,6 +466,259 @@ function renderAppList(apps) {
     }
     container.innerHTML = '';
     apps.forEach(app => container.appendChild(createAppItem(app)));
+}
+
+function renderDefaultAppDetail() {
+    selectedApp = null;
+    document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
+    startPrometheusAutoRefresh();
+    const panel = document.getElementById('app-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = `
+        <div class="prometheus-dashboard-loading">
+            <span>Loading Prometheus application metrics...</span>
+        </div>
+    `;
+    loadPrometheusApplicationMetrics();
+}
+
+function refreshPrometheusApplicationMetrics() {
+    if (selectedApp) return;
+    startPrometheusAutoRefresh();
+    const table = document.querySelector('#app-detail-panel .prometheus-metrics-table');
+    if (!table) {
+        renderDefaultAppDetail();
+        return;
+    }
+    table.classList.remove('metrics-refreshing');
+    void table.offsetWidth;
+    table.classList.add('metrics-refreshing');
+    loadPrometheusApplicationMetrics(true);
+}
+
+function startPrometheusAutoRefresh() {
+    stopPrometheusAutoRefresh();
+    if (!prometheusAutoRefreshEnabled || selectedApp) return;
+    prometheusAutoRefreshTimer = setInterval(() => {
+        if (!selectedApp && prometheusAutoRefreshEnabled) {
+            refreshPrometheusApplicationMetrics();
+        }
+    }, 15000);
+}
+
+function stopPrometheusAutoRefresh() {
+    if (!prometheusAutoRefreshTimer) return;
+    clearInterval(prometheusAutoRefreshTimer);
+    prometheusAutoRefreshTimer = null;
+}
+
+function togglePrometheusAutoRefresh(enabled) {
+    prometheusAutoRefreshEnabled = enabled;
+    if (enabled) {
+        startPrometheusAutoRefresh();
+    } else {
+        stopPrometheusAutoRefresh();
+    }
+}
+
+function renderDefaultEmptyState() {
+    stopPrometheusAutoRefresh();
+    const panel = document.getElementById('app-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = `
+        <div class="empty-state">
+            <span>Select an application from the left panel to view details.</span>
+        </div>
+    `;
+}
+
+async function loadPrometheusApplicationMetrics(refreshTableOnly = false) {
+    const panel = document.getElementById('app-detail-panel');
+    try {
+        const res = await fetch('/api/prometheus/application-metrics');
+        const data = await res.json();
+        if (selectedApp) return;
+        if (!data.configured || data.errorMessage || !Array.isArray(data.applications) || data.applications.length === 0) {
+            renderDefaultEmptyState();
+            return;
+        }
+        if (refreshTableOnly) {
+            const table = panel.querySelector('.prometheus-metrics-table');
+            if (table) {
+                table.outerHTML = buildPrometheusMetricsTableHtml(data, true);
+                return;
+            }
+        }
+        panel.innerHTML = buildPrometheusDashboardHtml(data);
+    } catch (_) {
+        if (!selectedApp) renderDefaultEmptyState();
+    }
+}
+
+function buildPrometheusDashboardHtml(data) {
+    return `
+        <div class="prometheus-dashboard">
+            <div class="prometheus-dashboard-header">
+                <div>
+                    <div class="prometheus-dashboard-title">Prometheus Application Metrics</div>
+                    <div class="prometheus-dashboard-subtitle">Last 1 hour by registered application</div>
+                </div>
+                <div class="prometheus-dashboard-actions">
+                    <label class="auto-refresh-toggle">
+                        <input type="checkbox" ${prometheusAutoRefreshEnabled ? 'checked' : ''} onchange="togglePrometheusAutoRefresh(this.checked)">
+                        <span class="auto-refresh-switch"></span>
+                        <span>Auto 15s</span>
+                    </label>
+                    <button class="btn-secondary" onclick="refreshPrometheusApplicationMetrics()">Refresh</button>
+                </div>
+            </div>
+            ${buildPrometheusMetricsTableHtml(data)}
+        </div>
+    `;
+}
+
+function buildPrometheusMetricsTableHtml(data, refreshing = false) {
+    const rows = data.applications.map(buildPrometheusAppRowHtml).join('');
+    return `
+        <div class="prometheus-metrics-table${refreshing ? ' metrics-refreshing' : ''}">
+            <div class="prometheus-metrics-head">
+                <span>Application</span>
+                <span>Memory</span>
+                <span>Uptime</span>
+                <span>Open Files</span>
+                <span>CPU Usage</span>
+                <span>Avg Latency</span>
+                <span>Responses</span>
+            </div>
+            ${rows}
+        </div>
+    `;
+}
+
+function buildPrometheusAppRowHtml(app) {
+    return `
+        <div class="prometheus-metrics-row">
+            <div class="prometheus-app-name">${escHtml(app.applicationName || '-')}</div>
+            <div>${renderMemoryGauge(app)}</div>
+            <div>${renderUptimeMetric(app.uptime)}</div>
+            <div>${renderDashboardSparkline(app.openFiles, '#6db33f', formatMetricValue(latestPointValue(app.openFiles)))}</div>
+            <div>${renderMultiSeriesSparkline(app.cpuUsage, 'percent')}</div>
+            <div>${renderDashboardSparkline(app.averageLatency, '#1a56c4', formatLatencyValue(latestPointValue(app.averageLatency)))}</div>
+            <div>${renderMultiSeriesSparkline(app.httpStatus, 'count')}</div>
+        </div>
+    `;
+}
+
+function renderMemoryGauge(app) {
+    const percent = app?.memoryUsedPercent;
+    if (!Number.isFinite(percent)) return '<div class="metric-empty-inline">No data</div>';
+    const value = Math.max(0, Math.min(100, percent));
+    const angle = -90 + (value * 1.8);
+    const allocated = formatMemoryMb(app?.memoryAllocatedMb);
+    const used = formatMemoryMb(app?.memoryUsedMb);
+    return `
+        <div class="memory-gauge" style="--gauge-angle:${angle}deg;">
+            <div class="memory-gauge-arc"></div>
+            <div class="memory-gauge-needle"></div>
+            <div class="memory-gauge-value">${value.toFixed(1)}%</div>
+        </div>
+        <div class="memory-mb">
+            <span>Allocated ${allocated}</span>
+            <span>Used ${used}</span>
+        </div>
+    `;
+}
+
+function renderUptimeMetric(uptime) {
+    if (!uptime || !Number.isFinite(uptime.uptimeSeconds)) return '<div class="metric-empty-inline">No data</div>';
+    return `
+        <div class="uptime-metric">
+            <div class="uptime-start">${formatDateTime(uptime.startedAt)}</div>
+            <div class="uptime-elapsed">${formatDuration(uptime.uptimeSeconds)}</div>
+        </div>
+    `;
+}
+
+function renderDashboardSparkline(points, color, label) {
+    if (!Array.isArray(points) || points.length === 0) return '<div class="metric-empty-inline">No data</div>';
+    const svg = buildSparklineSvg(points, [{ name: 'value', color, points }]);
+    return `<div class="dashboard-sparkline">${svg}<div class="sparkline-value">${escHtml(label)}</div></div>`;
+}
+
+function renderMultiSeriesSparkline(series, valueType) {
+    const available = (series || []).filter(s => Array.isArray(s.points) && s.points.length > 0);
+    if (available.length === 0) return '<div class="metric-empty-inline">No data</div>';
+    const palette = ['#6db33f', '#1a56c4', '#8a6d3b'];
+    const svgSeries = available.map((s, idx) => ({ name: s.name, color: palette[idx % palette.length], points: s.points }));
+    const svg = buildSparklineSvg(available.flatMap(s => s.points), svgSeries);
+    const legend = svgSeries.map(s => {
+        const value = latestPointValue(s.points);
+        const label = valueType === 'percent' ? `${formatMetricValue(value * 100)}%` : formatMetricValue(value);
+        return `<span><i style="background:${s.color};"></i>${escHtml(s.name)} ${label}</span>`;
+    }).join('');
+    return `<div class="dashboard-sparkline">${svg}<div class="sparkline-legend">${legend}</div></div>`;
+}
+
+function buildSparklineSvg(allPoints, series) {
+    const width = 150;
+    const height = 54;
+    const pad = 5;
+    const timestamps = allPoints.map(p => p.timestamp);
+    const values = allPoints.map(p => p.value);
+    const xMin = Math.min(...timestamps);
+    const xMax = Math.max(...timestamps);
+    const yMin = Math.min(...values);
+    const yMax = Math.max(...values);
+    const xSpan = xMax - xMin || 1;
+    const ySpan = yMax - yMin || 1;
+    const paths = series.map(s => {
+        const d = s.points.map((p, idx) => {
+            const x = pad + ((p.timestamp - xMin) / xSpan) * (width - pad * 2);
+            const y = height - pad - ((p.value - yMin) / ySpan) * (height - pad * 2);
+            return `${idx === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-hidden="true">${paths}</svg>`;
+}
+
+function latestPointValue(points) {
+    if (!Array.isArray(points) || points.length === 0) return null;
+    return points[points.length - 1]?.value ?? null;
+}
+
+function formatLatencyValue(value) {
+    if (!Number.isFinite(value)) return '—';
+    if (value < 1) return `${Number((value * 1000).toFixed(2)).toLocaleString()} ms`;
+    return `${Number(value.toFixed(3)).toLocaleString()} s`;
+}
+
+function formatMemoryMb(value) {
+    if (!Number.isFinite(value)) return '—';
+    return `${Number(value.toFixed(1)).toLocaleString()} MB`;
+}
+
+function formatDateTime(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function formatDuration(seconds) {
+    if (!Number.isFinite(seconds)) return '—';
+    const total = Math.max(0, Math.floor(seconds));
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
 }
 
 // ── Add Application Modal ────────────────────────────────────────────────────
@@ -541,6 +797,7 @@ async function saveApp() {
                     modal.style.display = 'none';
                     modal.classList.remove('fading-out');
                     addAppToList(name);
+                    if (!selectedApp) renderDefaultAppDetail();
                 }, { once: true });
             }, 800);
         } else {
@@ -602,11 +859,7 @@ async function confirmDeleteApp() {
 
         if (selectedApp === name) {
             selectedApp = null;
-            document.getElementById('app-detail-panel').innerHTML = `
-                <div class="empty-state">
-                    <span>Select an application from the left panel to view details.</span>
-                </div>
-            `;
+            renderDefaultAppDetail();
         }
 
         if (container.querySelectorAll('.app-item').length === 0) {
@@ -1670,6 +1923,7 @@ function showPanelLoading(elementId) {
 }
 
 async function renderAppDetail(appName) {
+    stopPrometheusAutoRefresh();
     showPanelLoading('app-detail-panel');
     await Promise.all([
         loadFiringList(appName),
@@ -1690,6 +1944,7 @@ async function renderAppDetail(appName) {
 
 // WebSocket receive: render immediately from local state without an API call.
 function renderAppDetailFromLocal(appName) {
+    stopPrometheusAutoRefresh();
     const panel = document.getElementById('app-detail-panel');
     panel.innerHTML = buildAppDetailHtml(appName);
     applyHighlighting(panel);

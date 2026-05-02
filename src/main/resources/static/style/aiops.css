@@ -743,6 +743,18 @@ body {
 
 .btn-add:hover { background: #5a9632; }
 
+.panel-header-title {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    cursor: pointer;
+}
+
 /* ── App blink animation (newly added) ── */
 @keyframes appBlink {
     0%, 100% { background-color: transparent; }
@@ -757,6 +769,268 @@ body {
     padding: 20px 16px;
     font-size: 0.85rem;
     color: #999;
+}
+
+.prometheus-dashboard-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    font-size: 0.9rem;
+}
+
+.prometheus-dashboard {
+    width: 100%;
+    padding: 18px;
+    overflow-x: auto;
+}
+
+.prometheus-dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.prometheus-dashboard-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.auto-refresh-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #555;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.auto-refresh-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.auto-refresh-switch {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    border-radius: 18px;
+    background: #cfcfcf;
+    transition: background 0.18s ease;
+}
+
+.auto-refresh-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.18s ease;
+}
+
+.auto-refresh-toggle input:checked + .auto-refresh-switch {
+    background: #6db33f;
+}
+
+.auto-refresh-toggle input:checked + .auto-refresh-switch::after {
+    transform: translateX(16px);
+}
+
+.prometheus-dashboard-title {
+    color: #34302d;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.prometheus-dashboard-subtitle {
+    color: #777;
+    font-size: 0.78rem;
+    margin-top: 2px;
+}
+
+.prometheus-metrics-table {
+    min-width: 1040px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.prometheus-metrics-table.metrics-refreshing {
+    animation: metricsRefreshBlink 0.45s ease;
+}
+
+@keyframes metricsRefreshBlink {
+    0% { opacity: 1; }
+    45% { opacity: 0.45; }
+    100% { opacity: 1; }
+}
+
+.prometheus-metrics-head,
+.prometheus-metrics-row {
+    display: grid;
+    grid-template-columns: 140px 110px 130px 160px 185px 160px 185px;
+}
+
+.prometheus-metrics-head {
+    background: #fafafa;
+    color: #555;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.prometheus-metrics-head span,
+.prometheus-metrics-row > div {
+    padding: 10px 12px;
+    border-right: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    min-width: 0;
+}
+
+.prometheus-metrics-head span:last-child,
+.prometheus-metrics-row > div:last-child {
+    border-right: none;
+}
+
+.prometheus-metrics-row:last-child > div {
+    border-bottom: none;
+}
+
+.prometheus-app-name {
+    color: #34302d;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.metric-empty-inline {
+    color: #aaa;
+    font-size: 0.78rem;
+    padding-top: 18px;
+}
+
+.memory-gauge {
+    position: relative;
+    width: 86px;
+    height: 54px;
+    margin: 0 auto;
+}
+
+.memory-gauge-arc {
+    position: absolute;
+    inset: 0;
+    border-radius: 86px 86px 0 0;
+    background: conic-gradient(from 270deg at 50% 100%, #6db33f 0deg, #f0c36a 108deg, #a94442 180deg, transparent 180deg);
+    overflow: hidden;
+}
+
+.memory-gauge-arc::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 0;
+    height: 34px;
+    background: #fff;
+    border-radius: 68px 68px 0 0;
+}
+
+.memory-gauge-needle {
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 2px;
+    height: 34px;
+    background: #34302d;
+    transform-origin: 50% 100%;
+    transform: translateX(-50%) rotate(var(--gauge-angle));
+}
+
+.memory-gauge-value {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    text-align: center;
+    color: #34302d;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.memory-mb {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 5px;
+    color: #555;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.uptime-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.uptime-start {
+    color: #555;
+    font-size: 0.78rem;
+}
+
+.uptime-elapsed {
+    color: #34302d;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.dashboard-sparkline svg {
+    display: block;
+    width: 100%;
+    height: 54px;
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 3px;
+}
+
+.sparkline-value {
+    margin-top: 4px;
+    color: #34302d;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.sparkline-legend {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 8px;
+    color: #555;
+    font-size: 0.72rem;
+}
+
+.sparkline-legend i {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 4px;
 }
 
 .list-error { color: #a94442; }

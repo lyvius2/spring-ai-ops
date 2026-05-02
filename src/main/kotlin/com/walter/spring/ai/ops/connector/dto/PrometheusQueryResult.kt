@@ -31,6 +31,27 @@ data class PrometheusQueryResult(
     fun isSuccess(): Boolean = status == "success" && data != null
 
     /**
+     * Flattens all result series into a list of time-series points.
+     * Points that share the same timestamp are merged by summing their values.
+     */
+    fun aggregatePoints(): List<PrometheusMetricPoint> =
+        data?.result.orEmpty()
+            .flatMap { it.values }
+            .mapNotNull { point ->
+                val timestamp = point.getOrNull(0)?.toDoubleOrNull()?.toLong() ?: return@mapNotNull null
+                val value = point.getOrNull(1)?.toDoubleOrNull() ?: return@mapNotNull null
+                PrometheusMetricPoint(timestamp, value)
+            }
+            .groupBy { it.timestamp }
+            .map { (timestamp, points) -> PrometheusMetricPoint(timestamp, points.sumOf { it.value }) }
+            .sortedBy { it.timestamp }
+
+    /**
+     * Returns the value of the most recent data point, or null if no data is available.
+     */
+    fun lastValue(): Double? = aggregatePoints().lastOrNull()?.value
+
+    /**
      * Builds a prompt section summarising the collected metric data for LLM analysis.
      */
     fun createMetricSectionPrompt(): String {

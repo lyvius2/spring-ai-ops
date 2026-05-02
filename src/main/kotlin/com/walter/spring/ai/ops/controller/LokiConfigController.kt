@@ -6,6 +6,8 @@ import com.walter.spring.ai.ops.controller.dto.LokiConfigured
 import com.walter.spring.ai.ops.controller.dto.PrometheusConfigRequest
 import com.walter.spring.ai.ops.controller.dto.PrometheusConfigResponse
 import com.walter.spring.ai.ops.controller.dto.PrometheusConfigured
+import com.walter.spring.ai.ops.controller.dto.PrometheusApplicationMetricsResponse
+import com.walter.spring.ai.ops.facade.ApplicationFacade
 import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.PrometheusService
 import io.swagger.v3.oas.annotations.Operation
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController
 class LokiConfigController(
     private val lokiService: LokiService,
     private val prometheusService: PrometheusService,
+    private val applicationFacade: ApplicationFacade,
 ) {
     @Operation(summary = "Get Loki configuration status")
     @GetMapping("/api/loki/status")
@@ -47,6 +50,12 @@ class LokiConfigController(
         return PrometheusConfigured(prometheusUrl.isNotBlank(), prometheusUrl)
     }
 
+    @Operation(summary = "Get Prometheus application metrics for registered applications")
+    @GetMapping("/api/prometheus/application-metrics")
+    fun prometheusApplicationMetrics(): PrometheusApplicationMetricsResponse {
+        return prometheusService.getApplicationMetrics(applicationFacade.getApps())
+    }
+
     @Operation(
         summary = "Save Prometheus base URL",
         description = "Validates the connection to the given URL before persisting it in Redis."
@@ -59,4 +68,3 @@ class LokiConfigController(
         }.getOrElse { PrometheusConfigResponse.failure(it as Exception) }
     }
 }
-

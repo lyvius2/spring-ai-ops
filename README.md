@@ -578,6 +578,7 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 | `POST` | `/api/loki/config` | Save Loki base URL |
 | `GET` | `/api/prometheus/status` | Get Prometheus configuration status |
 | `POST` | `/api/prometheus/config` | Save Prometheus base URL (optional) |
+| `GET` | `/api/prometheus/application-metrics` | Get per-application Prometheus metrics (memory, CPU, latency, HTTP status) |
 | `POST` | `/api/github/config` | Save GitHub / GitLab access token and base URL |
 | `GET` | `/api/github/config/status` | Get Git provider configuration status |
 | `GET` | `/api/app/list` | List registered applications |
@@ -689,6 +690,7 @@ com.walter.spring.ai.ops
 └── util/
     ├── CodeAnalysisResultHandler.kt  # JSON parsing, sanitisation, and recovery for LLM issue output
     ├── CryptoProvider.kt          # AES encryption/decryption for stored API keys
+    ├── MetricHandler.kt           # Prometheus metric series builder (memory, CPU, latency, HTTP status per app)
     ├── RedisLockManager.kt        # Token-based Redis locks for repository working tree mutations
     ├── RedisExtensions.kt         # zSetPushWithTtl / zSetRangeAllDesc helpers
     ├── StringExtentions.kt        # toISO8601 helper
@@ -699,15 +701,14 @@ com.walter.spring.ai.ops
 
 ## Changelog
 
-| Date | Description |
-|---|---|
+| Date       | Description |
+|------------|---|
+| 2026-05-02 | Added Prometheus Application Metrics dashboard (`GET /api/prometheus/application-metrics`) — displays per-application JVM memory (used %, allocated MB, used MB), uptime, open-file count, CPU usage (system / process), average HTTP latency, and HTTP status breakdown (2xx / 4xx / 5xx) as time-series charts when `prometheus.url` is configured |
 | 2026-04-30 | Added optional persistent repository storage — registered repositories can be kept under `repository.local-path`, synchronized under a Redis lock, reused by Code Risk and Grafana source snippet flows, and cleaned up on app rename/delete |
 | 2026-04-29 | Added source code suggestion support for Grafana alert analysis — stack-trace-related snippets are sent to the LLM, structured `sourceCodeSuggestions` are stored with firing records, and the UI renders original/suggested code side by side |
 | 2026-04-26 | Added Prometheus metric query to Grafana alert analysis — `PrometheusService` fetches `query_range` data alongside Loki logs and sends both to the LLM; Prometheus is optional (`prometheus.url` may be left blank) |
 | 2026-04-22 | Added CSRF token same-origin protection for `/api/code-risk/**` — token embedded in HTML meta tag, validated via `X-CSRF-Token` header |
-| 2026-04-22 | Added `<think>` block stripping in `AiModelService` to remove chain-of-thought output from models that emit it (e.g. DeepSeek, QwQ) |
 | 2026-04-22 | Added fallback JSON parser in `CodeAnalysisResultHandler` to recover partial issue data when LLM returns malformed delimiters or truncated JSON |
-| 2026-04-22 | Added `@Schema` annotations to all request/response DTOs and Java records for complete Swagger UI documentation |
 | 2026-04-20 | Added Static Code Risk Analysis — clone a Git repository and run AI-powered full-codebase review with single-call or map-reduce strategy; results include per-issue severity, affected file, and code snippet |
 | 2026-04-18 | Added GitLab push webhook support — automatically detected via `X-Gitlab-Event` header on the unified `/webhook/git` endpoint |
 | 2026-04-15 | Abstracted external connector integration with a shared dynamic URL resolution base for GitHub and Loki |
