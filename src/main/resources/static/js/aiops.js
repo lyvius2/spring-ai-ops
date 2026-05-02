@@ -993,10 +993,23 @@ async function loadCommitList(appName) {
     try {
         const res  = await fetch(`/api/commit/${encodeURIComponent(appName)}/list`);
         const data = await res.json();
-        appCommitLists[appName] = data.commits || [];
+        appCommitLists[appName] = sortByDateDesc(data.commits || [], 'pushedAt');
     } catch (_) {
         appCommitLists[appName] = appCommitLists[appName] || [];
     }
+}
+
+function sortByDateDesc(items, field) {
+    return [...items]
+        .map((item, index) => ({ item, index, time: Date.parse(item?.[field] || '') }))
+        .sort((a, b) => {
+            const aValid = Number.isFinite(a.time);
+            const bValid = Number.isFinite(b.time);
+            if (aValid && bValid && a.time !== b.time) return b.time - a.time;
+            if (aValid !== bValid) return aValid ? -1 : 1;
+            return a.index - b.index;
+        })
+        .map(({ item }) => item);
 }
 
 function formatOccupiedAt(dateStr) {
@@ -1369,7 +1382,7 @@ function detectGitProvider(url) {
 
 function renderCommitUrlSection(record) {
     if (!record) return '';
-    const commits = record.commitSummaries;
+    const commits = record.commitSummaries ? sortByDateDesc(record.commitSummaries, 'timestamp') : record.commitSummaries;
     const provider = detectGitProvider(record.githubUrl);
     const providerLabel = provider === 'GITLAB' ? 'VIEW ON GITLAB' : 'VIEW ON GITHUB';
     const branch = record.branch || '-';
