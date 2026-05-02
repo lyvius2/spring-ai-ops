@@ -1,5 +1,16 @@
 # Spring AI Ops
 
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.0-7F52FF?logo=kotlin&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.4-6DB33F?logo=springboot&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)
+![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.0-6DB33F)
+![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F)
+![Redis](https://img.shields.io/badge/Redis-enabled-DC382D?logo=redis&logoColor=white)
+![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
+![Prometheus](https://img.shields.io/badge/Prometheus-optional-E6522C?logo=prometheus&logoColor=white)
+![Loki](https://img.shields.io/badge/Loki-logs-F46800?logo=grafana&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집합니다. 또한 등록된 애플리케이션 Git 저장소를 checkout하고, JVM stack trace와 관련된 소스 코드 snippet만 추출하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
 
 ---

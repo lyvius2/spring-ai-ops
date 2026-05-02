@@ -1,5 +1,16 @@
 # Spring AI Ops
 
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.0-7F52FF?logo=kotlin&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.4-6DB33F?logo=springboot&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)
+![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.0-6DB33F)
+![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F)
+![Redis](https://img.shields.io/badge/Redis-enabled-DC382D?logo=redis&logoColor=white)
+![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
+![Prometheus](https://img.shields.io/badge/Prometheus-optional-E6522C?logo=prometheus&logoColor=white)
+![Loki](https://img.shields.io/badge/Loki-logs-F46800?logo=grafana&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 [한국어(Korean) 문서](README_KR.md)  
   
 An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs, optionally fetches Prometheus metrics over the same alert window, checks out the registered application source repository, and sends focused stack-trace-related source snippets to the LLM. Results are delivered to a live dashboard via WebSocket.  
