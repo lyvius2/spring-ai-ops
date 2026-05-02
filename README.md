@@ -4,6 +4,8 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.4-6DB33F?logo=springboot&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)
 ![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.0-6DB33F)
+![OpenAI](https://img.shields.io/badge/OpenAI-supported-412991?logo=openai&logoColor=white)
+![Anthropic](https://img.shields.io/badge/Anthropic-supported-191919)
 ![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F)
 ![Redis](https://img.shields.io/badge/Redis-enabled-DC382D?logo=redis&logoColor=white)
 ![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
