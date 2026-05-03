@@ -318,6 +318,21 @@ POST /webhook/grafana[/{application}]
 
 ---
 
+### Observability Integration (Loki Required, Prometheus Optional) / 옵저버빌리티 연동 (Loki 필수, Prometheus 선택)
+*Configure required Loki connection settings for Grafana alert analysis. Prometheus is also supported as an optional metric data source for richer incident context.*
+*Grafana 알림 분석을 위해 Loki 접속 정보를 필수로 설정해야 하며, Prometheus는 더 풍부한 장애 컨텍스트를 위한 선택적 메트릭 소스로 지원됩니다.*
+
+![Metric Visualization](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/ObservabilityProviders.png?raw=true)
+
+---
+
+### Metric Visualization
+*If Prometheus is configured and reachable, the dashboard renders a simple metric visualization for each application, including CPU usage, memory usage, average latency, and HTTP response status distribution over time.*
+
+![Metric Visualization](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/MetricVisualization.png?raw=true)
+
+---
+
 ### Static Code Risk Analysis
 *Run a full AI-powered static analysis on any registered Git repository. Issues are grouped by file with severity levels (HIGH / MEDIUM / LOW), and each entry includes the affected code snippet and a recommended fix.*
 
@@ -343,6 +358,13 @@ POST /webhook/grafana[/{application}]
 *The LLM analyzes the Grafana alert context together with Loki logs, optional Prometheus metric series, and focused source snippets resolved from JVM stack traces. Structured source code suggestions appear at the bottom of the AI Analysis panel; clicking a file path opens a popup with original code on the left and the suggested replacement on the right.*
 
 ![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
+
+---
+
+### Source Fix Suggestions / 소스 수정 제안
+*During error analysis, the system identifies source code that may contribute to the exception and provides concrete fix suggestions, including what to change and why the change helps prevent recurrence.*
+
+![Suggested Source](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/SuggestedSource.png?raw=true)
 
 ---
 
@@ -758,5 +780,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
----

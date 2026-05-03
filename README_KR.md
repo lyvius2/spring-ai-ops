@@ -302,6 +302,20 @@ POST /webhook/grafana[/{application}]
 
 ---
 
+### Observability 연동 (Loki 필수, Prometheus 선택)
+*Grafana 알림 분석을 위해 Loki 접속 정보를 필수로 설정해야 하며, Prometheus는 더 풍부한 장애 컨텍스트를 위한 선택적 메트릭 소스로 지원됩니다.*
+
+![Metric Visualization](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/ObservabilityProviders.png?raw=true)
+
+---
+
+### Metric 시각화
+*Prometheus 접속 설정이 되어 있고 실제로 연결 가능한 경우, 대시보드에서 애플리케이션별 CPU 사용률, 메모리 사용률, 평균 레이턴시, HTTP 응답 상태 분포를 시간 흐름에 따라 간단한 차트로 시각화합니다.*
+
+![Metric Visualization](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/MetricVisualization.png?raw=true)
+
+---
+
 ### 정적 코드 위험 분석
 *등록된 Git 저장소를 대상으로 AI 기반 전체 정적 분석을 실행합니다. 이슈는 파일 단위로 그룹화되며 심각도(HIGH / MEDIUM / LOW), 문제 코드 스니펫, 권장 수정 사항이 함께 표시됩니다.*
 
@@ -327,6 +341,13 @@ POST /webhook/grafana[/{application}]
 *LLM이 Grafana 알림 컨텍스트와 Loki 로그, 선택적으로 Prometheus 메트릭 시계열, 그리고 JVM stack trace에서 resolve된 focused source snippet을 함께 분석합니다. 구조화된 소스 수정 권고안은 AI Analysis 하단에 표시되며, 파일 경로를 클릭하면 원본 코드와 수정 제안을 좌우 비교 popup으로 확인할 수 있습니다.*
 
 ![Firing Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/FiringAnalyze.png?raw=true)
+
+---
+
+### 소스 수정 제안
+*오류 분석 과정에서 예외의 원인이 될 수 있는 소스 코드를 식별하고, 재발 방지를 위해 무엇을 어떻게 수정하면 좋은지 근거와 함께 구체적인 수정 제안을 제공합니다.*
+
+![Suggested Source](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/SuggestedSource.png?raw=true)
 
 ---
 
