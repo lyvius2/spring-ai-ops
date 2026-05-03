@@ -341,14 +341,16 @@ function openObservabilityModal(statusData, closeable, defaultProvider) {
     const group = document.getElementById('observability-provider-group');
     group.innerHTML = '';
     OBSERVABILITY_PROVIDERS.forEach((p, idx) => {
-        const lname = p.name.toLowerCase();
+        const lname       = escHtml(p.name.toLowerCase());
+        const pNameEsc    = escHtml(p.name);
+        const displayEsc  = escHtml(p.displayName);
         const div = document.createElement('div');
         div.className = 'radio-option';
         div.innerHTML = `
-            <input type="radio" name="observability-provider" id="obs-${lname}" value="${p.name}" ${idx === 0 ? 'checked' : ''}>
+            <input type="radio" name="observability-provider" id="obs-${lname}" value="${pNameEsc}" ${idx === 0 ? 'checked' : ''}>
             <label for="obs-${lname}">
-                <img src="/images/${lname}.svg" class="provider-logo" alt="${p.displayName}" onerror="this.style.display='none'">
-                ${p.displayName}
+                <img src="/images/${lname}.svg" class="provider-logo" alt="${displayEsc}" onerror="this.style.display='none'">
+                ${displayEsc}
             </label>`;
         group.appendChild(div);
     });
@@ -797,12 +799,12 @@ function formatDateTime(value) {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleString('en-US', {
+    return escHtml(date.toLocaleString('en-US', {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-    });
+    }));
 }
 
 function formatDuration(seconds) {
@@ -1364,8 +1366,8 @@ function formatOccupiedAt(dateStr) {
     if (!dateStr) return '—';
     const s = String(dateStr);
     const tIdx = s.indexOf('T');
-    if (tIdx === -1) return s;
-    return s.substring(0, tIdx) + ' ' + s.substring(tIdx + 1, tIdx + 9);
+    const formatted = tIdx === -1 ? s : s.substring(0, tIdx) + ' ' + s.substring(tIdx + 1, tIdx + 9);
+    return escHtml(formatted);
 }
 
 function lokiLevelClass(level) {
@@ -2052,6 +2054,13 @@ document.addEventListener('click', async function (e) {
         return;
     }
 
+    // Risk file pagination — uses data-* to avoid JS string injection in onclick
+    const riskPageBtn = e.target.closest('.risk-page-btn[data-app]');
+    if (riskPageBtn && !riskPageBtn.disabled) {
+        goToRiskFilePage(riskPageBtn.dataset.app, parseInt(riskPageBtn.dataset.page, 10));
+        return;
+    }
+
     // Tab switching
     const btn = e.target.closest('.tab-btn');
     if (btn) {
@@ -2386,9 +2395,9 @@ function renderRiskIssuesSection(issues, appName) {
 
     const paginationHtml = totalPages > 1 ? `
         <div class="risk-file-pagination">
-            <button class="risk-page-btn" onclick="goToRiskFilePage('${escHtml(appName)}', ${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>&#8249;</button>
+            <button class="risk-page-btn" data-app="${escHtml(appName)}" data-page="${currentPage - 1}" ${currentPage === 0 ? 'disabled' : ''}>&#8249;</button>
             <span class="risk-page-info">${pageStart + 1}–${Math.min(pageStart + RISK_FILE_PAGE_SIZE, totalFiles)} / ${totalFiles} files</span>
-            <button class="risk-page-btn" onclick="goToRiskFilePage('${escHtml(appName)}', ${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>&#8250;</button>
+            <button class="risk-page-btn" data-app="${escHtml(appName)}" data-page="${currentPage + 1}" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>&#8250;</button>
         </div>` : '';
 
     return `
@@ -2579,12 +2588,13 @@ function openGitRemoteModal(statusData, closeable) {
     const group = document.getElementById('git-remote-provider-group');
     group.innerHTML = '';
     GIT_REMOTE_PROVIDERS.forEach((p, idx) => {
-        const lname = p.name.toLowerCase();
-        const displayName = lname.charAt(0).toUpperCase() + lname.slice(1);
+        const lname       = escHtml(p.name.toLowerCase());
+        const displayName = escHtml(p.name.charAt(0).toUpperCase() + p.name.slice(1).toLowerCase());
+        const pNameEsc    = escHtml(p.name);
         const div = document.createElement('div');
         div.className = 'radio-option';
         div.innerHTML = `
-            <input type="radio" name="git-remote-provider" id="git-remote-${lname}" value="${p.name}" ${idx === 0 ? 'checked' : ''}>
+            <input type="radio" name="git-remote-provider" id="git-remote-${lname}" value="${pNameEsc}" ${idx === 0 ? 'checked' : ''}>
             <label for="git-remote-${lname}">
                 <img src="/images/${lname}.svg" class="provider-logo" alt="${displayName}" onerror="this.style.display='none'">
                 ${displayName}
@@ -2740,14 +2750,22 @@ function syntaxHighlightJson(json) {
 }
 
 function escHtml(str) {
-    const d = document.createElement('div');
-    d.appendChild(document.createTextNode(String(str)));
-    return d.innerHTML;
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function renderInline(text) {
-    return text
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const esc = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    return esc
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/`([^`]+)`/g, '<code>$1</code>');
 }
@@ -2912,9 +2930,10 @@ function renderGitRemoteStatus(statusData) {
     if (providers.length === 0) return;
 
     const badges = providers.map(p => {
-        const lp = p.toLowerCase();
-        return `<img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${p}" onerror="this.style.display='none'">
-                <span class="badge badge-up">${p}</span>`;
+        const lp    = escHtml(p.toLowerCase());
+        const pEsc  = escHtml(p);
+        return `<img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${pEsc}" onerror="this.style.display='none'">
+                <span class="badge badge-up">${pEsc}</span>`;
     }).join(' ');
 
     cell.innerHTML = `
@@ -2941,12 +2960,13 @@ function renderPrometheusStatus(prometheusUrl) {
 function renderLlmStatus(provider) {
     const cell = document.getElementById('status-llm-provider');
     if (!cell || !provider) return;
-    const lp = provider.toLowerCase();
+    const lp    = escHtml(provider.toLowerCase());
+    const lpUpper = escHtml(provider.toUpperCase());
     cell.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between;">
             <div>
                 <img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${lp}" onerror="this.style.display='none'">
-                <span class="badge badge-up">${lp.toUpperCase()}</span>
+                <span class="badge badge-up">${lpUpper}</span>
                 <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
             </div>
             <button class="btn-secondary" style="margin-top:0;" onclick="openLlmModal(true)">Reconfigure</button>
