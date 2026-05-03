@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.util
 
+import org.apache.commons.lang3.StringUtils
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -60,7 +61,7 @@ class CryptoProvider(
         return Base64.getEncoder().encodeToString(iv + ciphertext)
     }
 
-    fun decrypt(encrypted: String): String? {
+    fun decrypt(encrypted: String?): String {
         val key = aesKey
         return runCatching {
             val combined = Base64.getDecoder().decode(encrypted)
@@ -72,7 +73,7 @@ class CryptoProvider(
             String(cipher.doFinal(ciphertext), Charsets.UTF_8)
         }.getOrElse {
             log.warn("Failed to decrypt value from Redis — it may be a plaintext value stored before encryption was introduced. Re-entering the value will encrypt it going forward.")
-            null
+            StringUtils.EMPTY
         }
     }
 }

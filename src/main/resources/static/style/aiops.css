@@ -125,7 +125,12 @@ body {
     margin-bottom: 18px;
 }
 
-.radio-option { position: relative; }
+.radio-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
 
 .radio-option input[type="radio"] {
     position: absolute;
@@ -483,8 +488,21 @@ body {
 }
 
 .alert-success { background: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
+.alert-info    { background: #d9edf7; color: #31708f; border: 1px solid #bce8f1; }
 .alert-warning { background: #fcf8e3; color: #8a6d3b; border: 1px solid #faebcc; }
 .alert-error   { background: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
+
+.llm-key-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #3c763d;
+    background: #dff0d8;
+    border: 1px solid #d6e9c6;
+    border-radius: 10px;
+    padding: 1px 7px;
+    white-space: nowrap;
+}
 
 /* ── Modal Overlay ── */
 .modal-overlay {
@@ -507,9 +525,12 @@ body {
 .modal-box {
     background: #fff;
     border-radius: 4px;
-    width: 500px;
+    width: 540px;
     max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 60px);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
@@ -559,6 +580,8 @@ body {
 
 .modal-body {
     padding: 24px;
+    overflow-y: auto;
+    flex: 1 1 auto;
 }
 
 .source-suggestion-modal-body {

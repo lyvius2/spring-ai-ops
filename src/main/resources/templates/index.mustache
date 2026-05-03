@@ -18,6 +18,7 @@
 const LLM_CONFIGURED      = {{#configured}}true{{/configured}}{{^configured}}false{{/configured}};
 const CURRENT_LLM         = '{{currentLlm}}';
 const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectProvider}}false{{/selectProvider}};
+const LLM_PROVIDERS       = [{{#llmProviders}}{"key":"{{key}}","product":"{{product}}"},{{/llmProviders}}];
 const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl":"{{apiUrl}}","domain":"{{domain}}"},{{/gitRemoteProviders}}];
 const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","displayName":"{{displayName}}","apiUrl":"{{apiUrl}}"},{{/observabilityProviders}}];
 </script>
@@ -41,7 +42,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
             <p class="modal-desc" id="llm-modal-desc">
                 Select your LLM provider and enter an API key to get started.
             </p>
-            <div class="radio-group">
+            <div class="radio-group" id="llm-provider-group">
                 {{#llmProviders}}
                 <div class="radio-option">
                     <input type="radio" name="llm-provider" id="llm-{{key}}" value="{{key}}">
@@ -49,6 +50,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                         <img src="/images/{{key}}.svg" class="provider-logo" alt="{{product}}">
                         <span style="text-transform:uppercase;">{{key}}</span>
                     </label>
+                    <div class="llm-key-badge" id="llm-key-badge-{{key}}" style="display:none;">&#10003; Key saved</div>
                 </div>
                 {{/llmProviders}}
             </div>
@@ -57,12 +59,18 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                 <input type="password" id="llm-api-key" class="form-input"
                        placeholder="sk-..." autocomplete="off" />
             </div>
-            <button class="btn-primary" id="llm-save-btn" onclick="saveLlmConfig()">
-                Save &amp; Connect
-            </button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-primary" id="llm-save-btn" onclick="saveLlmConfig()">
+                    Save &amp; Connect
+                </button>
+                <button class="btn-secondary" id="llm-save-key-only-btn" onclick="saveLlmKeyOnly()" style="display:none; margin-top:0;">
+                    Save Key Only
+                </button>
+            </div>
             <div class="alert alert-success" id="llm-alert-success">
                 Connection successful! LLM is ready.
             </div>
+            <div class="alert alert-info" id="llm-alert-info"></div>
             <div class="alert alert-warning" id="llm-alert-warning"></div>
             <div class="alert alert-error"   id="llm-alert-error"></div>
         </div>

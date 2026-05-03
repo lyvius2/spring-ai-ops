@@ -1,10 +1,14 @@
 package com.walter.spring.ai.ops.service
 
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_API_KEY
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.LlmProvider
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_APIS
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_USAGE_LLM
+import com.walter.spring.ai.ops.controller.dto.LlmStatusResponse
 import com.walter.spring.ai.ops.event.RateLimitHitEvent
+import com.walter.spring.ai.ops.service.dto.LlmConfig
 import com.walter.spring.ai.ops.util.CryptoProvider
+import com.walter.spring.ai.ops.util.getArrayList
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
@@ -33,6 +37,7 @@ import java.util.concurrent.Semaphore
 class AiModelService(
     private val redisTemplate: StringRedisTemplate,
     private val cryptoProvider: CryptoProvider,
+    private val objectMapper: ObjectMapper,
     @Qualifier("llmRateLimiter") private val llmRateLimiter: Semaphore,
     private val eventPublisher: ApplicationEventPublisher,
     @Value("\${ai.open-ai.model:gpt-4o-mini}") private val openAiModel: String,
@@ -40,6 +45,9 @@ class AiModelService(
     @Value("\${ai.anthropic.model:claude-sonnet-4-6}") private val anthropicModel: String,
     @Value("\${ai.anthropic.api-key:}") private val anthropicApiKey: String,
     @Value("\${ai.anthropic.max-tokens:8192}") private val anthropicMaxTokens: Int,
+    @Value("\${ai.deepseek.model:deepseek-v4-pro}") private val deepseekModel: String,
+    @Value("\${ai.deepseek.api-key:}") private val deepseekApiKey: String,
+    @Value("\${ai.deepseek.base-url:https://api.deepseek.com}") private val deepseekBaseUrl: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
@@ -50,34 +58,70 @@ class AiModelService(
 
     @EventListener(ApplicationStartedEvent::class)
     fun initialize() {
-        val llm = redisTemplate.opsForValue().get(REDIS_KEY_LLM)
-        val apiKey = redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
-            ?.let { cryptoProvider.decrypt(it) }
-        if (!llm.isNullOrBlank() && !apiKey.isNullOrBlank()) {
-            runCatching { chatModel = buildChatModel(LlmProvider.fromKey(llm), apiKey) }
-                .onFailure { log.warn("Failed to restore ChatModel from Redis: {}", it.message) }
-            return
+        val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+        var llmConfigsUpdated = false
+        for (provider in LlmProvider.entries) {
+            val matchedLlmConfig: LlmConfig? = llmConfigs.firstOrNull { it.provider == provider }
+            if (matchedLlmConfig == null) {
+                llmConfigs.add(createLlmDefaultConfig(provider))
+                llmConfigsUpdated = true
+                continue
+            }
+            if (matchedLlmConfig.apiKey.isNullOrBlank()) {
+                val defaultApiKey = createLlmDefaultConfig(provider).apiKey
+                if (!defaultApiKey.isNullOrBlank()) {
+                    matchedLlmConfig.apiKey = defaultApiKey
+                    llmConfigsUpdated = true
+                }
+            }
         }
 
-        val hasOpenAi = openAiApiKey.isNotBlank()
-        val hasAnthropic = anthropicApiKey.isNotBlank()
-        if (hasOpenAi && !hasAnthropic) {
-            runCatching { configure(LlmProvider.OPEN_AI, openAiApiKey) }
-                .onFailure { log.warn("Failed to auto-configure OpenAI from yml: {}", it.message) }
-        } else if (hasAnthropic && !hasOpenAi) {
-            runCatching { configure(LlmProvider.ANTHROPIC, anthropicApiKey) }
-                .onFailure { log.warn("Failed to auto-configure Anthropic from yml: {}", it.message) }
+        if (llmConfigsUpdated) {
+            redisTemplate.opsForValue().set(REDIS_KEY_LLM_APIS, objectMapper.writeValueAsString(llmConfigs))
+        }
+
+        val ymlKeyCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey).count { it.isNotBlank() }
+        val fallbackUsage = if (ymlKeyCount < 2) llmConfigs.firstOrNull { !it.apiKey.isNullOrBlank() }?.provider?.key else null
+        val savedUsageLlm = redisTemplate.opsForValue().get(REDIS_KEY_USAGE_LLM)?.takeIf { it.isNotBlank() }
+        val usageLlm: String = savedUsageLlm ?: fallbackUsage ?: ""
+
+        if (usageLlm.isBlank()) {
+            return
+        }
+        if (savedUsageLlm == null) {
+            redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, usageLlm)
+        }
+        val matchedLlmConfig: LlmConfig? = llmConfigs.firstOrNull { it.provider.key == usageLlm }
+        if (matchedLlmConfig != null) {
+            val apiKey = cryptoProvider.decrypt(matchedLlmConfig.apiKey)
+            if (apiKey.isNotBlank()) {
+                runCatching { chatModel = buildChatModel(matchedLlmConfig.provider, apiKey) }
+                    .onFailure { log.warn("Failed to restore LLM config from Redis: {}", it.message) }
+            }
+            return
         }
     }
 
+    private fun createLlmDefaultConfig(provider: LlmProvider): LlmConfig {
+        val rawKey = when (provider) {
+            LlmProvider.OPEN_AI -> openAiApiKey
+            LlmProvider.ANTHROPIC -> anthropicApiKey
+            LlmProvider.DEEP_SEEK -> deepseekApiKey
+        }
+        val encryptedKey = rawKey.takeIf { it.isNotBlank() }?.let { cryptoProvider.encrypt(it) }
+        return LlmConfig(provider, encryptedKey)
+    }
+
     fun isSelectProviderRequired(): Boolean {
-        return openAiApiKey.isNotBlank() && anthropicApiKey.isNotBlank() && chatModel == null
+        val configuredCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey).count { it.isNotBlank() }
+        return configuredCount >= 2 && chatModel == null
     }
 
     fun configureFromYml(provider: LlmProvider) {
         val apiKey = when (provider) {
             LlmProvider.OPEN_AI -> openAiApiKey
             LlmProvider.ANTHROPIC -> anthropicApiKey
+            LlmProvider.DEEP_SEEK -> deepseekApiKey
         }
         if (apiKey.isBlank()) {
             throw IllegalStateException("API key for '${provider.key}' is not configured in application.yml")
@@ -86,12 +130,25 @@ class AiModelService(
     }
 
     fun configure(provider: LlmProvider, apiKey: String) {
+        val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+        val existingConfig = llmConfigs.firstOrNull { it.provider == provider }
         val effectiveApiKey = apiKey.ifBlank {
-            getCurrentApiKey() ?: throw IllegalStateException("API key is not configured. Please enter an API key.")
+            existingConfig?.apiKey
+                ?.let { cryptoProvider.decrypt(it) }
+                ?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("API key is not configured. Please enter an API key.")
         }
+
+        val encryptedKey = cryptoProvider.encrypt(effectiveApiKey)
+        if (existingConfig != null) {
+            existingConfig.apiKey = encryptedKey
+        } else {
+            llmConfigs.add(LlmConfig(provider, encryptedKey))
+        }
+        redisTemplate.opsForValue().set(REDIS_KEY_LLM_APIS, objectMapper.writeValueAsString(llmConfigs))
+        redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
+
         chatModel = buildChatModel(provider, effectiveApiKey)
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM, provider.key)
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM_API_KEY, cryptoProvider.encrypt(effectiveApiKey))
     }
 
     fun isConfigured(): Boolean {
@@ -99,12 +156,15 @@ class AiModelService(
     }
 
     fun getCurrentLlm(): String? {
-        return redisTemplate.opsForValue().get(REDIS_KEY_LLM)
+        return redisTemplate.opsForValue().get(REDIS_KEY_USAGE_LLM)
     }
 
-    private fun getCurrentApiKey(): String? {
-        return redisTemplate.opsForValue().get(REDIS_KEY_LLM_API_KEY)
-            ?.let { cryptoProvider.decrypt(it) }
+    fun getLlmConfigs(): List<LlmConfig> {
+        return redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+    }
+
+    fun hasApiKey(provider: LlmProvider): Boolean {
+        return getLlmConfigs().any { it.provider == provider && !it.apiKey.isNullOrBlank() }
     }
 
     fun getChatModel(): ChatModel {
@@ -116,13 +176,22 @@ class AiModelService(
             try {
                 return model.call(prompt).result.output.text ?: ""
             } catch (e: NonTransientAiException) {
-                val isRateLimit = e.message?.contains("rate_limit_error") == true || e.message?.contains("429") == true
-                if (isRateLimit && attempt < maxRetries - 1) {
-                    log.warn("Rate limit hit (attempt {}/{}), waiting 61s before retry...", attempt + 1, maxRetries)
-                    eventPublisher.publishEvent(RateLimitHitEvent(this, attempt + 1, maxRetries))
-                    Thread.sleep(61_000)
-                } else {
-                    throw e
+                val msg = e.message ?: ""
+                when {
+                    msg.contains("402") || msg.contains("Insufficient Balance") || msg.contains("insufficient_balance") ->
+                        throw IllegalStateException("LLM API call failed: insufficient balance. Please top up your account on the provider's platform.", e)
+                    msg.contains("401") || msg.contains("invalid_api_key") || msg.contains("Unauthorized") ->
+                        throw IllegalStateException("LLM API call failed: invalid or expired API key. Please reconfigure your API key.", e)
+                    msg.contains("rate_limit_error") || msg.contains("429") -> {
+                        if (attempt < maxRetries - 1) {
+                            log.warn("Rate limit hit (attempt {}/{}), waiting 61s before retry...", attempt + 1, maxRetries)
+                            eventPublisher.publishEvent(RateLimitHitEvent(this, attempt + 1, maxRetries))
+                            Thread.sleep(61_000)
+                        } else {
+                            throw e
+                        }
+                    }
+                    else -> throw e
                 }
             }
         }
@@ -144,6 +213,11 @@ class AiModelService(
                 val api = AnthropicApi.builder().apiKey(apiKey).build()
                 val options = AnthropicChatOptions.builder().model(anthropicModel).maxTokens(anthropicMaxTokens).build()
                 AnthropicChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
+            }
+            LlmProvider.DEEP_SEEK -> {
+                val api = OpenAiApi.builder().apiKey(apiKey).baseUrl(deepseekBaseUrl).build() // DeepSeek is compatible with OpenAI API
+                val options = OpenAiChatOptions.builder().model(deepseekModel).build()
+                OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
         }
     }

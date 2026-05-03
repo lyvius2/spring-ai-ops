@@ -74,6 +74,10 @@ ai:
     model: claude-sonnet-4-6            # Set Anthropic Model: Default is claude-sonnet-4-6
     api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
     max-tokens: 8192                    # Max output tokens for Anthropic model : Default is 8192
+  deepseek:
+    model: deepseek-v4-pro              # Set DeepSeek Model: Default is deepseek-v4-pro
+    api-key: ${AI_DEEP_SEEK_API_KEY:}   # Set your DeepSeek API key for authentication
+    base-url: ${AI_DEEP_SEEK_BASE_URL:https://api.deepseek.com}
 
 prometheus:
   url: ${PROMETHEUS_URL:}               # Set your Prometheus URL (e.g., http://localhost:9090). Optional; leave blank to skip metric queries.

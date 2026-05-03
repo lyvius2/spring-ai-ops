@@ -2,9 +2,30 @@
 let _llmConfigured     = !!LLM_CONFIGURED;
 let _currentLlm        = CURRENT_LLM;
 let _llmBothConfigured = !!LLM_SELECT_PROVIDER;
+let _savedLlmProviders = [];  // provider keys that have a stored API key (loaded from /api/llm/status)
 
 // CSRF token embedded by the server at page load time
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+// ── LLM Status Fetch ──────────────────────────────────────────────────────────
+
+async function fetchLlmStatus() {
+    try {
+        const res  = await fetch('/api/llm/status');
+        const data = await res.json();
+        _llmConfigured     = !!data.configured;
+        _currentLlm        = data.usageLlm || '';
+        _savedLlmProviders = Array.isArray(data.savedProviders) ? data.savedProviders : [];
+        updateLlmKeyBadges();
+    } catch (_) {}
+}
+
+function updateLlmKeyBadges() {
+    LLM_PROVIDERS.forEach(p => {
+        const badge = document.getElementById(`llm-key-badge-${p.key}`);
+        if (badge) badge.style.display = _savedLlmProviders.includes(p.key) ? '' : 'none';
+    });
+}
 
 // ── Select Provider Modal ─────────────────────────────────────────────────────
 
@@ -53,23 +74,38 @@ async function submitSelectProvider() {
 
 function hasLlmKeyConfigured(provider) {
     if (!provider) return false;
-    if (provider === _currentLlm) return true;
-    return _llmBothConfigured;
+    return _savedLlmProviders.includes(provider);
 }
 
 function updateLlmKeyInput() {
     const selected = document.querySelector('input[name="llm-provider"]:checked');
     if (!selected) return;
-    const apiKeyInput   = document.getElementById('llm-api-key');
-    const closeBtn      = document.getElementById('llm-modal-close');
-    const isReconfigure = closeBtn && closeBtn.style.display !== 'none';
+    const apiKeyInput  = document.getElementById('llm-api-key');
+    const saveKeyBtn   = document.getElementById('llm-save-key-only-btn');
+    const saveConnBtn  = document.getElementById('llm-save-btn');
+    const isReconfigure = document.getElementById('llm-modal-close').style.display !== 'none';
 
-    if (isReconfigure && hasLlmKeyConfigured(selected.value)) {
+    const keyAlreadySaved = hasLlmKeyConfigured(selected.value);
+    const isCurrentProvider = selected.value === _currentLlm;
+
+    if (keyAlreadySaved) {
         apiKeyInput.value = '';
         apiKeyInput.placeholder = 'API key already saved — leave blank to keep the existing key';
+        if (isReconfigure) {
+            // If already the active provider, only show "Save Key" to update the key
+            // If not active, show both buttons
+            saveConnBtn.textContent = isCurrentProvider ? 'Update Key &amp; Reconnect' : 'Set as Active';
+            saveConnBtn.innerHTML   = isCurrentProvider ? 'Update Key &amp; Reconnect' : 'Set as Active';
+            saveKeyBtn.style.display = isCurrentProvider ? 'none' : '';
+        } else {
+            saveConnBtn.innerHTML = 'Save &amp; Connect';
+            saveKeyBtn.style.display = 'none';
+        }
     } else {
         apiKeyInput.value = '';
         apiKeyInput.placeholder = selected.value === 'anthropic' ? 'sk-ant-...' : 'sk-...';
+        saveConnBtn.innerHTML = 'Save &amp; Connect';
+        saveKeyBtn.style.display = 'none';
     }
 }
 
@@ -77,31 +113,30 @@ function openLlmModal(isReconfigure) {
     const closeBtn = document.getElementById('llm-modal-close');
     const btn      = document.getElementById('llm-save-btn');
 
-    // Always reset button state — it may be disabled/relabelled from a previous save
-    btn.disabled    = false;
+    btn.disabled = false;
 
-    if (isReconfigure && _currentLlm) {
-        const radio = document.querySelector(`input[name="llm-provider"][value="${_currentLlm}"]`);
-        if (radio) radio.checked = true;
-        document.getElementById('llm-modal-desc').textContent =
-            'Update your LLM provider or API key.';
-        btn.textContent = 'Update & Reconnect';
-        closeBtn.style.display = 'block';
-    } else {
-        const firstRadio = document.querySelector('input[name="llm-provider"]');
-        if (firstRadio) firstRadio.checked = true;
-        btn.textContent = 'Save & Connect';
-        closeBtn.style.display = 'none';
-    }
+    fetchLlmStatus().then(() => {
+        if (isReconfigure && _currentLlm) {
+            const radio = document.querySelector(`input[name="llm-provider"][value="${_currentLlm}"]`);
+            if (radio) radio.checked = true;
+            document.getElementById('llm-modal-desc').textContent =
+                'Update the API key for any provider, or switch to a different one.';
+            closeBtn.style.display = 'block';
+        } else {
+            const firstRadio = document.querySelector('input[name="llm-provider"]');
+            if (firstRadio) firstRadio.checked = true;
+            document.getElementById('llm-modal-desc').textContent =
+                'Select your LLM provider and enter an API key to get started.';
+            closeBtn.style.display = 'none';
+        }
 
-    // Wire up provider change → key input state update
-    document.querySelectorAll('input[name="llm-provider"]').forEach(radio => {
-        radio.onchange = updateLlmKeyInput;
+        document.querySelectorAll('input[name="llm-provider"]').forEach(radio => {
+            radio.onchange = updateLlmKeyInput;
+        });
+        updateLlmKeyInput();
+        hideLlmAlerts();
+        document.getElementById('llm-modal').style.display = 'flex';
     });
-    updateLlmKeyInput();
-
-    hideLlmAlerts();
-    document.getElementById('llm-modal').style.display = 'flex';
 }
 
 function closeLlmModal() {
@@ -112,7 +147,6 @@ async function saveLlmConfig() {
     const llm    = document.querySelector('input[name="llm-provider"]:checked').value;
     const apiKey = document.getElementById('llm-api-key').value.trim();
     const btn    = document.getElementById('llm-save-btn');
-    const isReconfigure = btn.textContent.includes('Update');
 
     if (!apiKey && !hasLlmKeyConfigured(llm)) {
         showLlmAlert('error', 'Please enter an API key.');
@@ -120,7 +154,8 @@ async function saveLlmConfig() {
     }
 
     btn.disabled = true;
-    btn.textContent = 'Connecting...';
+    const origLabel = btn.innerHTML;
+    btn.innerHTML = 'Connecting...';
     hideLlmAlerts();
 
     try {
@@ -133,37 +168,91 @@ async function saveLlmConfig() {
 
         if (res.ok && data.status === 'SUCCESS') {
             showLlmAlert('success', '');
+            await fetchLlmStatus();
             setTimeout(async () => {
                 closeLlmModal();
-                if (isReconfigure && _currentLlm && _currentLlm !== llm) _llmBothConfigured = true;
                 _currentLlm    = llm;
                 _llmConfigured = true;
                 renderLlmStatus(llm);
+                const isReconfigure = origLabel.includes('Reconnect') || origLabel.includes('Active');
                 if (!isReconfigure) await proceedAfterLlm();
             }, 800);
         } else {
             showLlmAlert('error', data.message || 'An error occurred. Please try again.');
             btn.disabled = false;
-            btn.textContent = 'Save & Connect';
+            btn.innerHTML = origLabel;
         }
     } catch (e) {
         showLlmAlert('error', 'A network error occurred.');
         btn.disabled = false;
-        btn.textContent = 'Save & Connect';
+        btn.innerHTML = origLabel;
+    }
+}
+
+async function saveLlmKeyOnly() {
+    const llm    = document.querySelector('input[name="llm-provider"]:checked').value;
+    const apiKey = document.getElementById('llm-api-key').value.trim();
+    const btn    = document.getElementById('llm-save-key-only-btn');
+
+    if (!apiKey) {
+        showLlmAlert('error', 'Please enter an API key to save.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    hideLlmAlerts();
+
+    try {
+        // Save key by calling /config with the provider (does not change active usage from server perspective,
+        // but configure() sets USAGE_LLM — we restore it afterwards by switching back)
+        const currentProvider = _currentLlm;
+        const res = await fetch('/api/llm/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ llm, apiKey }),
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'SUCCESS') {
+            // Restore active provider if it was different
+            if (currentProvider && currentProvider !== llm) {
+                await fetch('/api/llm/select-provider', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ llm: currentProvider }),
+                });
+            }
+            await fetchLlmStatus();
+            showLlmAlert('info', `API key for ${llm.toUpperCase()} saved successfully.`);
+            document.getElementById('llm-api-key').value = '';
+            document.getElementById('llm-api-key').placeholder = 'API key already saved — leave blank to keep the existing key';
+            updateLlmKeyInput();
+        } else {
+            showLlmAlert('error', data.message || 'Failed to save key.');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Save Key Only';
+    } catch (e) {
+        showLlmAlert('error', 'A network error occurred.');
+        btn.disabled = false;
+        btn.textContent = 'Save Key Only';
     }
 }
 
 function showLlmAlert(type, msg) {
     hideLlmAlerts();
-    const ids = { success: 'llm-alert-success', warning: 'llm-alert-warning', error: 'llm-alert-error' };
+    const ids = { success: 'llm-alert-success', info: 'llm-alert-info', warning: 'llm-alert-warning', error: 'llm-alert-error' };
     const el  = document.getElementById(ids[type]);
+    if (!el) return;
     if (type !== 'success') el.textContent = msg;
     el.style.display = 'block';
 }
 
 function hideLlmAlerts() {
-    ['llm-alert-success', 'llm-alert-warning', 'llm-alert-error'].forEach(id => {
-        document.getElementById(id).style.display = 'none';
+    ['llm-alert-success', 'llm-alert-info', 'llm-alert-warning', 'llm-alert-error'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
     });
 }
 
@@ -2865,6 +2954,14 @@ async function proceedAfterLlm() {
 }
 
 async function init() {
+    // Sync LLM status from server (provider key save state, current usage, etc.)
+    await fetchLlmStatus();
+
+    // Reflect current LLM in the System Status panel immediately
+    if (_llmConfigured && _currentLlm) {
+        renderLlmStatus(_currentLlm);
+    }
+
     // Step 1: LLM not configured → branch by state
     if (!_llmConfigured) {
         if (LLM_SELECT_PROVIDER) {

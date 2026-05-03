@@ -53,8 +53,8 @@ class CryptoProviderTest {
     }
 
     @Test
-    @DisplayName("잘못된 암호문을 복호화하면 null을 반환한다")
-    fun givenInvalidCiphertext_whenDecrypt_thenReturnsNull() {
+    @DisplayName("잘못된 암호문을 복호화하면 빈 문자열을 반환한다")
+    fun givenInvalidCiphertext_whenDecrypt_thenReturnsEmpty() {
         // given
         val service = CryptoProvider("test-secret-key")
 
@@ -62,12 +62,12 @@ class CryptoProviderTest {
         val result = service.decrypt("not-a-valid-base64-ciphertext!!!!")
 
         // then
-        Assertions.assertThat(result).isNull()
+        Assertions.assertThat(result).isEmpty()
     }
 
     @Test
-    @DisplayName("다른 키로 암호화된 값을 복호화하면 null을 반환한다")
-    fun givenDifferentKey_whenDecrypt_thenReturnsNull() {
+    @DisplayName("다른 키로 암호화된 값을 복호화하면 빈 문자열을 반환한다")
+    fun givenDifferentKey_whenDecrypt_thenReturnsEmpty() {
         // given
         val encryptingService = CryptoProvider("key-A")
         val decryptingService = CryptoProvider("key-B")
@@ -77,7 +77,7 @@ class CryptoProviderTest {
         val result = decryptingService.decrypt(encrypted)
 
         // then
-        Assertions.assertThat(result).isNull()
+        Assertions.assertThat(result).isEmpty()
     }
 
     // ── 키 미설정 시 시작 실패 ────────────────────────────────────────────────
