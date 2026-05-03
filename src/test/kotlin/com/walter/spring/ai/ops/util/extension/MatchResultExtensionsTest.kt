@@ -1,4 +1,4 @@
-package com.walter.spring.ai.ops.util
+package com.walter.spring.ai.ops.util.extension
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName

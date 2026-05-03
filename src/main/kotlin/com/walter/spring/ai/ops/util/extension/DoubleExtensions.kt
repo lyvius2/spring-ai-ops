@@ -1,4 +1,4 @@
-package com.walter.spring.ai.ops.util
+package com.walter.spring.ai.ops.util.extension
 
 private const val BYTES_PER_MB = 1024.0 * 1024.0
 

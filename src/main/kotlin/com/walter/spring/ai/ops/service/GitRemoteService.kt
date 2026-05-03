@@ -6,8 +6,8 @@ import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.util.CryptoProvider
-import com.walter.spring.ai.ops.util.zSetPushWithTtl
-import com.walter.spring.ai.ops.util.zSetRangeAllDesc
+import com.walter.spring.ai.ops.util.extension.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.extension.zSetRangeAllDesc
 import org.springframework.data.redis.core.StringRedisTemplate
 
 abstract class GitRemoteService(

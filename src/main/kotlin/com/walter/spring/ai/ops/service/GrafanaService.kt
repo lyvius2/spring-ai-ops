@@ -6,8 +6,8 @@ import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryInquiry
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
-import com.walter.spring.ai.ops.util.zSetPushWithTtl
-import com.walter.spring.ai.ops.util.zSetRangeAllDesc
+import com.walter.spring.ai.ops.util.extension.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.extension.zSetRangeAllDesc
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service

@@ -6,8 +6,7 @@ import com.walter.spring.ai.ops.connector.dto.PrometheusQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryResult
 import com.walter.spring.ai.ops.controller.dto.PrometheusApplicationMetricsResponse
 import com.walter.spring.ai.ops.util.MetricHandler
-import com.walter.spring.ai.ops.util.verifyHttpConnection
-import com.walter.spring.ai.ops.util.verifyHttpConnection
+import com.walter.spring.ai.ops.util.extension.verifyHttpConnection
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service

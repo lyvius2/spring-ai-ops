@@ -1,4 +1,4 @@
-package com.walter.spring.ai.ops.util
+package com.walter.spring.ai.ops.util.extension
 
 import com.walter.spring.ai.ops.service.dto.StackTraceFrame
 import org.assertj.core.api.Assertions.assertThat

@@ -25,7 +25,7 @@ import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
-import com.walter.spring.ai.ops.util.toISO8601
+import com.walter.spring.ai.ops.util.extension.toISO8601
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import java.nio.file.Path

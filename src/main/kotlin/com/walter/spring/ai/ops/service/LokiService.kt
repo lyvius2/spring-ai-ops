@@ -4,7 +4,7 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LOKI_
 import com.walter.spring.ai.ops.connector.LokiConnector
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
-import com.walter.spring.ai.ops.util.verifyHttpConnection
+import com.walter.spring.ai.ops.util.extension.verifyHttpConnection
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service

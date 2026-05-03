@@ -8,7 +8,7 @@ import com.walter.spring.ai.ops.controller.dto.LlmStatusResponse
 import com.walter.spring.ai.ops.event.RateLimitHitEvent
 import com.walter.spring.ai.ops.service.dto.LlmConfig
 import com.walter.spring.ai.ops.util.CryptoProvider
-import com.walter.spring.ai.ops.util.getArrayList
+import com.walter.spring.ai.ops.util.extension.getArrayList
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel

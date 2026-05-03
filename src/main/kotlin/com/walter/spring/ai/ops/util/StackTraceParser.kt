@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.util
 
 import com.walter.spring.ai.ops.service.dto.StackTraceFrame
+import com.walter.spring.ai.ops.util.extension.toStackTraceFrame
 import org.springframework.stereotype.Component
 
 @Component

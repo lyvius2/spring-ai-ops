@@ -1,4 +1,4 @@
-package com.walter.spring.ai.ops.util
+package com.walter.spring.ai.ops.util.extension
 
 import java.net.InetSocketAddress
 import java.net.Socket

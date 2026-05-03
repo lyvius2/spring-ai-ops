@@ -6,6 +6,8 @@ import com.walter.spring.ai.ops.connector.dto.PrometheusQueryResult
 import com.walter.spring.ai.ops.controller.dto.PrometheusApplicationMetrics
 import com.walter.spring.ai.ops.controller.dto.PrometheusNamedSeries
 import com.walter.spring.ai.ops.controller.dto.PrometheusUptimeMetric
+import com.walter.spring.ai.ops.util.extension.bytesToMb
+import com.walter.spring.ai.ops.util.extension.percentOf
 import org.springframework.stereotype.Component
 import java.time.Instant
 

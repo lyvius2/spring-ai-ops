@@ -1,7 +1,6 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.walter.spring.ai.ops.code.RepositoryCloneStatus
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_CODE_RISK_PREFIX
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOSITORY_STATUS_PREFIX
 import com.walter.spring.ai.ops.config.RepositoryProperties
@@ -10,8 +9,8 @@ import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.service.dto.RepositoryStatus
 import com.walter.spring.ai.ops.util.RedisLockManager
-import com.walter.spring.ai.ops.util.zSetPushWithTtl
-import com.walter.spring.ai.ops.util.zSetRangeAllDesc
+import com.walter.spring.ai.ops.util.extension.zSetPushWithTtl
+import com.walter.spring.ai.ops.util.extension.zSetRangeAllDesc
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider

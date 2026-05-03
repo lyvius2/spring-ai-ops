@@ -5,8 +5,8 @@ import com.walter.spring.ai.ops.service.dto.IncidentSourceContext
 import com.walter.spring.ai.ops.service.dto.SourceSnippet
 import com.walter.spring.ai.ops.service.dto.StackTraceFrame
 import com.walter.spring.ai.ops.util.StackTraceParser
-import com.walter.spring.ai.ops.util.extractSourceSnippet
-import com.walter.spring.ai.ops.util.resolveSourceFile
+import com.walter.spring.ai.ops.util.extension.extractSourceSnippet
+import com.walter.spring.ai.ops.util.extension.resolveSourceFile
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 
