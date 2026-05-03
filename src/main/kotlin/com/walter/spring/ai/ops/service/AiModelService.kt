@@ -155,20 +155,20 @@ class AiModelService(
         return chatModel != null
     }
 
+    fun getCurrentStatus(): LlmStatusResponse {
+        val savedProviders = LlmProvider.entries
+            .filter { hasApiKey(it) }
+            .map { it.key }
+        return LlmStatusResponse(getCurrentLlm(), isConfigured(), savedProviders)
+    }
+
     fun getCurrentLlm(): String? {
         return redisTemplate.opsForValue().get(REDIS_KEY_USAGE_LLM)
     }
 
-    fun getLlmConfigs(): List<LlmConfig> {
-        return redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
-    }
-
     fun hasApiKey(provider: LlmProvider): Boolean {
-        return getLlmConfigs().any { it.provider == provider && !it.apiKey.isNullOrBlank() }
-    }
-
-    fun getChatModel(): ChatModel {
-        return chatModel ?: error("ChatModel is not configured")
+        val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+        return llmConfigs.any { it.provider == provider && !it.apiKey.isNullOrBlank() }
     }
 
     private fun callWithRateLimitRetry(model: ChatModel, prompt: Prompt, maxRetries: Int = 3): String {

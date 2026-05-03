@@ -4,6 +4,9 @@ let _currentLlm        = CURRENT_LLM;
 let _llmBothConfigured = !!LLM_SELECT_PROVIDER;
 let _savedLlmProviders = [];  // provider keys that have a stored API key (loaded from /api/llm/status)
 
+// Registered application names — populated by loadApps(), used for Prometheus metrics query
+let _appNames = [];
+
 // CSRF token embedded by the server at page load time
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
@@ -508,6 +511,7 @@ async function loadApps() {
     try {
         const res  = await fetch('/api/apps');
         const apps = await res.json();
+        _appNames = Array.isArray(apps) ? apps : [];
         renderAppList(apps);
         if (!selectedApp) renderDefaultAppDetail();
     } catch (e) {
@@ -624,7 +628,9 @@ function renderDefaultEmptyState() {
 async function loadPrometheusApplicationMetrics(refreshTableOnly = false) {
     const panel = document.getElementById('app-detail-panel');
     try {
-        const res = await fetch('/api/prometheus/application-metrics');
+        const query = _appNames.map(name => `apps=${encodeURIComponent(name)}`).join('&');
+        const url = `/api/prometheus/application-metrics${query ? '?' + query : ''}`;
+        const res = await fetch(url);
         const data = await res.json();
         if (selectedApp) return;
         if (!data.configured || data.errorMessage || !Array.isArray(data.applications) || data.applications.length === 0) {

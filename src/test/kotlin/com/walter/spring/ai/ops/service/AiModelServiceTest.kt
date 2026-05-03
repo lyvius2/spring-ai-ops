@@ -226,23 +226,6 @@ class AiModelServiceTest {
         assertThat(aiModelService.hasApiKey(LlmProvider.OPEN_AI)).isFalse()
     }
 
-    // ── getChatModel ──────────────────────────────────────────────────────────
-
-    @Test
-    @DisplayName("ChatModel이 구성되지 않은 상태에서 getChatModel은 예외 발생")
-    fun getChatModel_throwsException_whenNotConfigured() {
-        assertThatThrownBy { aiModelService.getChatModel() }
-            .isInstanceOf(IllegalStateException::class.java)
-    }
-
-    @Test
-    @DisplayName("configure 후 getChatModel은 ChatModel 인스턴스 반환")
-    fun getChatModel_returnsChatModel_afterConfigure() {
-        aiModelService.configure(LlmProvider.OPEN_AI, "sk-fake-key")
-
-        assertThat(aiModelService.getChatModel()).isNotNull()
-    }
-
     // ── executeAnalyzeFiring ──────────────────────────────────────────────────
 
     @Test

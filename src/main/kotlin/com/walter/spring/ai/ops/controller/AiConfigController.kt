@@ -27,14 +27,7 @@ class AiConfigController(
     )
     @GetMapping("/status")
     fun getStatus(): LlmStatusResponse {
-        val savedProviders = LlmProvider.entries
-            .filter { aiModelService.hasApiKey(it) }
-            .map { it.key }
-        return LlmStatusResponse(
-            usageLlm = aiModelService.getCurrentLlm(),
-            configured = aiModelService.isConfigured(),
-            savedProviders = savedProviders,
-        )
+        return aiModelService.getCurrentStatus()
     }
 
     @Operation(

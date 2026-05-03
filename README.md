@@ -6,6 +6,7 @@
 ![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.0-6DB33F)
 ![OpenAI](https://img.shields.io/badge/OpenAI-supported-412991?logo=openai&logoColor=white)
 ![Anthropic](https://img.shields.io/badge/Anthropic-supported-191919)
+![DeepSeek](https://img.shields.io/badge/DeepSeek-supported-4D6BFE)
 ![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F)
 ![Redis](https://img.shields.io/badge/Redis-enabled-DC382D?logo=redis&logoColor=white)
 ![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
@@ -15,7 +16,7 @@
 
 [한국어(Korean) 문서](README_KR.md)  
   
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs, optionally fetches Prometheus metrics over the same alert window, checks out the registered application source repository, and sends focused stack-trace-related source snippets to the LLM. Results are delivered to a live dashboard via WebSocket.  
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic, or DeepSeek) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs, optionally fetches Prometheus metrics over the same alert window, checks out the registered application source repository, and sends focused stack-trace-related source snippets to the LLM. Results are delivered to a live dashboard via WebSocket.  
 
 ---
 
@@ -75,7 +76,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Source Fix Suggestions** | Incident analysis can return structured source code suggestions (`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) shown at the bottom of the AI Analysis panel with a side-by-side popup and copy action |
 | **Persistent Repository Storage** | Optionally keep registered application repositories under `repository.local-path` to avoid repeated fresh checkouts; Redis locks protect branch switch/reset operations and failures fall back to temporary clones |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
-| **Dynamic LLM Configuration** | Switch between OpenAI and Anthropic at runtime via the UI — no restart required |
+| **Dynamic LLM Configuration** | Switch between OpenAI, Anthropic, and DeepSeek at runtime via the UI — no restart required. Each provider's API key is stored independently and can be updated separately |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
 | **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 20 concurrent) |
@@ -318,9 +319,8 @@ POST /webhook/grafana[/{application}]
 
 ---
 
-### Observability Integration (Loki Required, Prometheus Optional) / 옵저버빌리티 연동 (Loki 필수, Prometheus 선택)
+### Observability Integration (Loki Required, Prometheus Optional)
 *Configure required Loki connection settings for Grafana alert analysis. Prometheus is also supported as an optional metric data source for richer incident context.*
-*Grafana 알림 분석을 위해 Loki 접속 정보를 필수로 설정해야 하며, Prometheus는 더 풍부한 장애 컨텍스트를 위한 선택적 메트릭 소스로 지원됩니다.*
 
 ![Metric Visualization](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/ObservabilityProviders.png?raw=true)
 
@@ -333,10 +333,17 @@ POST /webhook/grafana[/{application}]
 
 ---
 
-### Static Code Risk Analysis
+### Static Code Risk Analysis — Real-Time Progress
+*During Code Risk analysis, progress updates (cloning, chunk analysis, consolidation) are streamed to the dashboard in real time via WebSocket STOMP. You can monitor each stage without refreshing the page.*
+
+![Static Code Risk Analysis Progress](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/Progress.png?raw=true)
+
+---
+
+### Static Code Risk Analysis — Results
 *Run a full AI-powered static analysis on any registered Git repository. Issues are grouped by file with severity levels (HIGH / MEDIUM / LOW), and each entry includes the affected code snippet and a recommended fix.*
 
-![Static Code Risk Analysis](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeRisk.png?raw=true)
+![Static Code Risk Analysis Results](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/CodeRisk.png?raw=true)
 
 ---
 
@@ -361,7 +368,7 @@ POST /webhook/grafana[/{application}]
 
 ---
 
-### Source Fix Suggestions / 소스 수정 제안
+### Source Fix Suggestions
 *During error analysis, the system identifies source code that may contribute to the exception and provides concrete fix suggestions, including what to change and why the change helps prevent recurrence.*
 
 ![Suggested Source](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/SuggestedSource.png?raw=true)
@@ -374,7 +381,7 @@ POST /webhook/grafana[/{application}]
 |---|---|
 | Language | Kotlin 2.2 / Java 21 |
 | Framework | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI-compatible) |
 | Observability | Loki (log queries), Prometheus (metric queries, optional) |
 | Persistence | Redis (primary store, no RDBMS) |
 | Dev Redis | Embedded Redis (auto-start, no install needed) |
@@ -387,7 +394,7 @@ POST /webhook/grafana[/{application}]
 
 **Design note — Spring AI AutoConfiguration disabled**
 
-All Spring AI `AutoConfiguration` classes are explicitly excluded in `application.yml`. `AiModelService` builds `OpenAiChatModel` / `AnthropicChatModel` directly using `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP`. This gives full control over model instantiation and allows hot-swapping the LLM provider at runtime.
+All Spring AI `AutoConfiguration` classes are explicitly excluded in `application.yml`. `AiModelService` builds `OpenAiChatModel` / `AnthropicChatModel` directly using `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP`. This gives full control over model instantiation and allows hot-swapping the LLM provider at runtime. DeepSeek uses the OpenAI-compatible API (`OpenAiChatModel` pointed at `https://api.deepseek.com`).
 
 **Design note — Virtual Thread concurrency**
 
@@ -407,7 +414,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 
 - JDK 21+
 - A non-empty `CRYPTO_SECRET_KEY` value for encrypting Redis-stored credentials
-- An API key for at least one LLM provider (OpenAI, Anthropic)
+- An API key for at least one LLM provider (OpenAI, Anthropic, or DeepSeek)
 - A running Loki instance for Grafana error analysis
 - (Optional) A running Prometheus instance for metric queries
 - (Optional) An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
@@ -426,6 +433,10 @@ ai:
     model: claude-sonnet-4-6             # Anthropic model name
     api-key: ${AI_ANTHROPIC_API_KEY:}    # Or set env var AI_ANTHROPIC_API_KEY
     max-tokens: 8192                     # Max output tokens for Anthropic (default: 8192)
+  deepseek:
+    model: deepseek-v4-pro               # DeepSeek model name
+    api-key: ${AI_DEEP_SEEK_API_KEY:}    # Or set env var AI_DEEP_SEEK_API_KEY
+    base-url: ${AI_DEEP_SEEK_BASE_URL:https://api.deepseek.com}  # DeepSeek API base URL
 
 loki:
   url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
@@ -542,9 +553,10 @@ crypto:
 | Situation | Result |
 |---|---|
 | Only one provider key present in yml | That provider is selected automatically on startup — no UI prompt |
-| Both provider keys present in yml | A provider-selection modal appears in the UI once |
+| Multiple provider keys present in yml | A provider-selection modal appears in the UI once |
 | No keys in yml | The full API key entry modal appears in the UI |
 | Key saved via UI before | Redis value is restored on restart — no prompt |
+| Multiple providers have keys saved in UI | The previously active provider is restored; others show **Key saved** in the configuration modal |
 
 ### Running
 
@@ -738,6 +750,7 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
+| 2026-05-03 | Added DeepSeek as a supported LLM provider — uses the OpenAI-compatible API (`deepseek-v4-pro` default); configurable via `ai.deepseek.*` in application.yml or env vars `AI_DEEP_SEEK_API_KEY` / `AI_DEEP_SEEK_BASE_URL`. Multiple provider API keys can be saved independently via the UI and switched at runtime |
 | 2026-05-02 | Added Prometheus Application Metrics dashboard (`GET /api/prometheus/application-metrics`) — displays per-application JVM memory (used %, allocated MB, used MB), uptime, open-file count, CPU usage (system / process), average HTTP latency, and HTTP status breakdown (2xx / 4xx / 5xx) as time-series charts when `prometheus.url` is configured |
 | 2026-04-30 | Added optional persistent repository storage — registered repositories can be kept under `repository.local-path`, synchronized under a Redis lock, reused by Code Risk and Grafana source snippet flows, and cleaned up on app rename/delete |
 | 2026-04-29 | Added source code suggestion support for Grafana alert analysis — stack-trace-related snippets are sent to the LLM, structured `sourceCodeSuggestions` are stored with firing records, and the UI renders original/suggested code side by side |
