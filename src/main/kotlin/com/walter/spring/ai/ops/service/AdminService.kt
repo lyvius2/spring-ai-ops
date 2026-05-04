@@ -1,7 +1,10 @@
 package com.walter.spring.ai.ops.service
 
+import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_ADMINISTRATORS
+import com.walter.spring.ai.ops.config.annotation.AdminOnly
+import com.walter.spring.ai.ops.controller.dto.AdminInfo
 import com.walter.spring.ai.ops.record.Administrator
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
@@ -15,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository
 import org.springframework.stereotype.Service
 import java.security.SecureRandom
+import java.time.Instant
 
 @Service
 class AdminService(
@@ -26,14 +30,13 @@ class AdminService(
 
     @EventListener(ApplicationStartedEvent::class)
     fun initializeAdminIfAbsent() {
-        val existing = redisTemplate.opsForValue().get(REDIS_KEY_ADMINISTRATORS)
-        if (!existing.isNullOrBlank()) {
+        if (getAdmins().isNotEmpty()) {
             return
         }
+
         val rawPassword = generateRandomPassword()
         val encoded = passwordEncoder.encode(rawPassword)
-        val admin = Administrator("admin", encoded)
-        redisTemplate.opsForValue().set(REDIS_KEY_ADMINISTRATORS, objectMapper.writeValueAsString(admin))
+        saveAdmins(listOf(Administrator("admin", encoded, Instant.now(), null)))
         log.info("==========================================================")
         log.info("  Admin account initialized.")
         log.info("  username : admin")
@@ -43,8 +46,7 @@ class AdminService(
     }
 
     fun authenticate(username: String, rawPassword: String): Boolean {
-        val admin = getAdmin() ?: return false
-        if (admin.username != username) return false
+        val admin = getAdminByUsername(username) ?: return false
         return passwordEncoder.matches(rawPassword, admin.password)
     }
 
@@ -54,6 +56,7 @@ class AdminService(
     }
 
     fun createAuthenticatedSession(username: String, httpRequest: HttpServletRequest) {
+        recordLogin(username)
         val auth = UsernamePasswordAuthenticationToken(
             username,
             null,
@@ -67,44 +70,76 @@ class AdminService(
         session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context)
     }
 
+    private fun recordLogin(username: String) {
+        val now = Instant.now()
+        val updated = getAdmins().map {
+            if (it.username() == username) Administrator(it.username(), it.password(), it.createdAt(), now) else it
+        }
+        saveAdmins(updated)
+    }
+
     fun changePassword(username: String, currentRaw: String, newRaw: String, confirmRaw: String) {
         require(newRaw == confirmRaw) { "New password and confirmation do not match." }
         validatePasswordComplexity(newRaw)
 
-        val admin = getAdmin() ?: throw IllegalStateException("No admin account found.")
-        require(admin.username == username) { "Admin account not found." }
-        require(passwordEncoder.matches(currentRaw, admin.password)) { "Current password is incorrect." }
+        val admins = getAdmins()
+        val admin = admins.find { it.username() == username }
+            ?: throw IllegalStateException("Admin account not found.")
+        require(passwordEncoder.matches(currentRaw, admin.password())) { "Current password is incorrect." }
 
-        val updated = Administrator(username, passwordEncoder.encode(newRaw))
-        redisTemplate.opsForValue().set(REDIS_KEY_ADMINISTRATORS, objectMapper.writeValueAsString(updated))
+        val updated = admins.map {
+            if (it.username() == username)
+                Administrator(username, passwordEncoder.encode(newRaw), it.createdAt(), it.lastLoginAt())
+            else it
+        }
+        saveAdmins(updated)
+    }
+
+    @AdminOnly
+    fun getAdminDetails(): List<AdminInfo> =
+        getAdmins().map { AdminInfo(it.username(), it.createdAt(), it.lastLoginAt()) }
+
+    @AdminOnly
+    fun removeAdmins(usernames: List<String>) {
+        require(usernames.isNotEmpty()) { "No accounts selected for removal." }
+        require(!usernames.contains("admin")) { "The 'admin' account cannot be removed." }
+        val updated = getAdmins().filter { it.username() !in usernames }
+        saveAdmins(updated)
+    }
+
+    @AdminOnly
+    fun createAdmin(username: String, rawPassword: String, confirmPassword: String) {
+        require(rawPassword == confirmPassword) { "Password and confirmation do not match." }
+        validatePasswordComplexity(rawPassword)
+
+        val admins = getAdmins()
+        require(admins.none { it.username() == username }) { "Username '$username' is already taken." }
+
+        saveAdmins(admins + Administrator(username, passwordEncoder.encode(rawPassword), Instant.now(), null))
     }
 
     fun validatePasswordComplexity(password: String) {
-        require(password.length >= 8) {
-            "Password must be at least 8 characters long."
-        }
-        require(password.any { it.isUpperCase() }) {
-            "Password must contain at least one uppercase letter."
-        }
-        require(password.any { it.isLowerCase() }) {
-            "Password must contain at least one lowercase letter."
-        }
-        require(password.any { it.isDigit() }) {
-            "Password must contain at least one digit."
-        }
-        require(password.any { !it.isLetterOrDigit() }) {
-            "Password must contain at least one special character."
+        require(password.length >= 8) { "Password must be at least 8 characters long." }
+        require(password.any { it.isUpperCase() }) { "Password must contain at least one uppercase letter." }
+        require(password.any { it.isLowerCase() }) { "Password must contain at least one lowercase letter." }
+        require(password.any { it.isDigit() }) { "Password must contain at least one digit." }
+        require(password.any { !it.isLetterOrDigit() }) { "Password must contain at least one special character." }
+    }
+
+    fun getAdmins(): List<Administrator> {
+        val value = redisTemplate.opsForValue().get(REDIS_KEY_ADMINISTRATORS) ?: return emptyList()
+        return runCatching {
+            objectMapper.readValue(value, object : TypeReference<List<Administrator>>() {})
+        }.getOrElse {
+            listOf(objectMapper.readValue(value, Administrator::class.java))
         }
     }
 
-    fun getAdmin(): Administrator? {
-        val value = redisTemplate.opsForValue().get(REDIS_KEY_ADMINISTRATORS) ?: return null
-        return runCatching {
-            objectMapper.readValue(value, Administrator::class.java)
-        }.getOrElse { e ->
-            log.warn("Failed to parse administrator record — returning null. cause: {}", e.message)
-            null
-        }
+    fun getAdminByUsername(username: String): Administrator? =
+        getAdmins().find { it.username() == username }
+
+    private fun saveAdmins(admins: List<Administrator>) {
+        redisTemplate.opsForValue().set(REDIS_KEY_ADMINISTRATORS, objectMapper.writeValueAsString(admins))
     }
 
     private fun generateRandomPassword(): String {

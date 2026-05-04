@@ -1,5 +1,6 @@
-package com.walter.spring.ai.ops.controller
+package com.walter.spring.ai.ops.config
 
+import com.walter.spring.ai.ops.config.exception.ForbiddenException
 import com.walter.spring.ai.ops.config.exception.UnauthorizedException
 import com.walter.spring.ai.ops.controller.dto.ErrorResponse
 import jakarta.servlet.http.HttpServletRequest
@@ -21,6 +22,14 @@ class GlobalExceptionHandler {
             .body(ErrorResponse(HttpStatus.UNAUTHORIZED.value(), ex.message ?: "Unauthorized", request.requestURI))
     }
 
+    @ExceptionHandler(ForbiddenException::class)
+    fun handleForbidden(ex: ForbiddenException, request: HttpServletRequest): ResponseEntity<Any> {
+        return ResponseEntity
+            .status(HttpStatus.FORBIDDEN)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(ErrorResponse(HttpStatus.FORBIDDEN.value(), ex.message ?: "Forbidden", request.requestURI))
+    }
+
     @ExceptionHandler(NoResourceFoundException::class)
     fun handleNoResourceFound(ex: NoResourceFoundException, request: HttpServletRequest): ResponseEntity<Any> {
         val path = request.requestURI
@@ -31,7 +40,13 @@ class GlobalExceptionHandler {
             return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ErrorResponse(HttpStatus.NOT_FOUND.value(), "The requested API endpoint does not exist: $path", path))
+                .body(
+                    ErrorResponse(
+                        HttpStatus.NOT_FOUND.value(),
+                        "The requested API endpoint does not exist: $path",
+                        path
+                    )
+                )
         }
         return ResponseEntity
             .status(HttpStatus.FOUND)

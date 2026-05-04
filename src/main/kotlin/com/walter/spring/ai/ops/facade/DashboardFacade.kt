@@ -34,7 +34,11 @@ class DashboardFacade(
         puzzles["gitRemoteProviders"] = GitRemoteProvider.entries.toTypedArray()
         puzzles["observabilityProviders"] = ObservabilityProvider.entries.toTypedArray()
         puzzles["csrfToken"] = csrfTokenProvider.token
-        puzzles["loggedIn"] = isAuthenticated()
+
+        val auth = SecurityContextHolder.getContext().authentication
+        val authenticated = auth != null && auth.isAuthenticated && auth !is AnonymousAuthenticationToken
+        puzzles["loggedIn"] = authenticated
+        puzzles["mainAdmin"] = authenticated && auth.name == "admin"
         return puzzles
     }
 
@@ -55,10 +59,5 @@ class DashboardFacade(
                 false
             }
         return Triple(configuredFuture, currentLlmFuture, selectProviderFuture)
-    }
-
-    private fun isAuthenticated(): Boolean {
-        val auth = SecurityContextHolder.getContext().authentication
-        return auth != null && auth.isAuthenticated && auth !is AnonymousAuthenticationToken
     }
 }

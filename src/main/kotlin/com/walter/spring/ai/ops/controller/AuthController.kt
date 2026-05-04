@@ -1,11 +1,18 @@
 package com.walter.spring.ai.ops.controller
 
+import com.walter.spring.ai.ops.controller.dto.AdminListResponse
 import com.walter.spring.ai.ops.controller.dto.ChangePasswordRequest
 import com.walter.spring.ai.ops.controller.dto.ChangePasswordResponse
+import com.walter.spring.ai.ops.controller.dto.CreateAdminRequest
+import com.walter.spring.ai.ops.controller.dto.CreateAdminResponse
 import com.walter.spring.ai.ops.controller.dto.LoginRequest
 import com.walter.spring.ai.ops.controller.dto.LoginResponse
+import com.walter.spring.ai.ops.controller.dto.RemoveAdminsRequest
+import com.walter.spring.ai.ops.controller.dto.RemoveAdminsResponse
 import com.walter.spring.ai.ops.service.AdminService
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -40,6 +47,31 @@ class AuthController(
             ChangePasswordResponse.changePasswordFailure(e)
         } catch (e: IllegalStateException) {
             ChangePasswordResponse.changePasswordFailure(e)
+        }
+    }
+
+    @PostMapping("/admin")
+    fun createAdmin(@RequestBody request: CreateAdminRequest): CreateAdminResponse {
+        return try {
+            adminService.createAdmin(request.username, request.password, request.confirmPassword)
+            CreateAdminResponse.success()
+        } catch (e: IllegalArgumentException) {
+            CreateAdminResponse.failure(e)
+        }
+    }
+
+    @GetMapping("/admins")
+    fun listAdmins(): AdminListResponse {
+        return AdminListResponse(adminService.getAdminDetails())
+    }
+
+    @DeleteMapping("/admins")
+    fun removeAdmins(@RequestBody request: RemoveAdminsRequest): RemoveAdminsResponse {
+        return try {
+            adminService.removeAdmins(request.usernames)
+            RemoveAdminsResponse.success()
+        } catch (e: IllegalArgumentException) {
+            RemoveAdminsResponse.failure(e)
         }
     }
 }

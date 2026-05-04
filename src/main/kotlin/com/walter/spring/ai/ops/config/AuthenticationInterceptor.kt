@@ -30,5 +30,8 @@ class AuthenticationInterceptor : HandlerInterceptor {
             || (method == "PUT"    && path.startsWith("/api/apps/"))
             || (method == "DELETE" && path.startsWith("/api/apps/"))
             || (method == "POST"   && path == "/api/code-risk")
+            || (method == "POST"   && path == "/api/auth/admin")
+            || (method == "GET"    && path == "/api/auth/admins")
+            || (method == "DELETE" && path == "/api/auth/admins")
     }
 }
