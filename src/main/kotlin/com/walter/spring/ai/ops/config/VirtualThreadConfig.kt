@@ -15,7 +15,7 @@ class VirtualThreadConfig {
 
     @Bean(TaskExecutionAutoConfiguration.APPLICATION_TASK_EXECUTOR_BEAN_NAME)
     fun applicationTaskExecutor(@Value("\${app.async.virtual.executor-concurrency-limit:200}") concurrencyLimit: Int): AsyncTaskExecutor {
-        val executor = SimpleAsyncTaskExecutor("vt-")
+        val executor = SimpleAsyncTaskExecutor("Virtual Thread-")
         executor.setVirtualThreads(true)
         executor.concurrencyLimit = concurrencyLimit
         return executor
