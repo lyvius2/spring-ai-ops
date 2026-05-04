@@ -78,6 +78,255 @@ async function logout() {
     }
 }
 
+// ── Account Management Modal ──────────────────────────────────────────────────
+
+let _adminList  = [];
+let _adminPage  = 1;
+const ADMIN_PAGE_SIZE = 10;
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+async function openAccountManagementModal() {
+    _adminPage = 1;
+    // reset add-account form
+    document.getElementById('ca-username').value = '';
+    document.getElementById('ca-password').value = '';
+    document.getElementById('ca-confirm').value  = '';
+    document.getElementById('ca-alert-success').style.display = 'none';
+    document.getElementById('ca-alert-error').style.display   = 'none';
+    document.getElementById('ca-submit-btn').disabled    = false;
+    document.getElementById('ca-submit-btn').textContent = 'Add Account';
+    document.getElementById('add-account-section').style.display    = 'none';
+    document.getElementById('add-account-toggle-icon').innerHTML    = '&#9654;';
+    document.getElementById('remove-account-section').style.display = 'none';
+    document.getElementById('remove-account-toggle-icon').innerHTML = '&#9654;';
+    document.getElementById('remove-alert-error').style.display     = 'none';
+
+    await loadAdminList();
+    document.getElementById('account-management-modal').style.display = 'flex';
+}
+
+function closeAccountManagementModal() {
+    document.getElementById('account-management-modal').style.display = 'none';
+}
+
+function toggleAddAccountSection() {
+    const section = document.getElementById('add-account-section');
+    const icon    = document.getElementById('add-account-toggle-icon');
+    const expanded = section.style.display !== 'none';
+    section.style.display = expanded ? 'none' : 'block';
+    icon.innerHTML = expanded ? '&#9654;' : '&#9660;';
+    if (!expanded) collapseRemoveAccountSection();
+}
+
+function toggleRemoveAccountSection() {
+    const section  = document.getElementById('remove-account-section');
+    const icon     = document.getElementById('remove-account-toggle-icon');
+    const expanded = section.style.display !== 'none';
+    section.style.display = expanded ? 'none' : 'block';
+    icon.innerHTML = expanded ? '&#9654;' : '&#9660;';
+    if (!expanded) collapseAddAccountSection();
+}
+
+function collapseAddAccountSection() {
+    document.getElementById('add-account-section').style.display = 'none';
+    document.getElementById('add-account-toggle-icon').innerHTML = '&#9654;';
+}
+
+function collapseRemoveAccountSection() {
+    document.getElementById('remove-account-section').style.display = 'none';
+    document.getElementById('remove-account-toggle-icon').innerHTML = '&#9654;';
+}
+
+async function loadAdminList() {
+    try {
+        const res = await fetch('/api/auth/admins');
+        if (!res.ok) { _adminList = []; }
+        else {
+            const data = await res.json();
+            _adminList = data.admins || [];
+        }
+    } catch (_) { _adminList = []; }
+    renderAdminList();
+}
+
+function formatInstant(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderAdminList() {
+    const container = document.getElementById('admin-list-container');
+    const start     = (_adminPage - 1) * ADMIN_PAGE_SIZE;
+    const pageItems = _adminList.slice(start, start + ADMIN_PAGE_SIZE);
+
+    if (_adminList.length === 0) {
+        container.innerHTML = '<div class="list-placeholder" style="padding:8px 0;">No admin accounts found.</div>';
+        document.getElementById('admin-pagination').innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = pageItems.map(item => {
+        const isMain = item.username === 'admin';
+        return `<div class="admin-list-item">
+            <input type="checkbox" class="admin-checkbox" value="${escapeHtml(item.username)}"
+                   ${isMain ? 'disabled title="The \'admin\' account cannot be removed."' : ''}>
+            <div class="admin-list-name">
+                ${escapeHtml(item.username)}
+                ${isMain ? '<span class="admin-badge">superuser</span>' : ''}
+            </div>
+            <div class="admin-list-meta">
+                <span>Created: ${formatInstant(item.createdAt)}</span>
+                <span>Last Login: ${formatInstant(item.lastLoginAt)}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    renderAdminPagination();
+}
+
+function renderAdminPagination() {
+    const totalPages = Math.ceil(_adminList.length / ADMIN_PAGE_SIZE);
+    const el = document.getElementById('admin-pagination');
+    if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+    let html = '<div class="pagination">';
+    html += `<button class="page-btn" onclick="setAdminPage(${_adminPage - 1})" ${_adminPage === 1 ? 'disabled' : ''}>&#8249;</button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="page-btn ${i === _adminPage ? 'page-active' : ''}" onclick="setAdminPage(${i})">${i}</button>`;
+    }
+    html += `<button class="page-btn" onclick="setAdminPage(${_adminPage + 1})" ${_adminPage === totalPages ? 'disabled' : ''}>&#8250;</button>`;
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function setAdminPage(page) {
+    const totalPages = Math.ceil(_adminList.length / ADMIN_PAGE_SIZE);
+    if (page < 1 || page > totalPages) return;
+    _adminPage = page;
+    renderAdminList();
+}
+
+function openRemoveConfirm() {
+    const checked = Array.from(document.querySelectorAll('.admin-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) {
+        const errEl = document.getElementById('remove-alert-error');
+        errEl.textContent = 'Please select at least one account to remove.';
+        errEl.style.display = 'block';
+        return;
+    }
+    document.getElementById('remove-alert-error').style.display   = 'none';
+    document.getElementById('remove-confirm-error').style.display = 'none';
+    document.getElementById('remove-confirm-list').innerHTML =
+        checked.map(u => `<li>${escapeHtml(u)}</li>`).join('');
+    document.getElementById('remove-confirm-btn').disabled    = false;
+    document.getElementById('remove-confirm-btn').textContent = 'Confirm Remove';
+    document.getElementById('remove-confirm-modal').style.display = 'flex';
+}
+
+function cancelRemoveConfirm() {
+    document.getElementById('remove-confirm-modal').style.display = 'none';
+}
+
+async function submitRemoveAdmins() {
+    const checked = Array.from(document.querySelectorAll('.admin-checkbox:checked')).map(cb => cb.value);
+    const btn     = document.getElementById('remove-confirm-btn');
+    const errEl   = document.getElementById('remove-confirm-error');
+
+    btn.disabled    = true;
+    btn.textContent = 'Removing...';
+    errEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/auth/admins', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usernames: checked }),
+        });
+
+        if (res.status === 401) { showAuthRequiredMessage(errEl); btn.disabled = false; btn.textContent = 'Confirm Remove'; return; }
+        if (res.status === 403) { errEl.textContent = 'Only the admin account can remove accounts.'; errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Confirm Remove'; return; }
+
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('remove-confirm-modal').style.display = 'none';
+            await loadAdminList();
+        } else {
+            errEl.textContent = data.message || 'Failed to remove accounts.';
+            errEl.style.display = 'block';
+            btn.disabled    = false;
+            btn.textContent = 'Confirm Remove';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled    = false;
+        btn.textContent = 'Confirm Remove';
+    }
+}
+
+async function submitCreateAdmin() {
+    const username        = document.getElementById('ca-username').value.trim();
+    const password        = document.getElementById('ca-password').value;
+    const confirmPassword = document.getElementById('ca-confirm').value;
+    const btn             = document.getElementById('ca-submit-btn');
+    const sucEl           = document.getElementById('ca-alert-success');
+    const errEl           = document.getElementById('ca-alert-error');
+
+    if (!username) {
+        errEl.textContent = 'Please enter a username.';
+        errEl.style.display = 'block';
+        sucEl.style.display = 'none';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    sucEl.style.display = 'none';
+    errEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/auth/admin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, confirmPassword }),
+        });
+
+        if (res.status === 401) { showAuthRequiredMessage(errEl); btn.disabled = false; btn.textContent = 'Add Account'; return; }
+        if (res.status === 403) { errEl.textContent = 'Only the admin account can create new admin accounts.'; errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Add Account'; return; }
+
+        const data = await res.json();
+        if (data.success) {
+            sucEl.style.display = 'block';
+            document.getElementById('ca-username').value = '';
+            document.getElementById('ca-password').value = '';
+            document.getElementById('ca-confirm').value  = '';
+            btn.disabled    = false;
+            btn.textContent = 'Add Account';
+            await loadAdminList();
+            setTimeout(() => { sucEl.style.display = 'none'; }, 2000);
+        } else {
+            errEl.textContent = data.message || 'Failed to create admin account.';
+            errEl.style.display = 'block';
+            btn.disabled    = false;
+            btn.textContent = 'Add Account';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled    = false;
+        btn.textContent = 'Add Account';
+    }
+}
+
 function openChangePasswordModal() {
     document.getElementById('cp-current').value = '';
     document.getElementById('cp-new').value = '';
@@ -980,6 +1229,13 @@ document.addEventListener('keydown', function (e) {
         submitSelectProvider();
     } else if (document.getElementById('run-analysis-modal').style.display === 'flex') {
         submitRunAnalysis();
+    } else if (document.getElementById('login-modal').style.display === 'flex') {
+        submitLogin();
+    } else if (document.getElementById('change-password-modal').style.display === 'flex') {
+        submitChangePassword();
+    } else if (document.getElementById('account-management-modal').style.display === 'flex') {
+        const addSection = document.getElementById('add-account-section');
+        if (addSection && addSection.style.display !== 'none') submitCreateAdmin();
     }
 });
 

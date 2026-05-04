@@ -2105,6 +2105,150 @@ body {
     text-overflow: ellipsis;
 }
 
+/* ── Account Management Modal ── */
+.modal-box-wide { width: min(680px, 92vw); }
+.modal-box-sm   { width: min(420px, 92vw); }
+
+.modal-overlay-nested {
+    z-index: 1100;
+    background-color: rgba(0,0,0,0.45);
+}
+
+.remove-confirm-list {
+    list-style: disc;
+    margin: 0 0 0 18px;
+    padding: 0;
+}
+.remove-confirm-list li {
+    padding: 3px 0;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #c0392b;
+}
+
+.section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #34302d;
+    padding: 6px 0;
+    user-select: none;
+}
+.section-toggle:hover { color: #6db33f; }
+
+.section-divider {
+    border: none;
+    border-top: 1px solid #e0dcd8;
+    margin: 14px 0 10px;
+}
+
+.section-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #34302d;
+    margin-bottom: 6px;
+}
+
+.admin-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid #f0ece8;
+    font-size: 0.88rem;
+}
+.admin-list-item:last-child { border-bottom: none; }
+.admin-list-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.admin-list-item input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.admin-list-info { flex: 1; min-width: 0; }
+.admin-list-name {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #34302d;
+}
+.admin-list-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    font-size: 0.75rem;
+    color: #888;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.admin-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    background-color: #6db33f;
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+.btn-danger {
+    padding: 8px 18px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background-color: #c0392b;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    margin-top: 0;
+}
+.btn-danger:hover { background-color: #a93226; }
+.btn-danger:disabled { background-color: #e0a09a; cursor: not-allowed; }
+
+.confirm-message {
+    font-size: 0.88rem;
+    color: #34302d;
+    background-color: #fff8f0;
+    border: 1px solid #f5c6a0;
+    border-radius: 4px;
+    padding: 10px 14px;
+}
+.confirm-message ul {
+    margin: 8px 0 0 16px;
+    padding: 0;
+    list-style: disc;
+}
+.confirm-message li { margin: 3px 0; font-weight: 600; }
+
+.pagination {
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+.page-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    font-size: 0.82rem;
+    background-color: #f5f3f0;
+    border: 1px solid #d6d0c8;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.12s;
+}
+.page-btn:hover:not(:disabled) { background-color: #e8e4df; }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-btn.page-active {
+    background-color: #6db33f;
+    color: #fff;
+    border-color: #6db33f;
+    font-weight: 700;
+}
+
 /* ── Toast Notification ── */
 .toast-notification {
     position: fixed;

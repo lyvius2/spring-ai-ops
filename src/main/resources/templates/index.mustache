@@ -35,6 +35,9 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
         <button class="btn-navbar" onclick="openLoginModal()">Login</button>
         {{/data.loggedIn}}
         {{#data.loggedIn}}
+        {{#data.mainAdmin}}
+        <button class="btn-navbar btn-navbar-secondary" onclick="openAccountManagementModal()">Manage Accounts</button>
+        {{/data.mainAdmin}}
         <button class="btn-navbar btn-navbar-secondary" onclick="openChangePasswordModal()">Change Password</button>
         <button class="btn-navbar" onclick="logout()">Logout</button>
         {{/data.loggedIn}}
@@ -416,6 +419,73 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
             </div>
             <button class="btn-primary" id="login-submit-btn" onclick="submitLogin()">Login</button>
             <div class="alert alert-error" id="login-alert-error"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Account Management ══ -->
+<div id="account-management-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box modal-box-wide">
+        <div class="modal-header">
+            Account Management
+            <button class="modal-close-btn" onclick="closeAccountManagementModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+
+            <!-- ── Add Account (collapsible) ── -->
+            <div class="section-toggle" onclick="toggleAddAccountSection()">
+                <span id="add-account-toggle-icon">&#9654;</span> Add Account
+            </div>
+            <div id="add-account-section" style="display:none;">
+                <div class="form-group" style="margin-top:12px;">
+                    <label class="form-label" for="ca-username">Username</label>
+                    <input type="text" id="ca-username" class="form-input" autocomplete="off" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="ca-password">Password</label>
+                    <input type="password" id="ca-password" class="form-input" autocomplete="new-password" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="ca-confirm">Confirm Password</label>
+                    <input type="password" id="ca-confirm" class="form-input" autocomplete="new-password" />
+                </div>
+                <button class="btn-primary" id="ca-submit-btn" onclick="submitCreateAdmin()">Add Account</button>
+                <div class="alert alert-success" id="ca-alert-success">Admin account created successfully.</div>
+                <div class="alert alert-error"   id="ca-alert-error"></div>
+            </div>
+
+            <!-- ── Remove Account (collapsible) ── -->
+            <div class="section-divider"></div>
+            <div class="section-toggle" onclick="toggleRemoveAccountSection()">
+                <span id="remove-account-toggle-icon">&#9654;</span> Remove Account
+            </div>
+            <div id="remove-account-section" style="display:none;">
+                <div id="admin-list-container" style="margin-top:8px;"></div>
+                <div id="admin-pagination"></div>
+                <button class="btn-danger" id="remove-selected-btn" onclick="openRemoveConfirm()" style="margin-top:12px;">Remove Selected</button>
+                <div class="alert alert-error" id="remove-alert-error"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Remove Account Confirm ══ -->
+<div id="remove-confirm-modal" class="modal-overlay modal-overlay-nested" style="display:none;">
+    <div class="modal-box modal-box-sm">
+        <div class="modal-header">
+            Confirm Removal
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc" style="margin-bottom:8px;">
+                Are you sure you want to remove the following account(s)?
+            </p>
+            <ul id="remove-confirm-list" class="remove-confirm-list"></ul>
+            <div style="display:flex; gap:8px; margin-top:16px;">
+                <button class="btn-danger" id="remove-confirm-btn" onclick="submitRemoveAdmins()">Confirm Remove</button>
+                <button class="btn-secondary" onclick="cancelRemoveConfirm()" style="margin-top:0;">Cancel</button>
+            </div>
+            <div class="alert alert-error" id="remove-confirm-error"></div>
         </div>
     </div>
 </div>
