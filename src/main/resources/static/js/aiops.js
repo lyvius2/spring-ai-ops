@@ -10,6 +10,132 @@ let _appNames = [];
 // CSRF token embedded by the server at page load time
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+let _loggedIn = !!IS_LOGGED_IN;
+
+function openLoginModal() {
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-alert-error').style.display = 'none';
+    document.getElementById('login-submit-btn').disabled = false;
+    document.getElementById('login-submit-btn').textContent = 'Login';
+    document.getElementById('login-modal').style.display = 'flex';
+}
+
+function closeLoginModal() {
+    document.getElementById('login-modal').style.display = 'none';
+}
+
+async function submitLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const btn      = document.getElementById('login-submit-btn');
+    const errEl    = document.getElementById('login-alert-error');
+
+    if (!username || !password) {
+        errEl.textContent = 'Please enter username and password.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Logging in...';
+    errEl.style.display = 'none';
+
+    try {
+        const res  = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            _loggedIn = true;
+            closeLoginModal();
+            location.reload();
+        } else {
+            errEl.textContent = data.message || 'Login failed.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Login';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Login';
+    }
+}
+
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+        _loggedIn = false;
+        location.reload();
+    }
+}
+
+function openChangePasswordModal() {
+    document.getElementById('cp-current').value = '';
+    document.getElementById('cp-new').value = '';
+    document.getElementById('cp-confirm').value = '';
+    document.getElementById('cp-alert-success').style.display = 'none';
+    document.getElementById('cp-alert-error').style.display = 'none';
+    document.getElementById('cp-submit-btn').disabled = false;
+    document.getElementById('cp-submit-btn').textContent = 'Change Password';
+    document.getElementById('change-password-modal').style.display = 'flex';
+}
+
+function closeChangePasswordModal() {
+    document.getElementById('change-password-modal').style.display = 'none';
+}
+
+async function submitChangePassword() {
+    const currentPassword = document.getElementById('cp-current').value;
+    const newPassword     = document.getElementById('cp-new').value;
+    const confirmPassword = document.getElementById('cp-confirm').value;
+    const btn             = document.getElementById('cp-submit-btn');
+    const sucEl           = document.getElementById('cp-alert-success');
+    const errEl           = document.getElementById('cp-alert-error');
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    sucEl.style.display = 'none';
+    errEl.style.display = 'none';
+
+    try {
+        const res  = await fetch('/api/auth/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'admin', currentPassword, newPassword, confirmPassword }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            sucEl.style.display = 'block';
+            setTimeout(() => closeChangePasswordModal(), 1500);
+        } else {
+            errEl.textContent = data.message || 'Password change failed.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Change Password';
+        }
+    } catch (e) {
+        errEl.textContent = 'A network error occurred.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Change Password';
+    }
+}
+
+function showAuthRequiredMessage(errEl) {
+    errEl.textContent = 'Authentication is required. Please log in.';
+    errEl.style.display = 'block';
+}
+
 // ── LLM Status Fetch ──────────────────────────────────────────────────────────
 
 async function fetchLlmStatus() {
@@ -883,6 +1009,14 @@ async function saveApp() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, gitUrl, deployBranch }),
         });
+
+        if (res.status === 401) {
+            showAuthRequiredMessage(errEl);
+            btn.disabled = false;
+            btn.textContent = 'Add';
+            return;
+        }
+
         const data = await res.json();
 
         if (data.success) {
@@ -947,7 +1081,12 @@ async function confirmDeleteApp() {
     closeConfirmDeleteModal();
 
     try {
-        await fetch(`/api/apps/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const res = await fetch(`/api/apps/${encodeURIComponent(name)}`, { method: 'DELETE' });
+
+        if (res.status === 401) {
+            showToastNotification('Authentication is required. Please log in.', 'error');
+            return;
+        }
 
         const container = document.getElementById('app-list-container');
         const item = Array.from(container.querySelectorAll('.app-item'))
@@ -965,6 +1104,20 @@ async function confirmDeleteApp() {
     } catch (e) {
         // silent fail — list will be consistent on next reload
     }
+}
+
+function showToastNotification(message, type) {
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.className = `toast-notification toast-${type}`;
+    toast.style.display = 'block';
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => { toast.style.display = 'none'; }, 4000);
 }
 
 // ── Edit Application Modal ───────────────────────────────────────────────────
@@ -1029,6 +1182,14 @@ async function saveEditApp() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, gitUrl, deployBranch }),
         });
+
+        if (res.status === 401) {
+            showAuthRequiredMessage(errEl);
+            btn.disabled = false;
+            btn.textContent = 'Save';
+            return;
+        }
+
         const data = await res.json();
 
         if (data.success) {
@@ -2520,6 +2681,16 @@ async function submitRunAnalysis() {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
             body: JSON.stringify({ appName: selectedApp, branch }),
         });
+
+        if (res.status === 401) {
+            document.getElementById('run-analysis-form').style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Run Analysis';
+            showAuthRequiredMessage(errEl);
+            document.getElementById('run-analysis-modal').style.display = 'flex';
+            return;
+        }
+
         const data = await res.json();
 
         closeRunAnalysisModal();

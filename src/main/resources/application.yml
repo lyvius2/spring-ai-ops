@@ -44,6 +44,7 @@ spring:
       - org.springframework.ai.model.image.observation.autoconfigure.ImageObservationAutoConfiguration
       - org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration
       - org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
 
 feign:
   loki:

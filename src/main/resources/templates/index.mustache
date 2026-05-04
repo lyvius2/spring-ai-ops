@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{csrfToken}}">
+    <meta name="csrf-token" content="{{data.csrfToken}}">
     <title>Spring AI Ops</title>
     <link rel="stylesheet" href="/style/aiops.css">
     <link rel="stylesheet" href="/webjars/highlightjs/11.10.0/styles/atom-one-dark.min.css" />
@@ -15,20 +15,30 @@
 
 <!-- Server-rendered state exposed to JS -->
 <script>
-const LLM_CONFIGURED      = {{#configured}}true{{/configured}}{{^configured}}false{{/configured}};
-const CURRENT_LLM         = '{{currentLlm}}';
-const LLM_SELECT_PROVIDER = {{#selectProvider}}true{{/selectProvider}}{{^selectProvider}}false{{/selectProvider}};
-const LLM_PROVIDERS       = [{{#llmProviders}}{"key":"{{key}}","product":"{{product}}"},{{/llmProviders}}];
-const GIT_REMOTE_PROVIDERS = [{{#gitRemoteProviders}}{"name":"{{name}}","apiUrl":"{{apiUrl}}","domain":"{{domain}}"},{{/gitRemoteProviders}}];
-const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","displayName":"{{displayName}}","apiUrl":"{{apiUrl}}"},{{/observabilityProviders}}];
+const LLM_CONFIGURED      = {{#data.configured}}true{{/data.configured}}{{^data.configured}}false{{/data.configured}};
+const CURRENT_LLM         = '{{data.currentLlm}}';
+const LLM_SELECT_PROVIDER = {{#data.selectProvider}}true{{/data.selectProvider}}{{^data.selectProvider}}false{{/data.selectProvider}};
+const LLM_PROVIDERS       = [{{#data.llmProviders}}{"key":"{{key}}","product":"{{product}}"},{{/data.llmProviders}}];
+const GIT_REMOTE_PROVIDERS = [{{#data.gitRemoteProviders}}{"name":"{{name}}","apiUrl":"{{apiUrl}}","domain":"{{domain}}"},{{/data.gitRemoteProviders}}];
+const OBSERVABILITY_PROVIDERS = [{{#data.observabilityProviders}}{"name":"{{name}}","displayName":"{{displayName}}","apiUrl":"{{apiUrl}}"},{{/data.observabilityProviders}}];
+const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}false{{/data.loggedIn}};
 </script>
 
 <!-- ── Navbar ── -->
 <nav class="navbar">
     <div class="navbar-brand">
         Spring AI Ops
+        <span class="navbar-subtitle">AI-Powered Observability & Code Intelligence</span>
     </div>
-    <span class="navbar-subtitle">AI-Powered Observability & Code Intelligence</span>
+    <div class="navbar-auth">
+        {{^data.loggedIn}}
+        <button class="btn-navbar" onclick="openLoginModal()">Login</button>
+        {{/data.loggedIn}}
+        {{#data.loggedIn}}
+        <button class="btn-navbar btn-navbar-secondary" onclick="openChangePasswordModal()">Change Password</button>
+        <button class="btn-navbar" onclick="logout()">Logout</button>
+        {{/data.loggedIn}}
+    </div>
 </nav>
 
 <!-- ══ Modal 1: LLM Setup ══ -->
@@ -43,7 +53,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                 Select your LLM provider and enter an API key to get started.
             </p>
             <div class="radio-group" id="llm-provider-group">
-                {{#llmProviders}}
+                {{#data.llmProviders}}
                 <div class="radio-option">
                     <input type="radio" name="llm-provider" id="llm-{{key}}" value="{{key}}">
                     <label for="llm-{{key}}">
@@ -52,7 +62,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                     </label>
                     <div class="llm-key-badge" id="llm-key-badge-{{key}}" style="display:none;">&#10003; Key saved</div>
                 </div>
-                {{/llmProviders}}
+                {{/data.llmProviders}}
             </div>
             <div class="form-group">
                 <label class="form-label" for="llm-api-key">API Key</label>
@@ -87,7 +97,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                 Please select the LLM provider you want to use.
             </p>
             <div class="radio-group">
-                {{#llmProviders}}
+                {{#data.llmProviders}}
                 <div class="radio-option">
                     <input type="radio" name="select-provider" id="select-{{key}}" value="{{key}}">
                     <label for="select-{{key}}">
@@ -95,7 +105,7 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
                         <span style="text-transform:uppercase;">{{key}}</span>
                     </label>
                 </div>
-                {{/llmProviders}}
+                {{/data.llmProviders}}
             </div>
             <button class="btn-primary" id="select-provider-btn" onclick="submitSelectProvider()">Select</button>
             <div class="alert alert-error" id="select-provider-alert-error"></div>
@@ -328,25 +338,25 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
             <tbody>
                 <tr>
                     <td>Environment</td>
-                    <td>{{activeProfile}}</td>
+                    <td>{{data.activeProfile}}</td>
                 </tr>
                 <tr>
                     <td>LLM Provider</td>
                     <td id="status-llm-provider">
                         <div style="display:flex; align-items:center; justify-content:space-between;">
                             <div>
-                                {{#configured}}
-                                    <img src="/images/{{currentLlm}}.svg" class="provider-logo provider-logo-badge" alt="{{currentLlm}}">
-                                    <span class="badge badge-up">{{currentLlm}}</span>
+                                {{#data.configured}}
+                                    <img src="/images/{{data.currentLlm}}.svg" class="provider-logo provider-logo-badge" alt="{{data.currentLlm}}">
+                                    <span class="badge badge-up">{{data.currentLlm}}</span>
                                     <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
-                                {{/configured}}
-                                {{^configured}}
+                                {{/data.configured}}
+                                {{^data.configured}}
                                     <span style="color:#aaa;">—</span> <span class="badge badge-down">NOT CONFIGURED</span>
-                                {{/configured}}
+                                {{/data.configured}}
                             </div>
-                            {{#configured}}
+                            {{#data.configured}}
                                 <button class="btn-secondary" style="margin-top:0;" onclick="openLlmModal(true)">Reconfigure</button>
-                            {{/configured}}
+                            {{/data.configured}}
                         </div>
                     </td>
                 </tr>
@@ -383,6 +393,60 @@ const OBSERVABILITY_PROVIDERS = [{{#observabilityProviders}}{"name":"{{name}}","
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- ══ Modal: Login ══ -->
+<div id="login-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            Login
+            <button class="modal-close-btn" onclick="closeLoginModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label" for="login-username">Username</label>
+                <input type="text" id="login-username" class="form-input"
+                       placeholder="admin" autocomplete="username" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="login-password">Password</label>
+                <input type="password" id="login-password" class="form-input"
+                       placeholder="" autocomplete="current-password" />
+            </div>
+            <button class="btn-primary" id="login-submit-btn" onclick="submitLogin()">Login</button>
+            <div class="alert alert-error" id="login-alert-error"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Change Password ══ -->
+<div id="change-password-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            Change Password
+            <button class="modal-close-btn" onclick="closeChangePasswordModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label" for="cp-current">Current Password</label>
+                <input type="password" id="cp-current" class="form-input"
+                       placeholder="" autocomplete="current-password" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="cp-new">New Password</label>
+                <input type="password" id="cp-new" class="form-input"
+                       placeholder="" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="cp-confirm">Confirm New Password</label>
+                <input type="password" id="cp-confirm" class="form-input"
+                       placeholder="" autocomplete="new-password" />
+            </div>
+            <button class="btn-primary" id="cp-submit-btn" onclick="submitChangePassword()">Change Password</button>
+            <div class="alert alert-success" id="cp-alert-success">Password changed successfully.</div>
+            <div class="alert alert-error"   id="cp-alert-error"></div>
+        </div>
     </div>
 </div>
 

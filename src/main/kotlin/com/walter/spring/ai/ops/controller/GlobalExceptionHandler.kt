@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.controller
 
+import com.walter.spring.ai.ops.config.exception.UnauthorizedException
 import com.walter.spring.ai.ops.controller.dto.ErrorResponse
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpHeaders
@@ -12,6 +13,14 @@ import org.springframework.web.servlet.resource.NoResourceFoundException
 
 @ControllerAdvice
 class GlobalExceptionHandler {
+    @ExceptionHandler(UnauthorizedException::class)
+    fun handleUnauthorized(ex: UnauthorizedException, request: HttpServletRequest): ResponseEntity<Any> {
+        return ResponseEntity
+            .status(HttpStatus.UNAUTHORIZED)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(ErrorResponse(HttpStatus.UNAUTHORIZED.value(), ex.message ?: "Unauthorized", request.requestURI))
+    }
+
     @ExceptionHandler(NoResourceFoundException::class)
     fun handleNoResourceFound(ex: NoResourceFoundException, request: HttpServletRequest): ResponseEntity<Any> {
         val path = request.requestURI
