@@ -12,6 +12,7 @@
 ![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
 ![Prometheus](https://img.shields.io/badge/Prometheus-optional-E6522C?logo=prometheus&logoColor=white)
 ![Loki](https://img.shields.io/badge/Loki-logs-F46800?logo=grafana&logoColor=white)
+![Spring Security](https://img.shields.io/badge/Spring%20Security-enabled-6DB33F?logo=springsecurity&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 [한국어(Korean) 문서](README_KR.md)  
@@ -40,6 +41,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
   - [Setting Up Grafana](#setting-up-grafana)
   - [Setting Up GitHub Webhooks](#setting-up-github-webhooks)
   - [Setting Up GitLab Webhooks](#setting-up-gitlab-webhooks)
+- [Admin Authentication](#admin-authentication)
 - [API Reference](#api-reference)
 - [API Documentation (Swagger)](#api-documentation-swagger)
 - [Package Structure](#package-structure)
@@ -80,6 +82,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
 | **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 20 concurrent) |
+| **Admin Authentication** | Spring Security role-based access control — the `admin` super-account is auto-created on first startup with a one-time password printed to the console; only `admin` can create or delete other administrator accounts; App registration, update, deletion, and Code Risk Analysis require authentication |
 
 ---
 
@@ -312,6 +315,13 @@ POST /webhook/grafana[/{application}]
 
 ## Screenshots
 
+### Admin login required
+*Registering, updating, or deleting an application and running Static Code Risk Analysis all require an administrator account. On first startup, the `admin` super-account is created automatically and its initial password is displayed in the application log — look for a line beginning with `Admin account created`.*
+
+![Admin Account Initialize](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AdminInitialize.png?raw=true)
+
+---
+
 ### LLM API Key Configuration
 *Enter your LLM provider and API key through the UI. The model is activated immediately without restarting the application.*
 
@@ -334,7 +344,7 @@ POST /webhook/grafana[/{application}]
 ---
 
 ### Static Code Risk Analysis — Real-Time Progress
-*During Code Risk analysis, progress updates (cloning, chunk analysis, consolidation) are streamed to the dashboard in real time via WebSocket STOMP. You can monitor each stage without refreshing the page.*
+*During Code Risk analysis, progress updates (cloning, chunk analysis, consolidation) are streamed to the dashboard in real time via WebSocket STOMP. You can monitor each stage without refreshing the page. An administrator account login is required to initiate the analysis.*
 
 ![Static Code Risk Analysis Progress](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/Progress.png?raw=true)
 
@@ -614,6 +624,35 @@ Ensure your GitLab personal access token (configured in yml or via the UI) has `
 
 ---
 
+## Admin Authentication
+
+Spring AI Ops uses **Spring Security** to protect write operations. When no administrator account exists in Redis, the `admin` super-account is created automatically on application startup and its initial password is printed once to the log:
+
+```
+[AdminAccountService] Admin account created — username: admin, password: <generated-password>
+```
+
+> Store this password securely. It is printed only once at startup and cannot be recovered after the log is rotated.
+
+### Protected Operations
+
+| Operation | Authentication required |
+|---|---|
+| Register a new application | Yes |
+| Update application settings | Yes |
+| Delete an application | Yes |
+| Run Static Code Risk Analysis | Yes |
+| Read analysis results and dashboard | No |
+| Configure LLM / Loki / Prometheus / Git | No |
+
+### Account Management
+
+Administrator accounts are managed from the **Account Management** panel in the dashboard. Only the `admin` super-account can create or delete other administrator accounts.
+
+> The `admin` super-account itself cannot be deleted.
+
+---
+
 ## API Reference
 
 | Method | Path | Description |
@@ -750,6 +789,7 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
+| 2026-05-04 | Added role-based admin authentication via Spring Security — `admin` super-account is auto-created on first startup with a one-time password logged to the console; only `admin` can create or delete other administrator accounts; App registration, update, deletion, and Code Risk Analysis require authentication |
 | 2026-05-03 | Added DeepSeek as a supported LLM provider — uses the OpenAI-compatible API (`deepseek-v4-pro` default); configurable via `ai.deepseek.*` in application.yml or env vars `AI_DEEP_SEEK_API_KEY` / `AI_DEEP_SEEK_BASE_URL`. Multiple provider API keys can be saved independently via the UI and switched at runtime |
 | 2026-05-02 | Added Prometheus Application Metrics dashboard (`GET /api/prometheus/application-metrics`) — displays per-application JVM memory (used %, allocated MB, used MB), uptime, open-file count, CPU usage (system / process), average HTTP latency, and HTTP status breakdown (2xx / 4xx / 5xx) as time-series charts when `prometheus.url` is configured |
 | 2026-04-30 | Added optional persistent repository storage — registered repositories can be kept under `repository.local-path`, synchronized under a Redis lock, reused by Code Risk and Grafana source snippet flows, and cleaned up on app rename/delete |

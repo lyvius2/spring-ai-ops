@@ -12,6 +12,7 @@
 ![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
 ![Prometheus](https://img.shields.io/badge/Prometheus-optional-E6522C?logo=prometheus&logoColor=white)
 ![Loki](https://img.shields.io/badge/Loki-logs-F46800?logo=grafana&logoColor=white)
+![Spring Security](https://img.shields.io/badge/Spring%20Security-enabled-6DB33F?logo=springsecurity&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic, DeepSeek)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집합니다. 또한 등록된 애플리케이션 Git 저장소를 checkout하고, JVM stack trace와 관련된 소스 코드 snippet만 추출하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
@@ -38,6 +39,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
   - [Grafana 설정](#grafana-설정)
   - [GitHub Webhook 설정](#github-webhook-설정)
   - [GitLab Webhook 설정](#gitlab-webhook-설정)
+- [관리자 인증](#관리자-인증)
 - [API 레퍼런스](#api-레퍼런스)
 - [API 문서 (Swagger)](#api-문서-swagger)
 - [라이선스](#라이선스)
@@ -76,6 +78,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
 | **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
 | **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 20) |
+| **관리자 인증** | Spring Security 기반 접근 제어 — 처음 기동 시 관리자 계정이 없으면 `admin` 슈퍼 계정이 자동 생성되고 초기 비밀번호가 콘솔 로그에 한 번 출력됩니다. `admin` 계정만이 다른 관리자 계정을 생성·삭제할 수 있으며, 앱 등록·수정·삭제 및 Code Risk Analysis 실행에는 관리자 로그인이 필요합니다 |
 
 ---
 
@@ -296,6 +299,13 @@ POST /webhook/grafana[/{application}]
 
 ## 스크린샷
 
+### 관리자 로그인 필요
+*애플리케이션 등록·수정·삭제 및 Static Code Risk Analysis 실행에는 관리자 계정 인증이 필요합니다. 처음 기동 시 `admin` 슈퍼 계정이 자동으로 생성되며, 초기 비밀번호는 애플리케이션 로그에서 `Admin account created`로 시작하는 줄을 통해 확인할 수 있습니다.*
+
+![Admin Account Initialize](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/AdminInitialize.png?raw=true)
+
+---
+
 ### LLM API Key 설정
 *UI에서 LLM 제공자와 API 키를 입력합니다. 애플리케이션을 재시작하지 않아도 즉시 모델이 활성화됩니다.*
 
@@ -318,7 +328,7 @@ POST /webhook/grafana[/{application}]
 ---
 
 ### 정적 코드 위험 분석 - 실시간 진행
-*코드 위험 분석 중에는 클론, 청크 분석, 취합 등 각 단계의 진행 상황이 WebSocket STOMP를 통해 실시간으로 대시보드에 전달됩니다. 페이지를 새로고침하지 않아도 모든 진행 상황을 즉시 확인할 수 있습니다.*
+*코드 위험 분석 중에는 클론, 청크 분석, 취합 등 각 단계의 진행 상황이 WebSocket STOMP를 통해 실시간으로 대시보드에 전달됩니다. 페이지를 새로고침하지 않아도 모든 진행 상황을 즉시 확인할 수 있습니다. 분석 실행에는 관리자 계정 로그인이 필요합니다.*
 
 ![Static Code Risk Analysis Progress](https://github.com/lyvius2/spring-ai-ops/blob/main/docs/Progress.png?raw=true)
 
@@ -567,6 +577,35 @@ GitHub 액세스 토큰(yml 또는 UI에서 설정)은 `repo` read 스코프(클
 GitLab 액세스 토큰(yml 또는 UI에서 설정)은 `read_api` 스코프가 필요합니다. 셀프 호스팅 GitLab 인스턴스를 사용하는 경우 `gitlab.url`을 해당 인스턴스의 API 기본 URL(예: `https://gitlab.example.com/api/v4`)로 설정하세요.
 
 > **참고**: GitLab Webhook **Secret Token**은 현재 지원하지 않습니다. Webhook 설정 시 Secret Token 필드는 비워두세요.
+
+---
+
+## 관리자 인증
+
+Spring AI Ops는 **Spring Security**를 사용하여 쓰기 작업을 보호합니다. Redis에 관리자 계정이 없을 경우, 애플리케이션 시작 시 `admin` 슈퍼 계정이 자동으로 생성되고 초기 비밀번호가 로그에 한 번 출력됩니다:
+
+```
+[AdminAccountService] Admin account created — username: admin, password: <generated-password>
+```
+
+> 이 비밀번호는 최초 기동 시에만 출력됩니다. 로그가 초기화되면 복구할 수 없으니 안전한 곳에 보관하세요.
+
+### 인증이 필요한 작업
+
+| 작업 | 관리자 인증 필요 여부 |
+|---|---|
+| 애플리케이션 등록 | 필요 |
+| 애플리케이션 설정 변경 | 필요 |
+| 애플리케이션 삭제 | 필요 |
+| Static Code Risk Analysis 실행 | 필요 |
+| 분석 결과 조회 및 대시보드 열람 | 불필요 |
+| LLM / Loki / Prometheus / Git 설정 | 불필요 |
+
+### 계정 관리
+
+관리자 계정은 대시보드의 **Account Management** 패널에서 관리합니다. 다른 관리자 계정의 생성·삭제는 `admin` 슈퍼 계정만 가능합니다.
+
+> `admin` 슈퍼 계정 자체는 삭제할 수 없습니다.
 
 ---
 
