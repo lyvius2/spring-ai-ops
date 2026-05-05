@@ -36,7 +36,7 @@ class AdminService(
 
         val rawPassword = generateRandomPassword()
         val encoded = passwordEncoder.encode(rawPassword)
-        saveAdmins(listOf(Administrator("admin", encoded, Instant.now(), null)))
+        saveAdmins(listOf(Administrator("admin", encoded, Instant.now(), null, true)))
         log.info("==========================================================")
         log.info("  Admin account initialized.")
         log.info("  username : admin")
@@ -55,7 +55,7 @@ class AdminService(
         httpRequest.getSession(false)?.invalidate()
     }
 
-    fun createAuthenticatedSession(username: String, httpRequest: HttpServletRequest) {
+    fun createAuthenticatedSession(username: String, httpRequest: HttpServletRequest): Boolean {
         recordLogin(username)
         val auth = UsernamePasswordAuthenticationToken(
             username,
@@ -68,14 +68,23 @@ class AdminService(
 
         val session = httpRequest.getSession(true)
         session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context)
+        return isPasswordChangeRequired(username)
     }
 
     private fun recordLogin(username: String) {
         val now = Instant.now()
         val updated = getAdmins().map {
-            if (it.username() == username) Administrator(it.username(), it.password(), it.createdAt(), now) else it
+            if (it.username() == username) {
+                Administrator(it.username(), it.password(), it.createdAt(), now, it.passwordChangeRequired())
+            } else {
+                it
+            }
         }
         saveAdmins(updated)
+    }
+
+    private fun isPasswordChangeRequired(username: String): Boolean {
+        return getAdminByUsername(username)?.passwordChangeRequired() == true
     }
 
     fun changePassword(username: String, currentRaw: String, newRaw: String, confirmRaw: String) {
@@ -89,7 +98,7 @@ class AdminService(
 
         val updated = admins.map {
             if (it.username() == username)
-                Administrator(username, passwordEncoder.encode(newRaw), it.createdAt(), it.lastLoginAt())
+                Administrator(username, passwordEncoder.encode(newRaw), it.createdAt(), it.lastLoginAt(), false)
             else it
         }
         saveAdmins(updated)
@@ -115,7 +124,7 @@ class AdminService(
         val admins = getAdmins()
         require(admins.none { it.username() == username }) { "Username '$username' is already taken." }
 
-        saveAdmins(admins + Administrator(username, passwordEncoder.encode(rawPassword), Instant.now(), null))
+        saveAdmins(admins + Administrator(username, passwordEncoder.encode(rawPassword), Instant.now(), null, false))
     }
 
     fun validatePasswordComplexity(password: String) {

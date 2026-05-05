@@ -66,7 +66,7 @@ class AdminServiceTest {
     @DisplayName("Redis에 관리자 정보가 이미 있으면 초기화를 건너뛴다")
     fun givenAdminAlreadyInRedis_whenInitializeAdminIfAbsent_thenSkips() {
         // given
-        val existing = objectMapper.writeValueAsString(Administrator("admin", "encoded", null, null))
+        val existing = objectMapper.writeValueAsString(Administrator("admin", "encoded", null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(existing)
 
@@ -88,7 +88,7 @@ class AdminServiceTest {
         // given
         val rawPassword = "Test@1234"
         val encoded = passwordEncoder.encode(rawPassword)
-        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null))
+        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -104,7 +104,7 @@ class AdminServiceTest {
     fun givenWrongPassword_whenAuthenticate_thenReturnsFalse() {
         // given
         val encoded = passwordEncoder.encode("Test@1234")
-        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null))
+        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -121,7 +121,7 @@ class AdminServiceTest {
         // given
         val rawPassword = "Test@1234"
         val encoded = passwordEncoder.encode(rawPassword)
-        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null))
+        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -154,7 +154,7 @@ class AdminServiceTest {
         // given
         val oldPassword = "OldPass@1"
         val encoded = passwordEncoder.encode(oldPassword)
-        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null))
+        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -182,7 +182,7 @@ class AdminServiceTest {
     fun givenWrongCurrentPassword_whenChangePassword_thenThrowsException() {
         // given
         val encoded = passwordEncoder.encode("OldPass@1")
-        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null))
+        val json = objectMapper.writeValueAsString(Administrator("admin", encoded, null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -247,7 +247,7 @@ class AdminServiceTest {
     @DisplayName("username에 해당하는 관리자가 있으면 반환한다")
     fun givenExistingUsername_whenGetAdminByUsername_thenReturnsAdministrator() {
         // given
-        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null)))
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -263,7 +263,7 @@ class AdminServiceTest {
     @DisplayName("username에 해당하는 관리자가 없으면 null을 반환한다")
     fun givenUnknownUsername_whenGetAdminByUsername_thenReturnsNull() {
         // given
-        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null)))
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -323,7 +323,7 @@ class AdminServiceTest {
     @DisplayName("리스트 형식 JSON이 저장된 경우 파싱하여 반환한다")
     fun givenListJson_whenGetAdmins_thenReturnsList() {
         // given
-        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null)))
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -339,7 +339,7 @@ class AdminServiceTest {
     @DisplayName("구 단일 객체 형식 JSON이 저장된 경우 backward compat으로 리스트로 반환한다")
     fun givenLegacySingleObjectJson_whenGetAdmins_thenWrapsInList() {
         // given
-        val json = objectMapper.writeValueAsString(Administrator("admin", "encoded", null, null))
+        val json = objectMapper.writeValueAsString(Administrator("admin", "encoded", null, null, false))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -372,7 +372,7 @@ class AdminServiceTest {
     fun givenAdminList_whenGetAdminDetails_thenReturnsDetails() {
         // given
         val now = java.time.Instant.now()
-        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc1", now, now), Administrator("operator", "enc2", now, null)))
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc1", now, now, false), Administrator("operator", "enc2", now, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -391,7 +391,7 @@ class AdminServiceTest {
     @DisplayName("선택된 계정이 삭제된다")
     fun givenExistingUsername_whenRemoveAdmins_thenRemovesThem() {
         // given
-        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc1", null, null), Administrator("operator", "enc2", null, null)))
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc1", null, null, false), Administrator("operator", "enc2", null, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
 
@@ -426,7 +426,7 @@ class AdminServiceTest {
     @DisplayName("유효한 조건이면 새 admin 계정이 저장된다")
     fun givenValidInput_whenCreateAdmin_thenSavesNewAdmin() {
         // given
-        val existingJson = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null)))
+        val existingJson = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(existingJson)
 
@@ -441,7 +441,7 @@ class AdminServiceTest {
     @DisplayName("이미 존재하는 username으로는 계정 생성이 불가하다")
     fun givenDuplicateUsername_whenCreateAdmin_thenThrowsException() {
         // given
-        val existingJson = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null)))
+        val existingJson = objectMapper.writeValueAsString(listOf(Administrator("admin", "encoded", null, null, false)))
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(existingJson)
 
@@ -469,6 +469,26 @@ class AdminServiceTest {
         }
     }
 
+    @Test
+    @DisplayName("비밀번호 변경 후 passwordChangeRequired가 false로 저장된다")
+    fun givenPasswordChangeRequired_whenChangePassword_thenClearsFlag() {
+        // given
+        val oldPassword = "OldPass@1"
+        val encoded = passwordEncoder.encode(oldPassword)
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", encoded, null, null, true)))
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
+
+        // when
+        adminService.changePassword("admin", oldPassword, "NewPass@2", "NewPass@2")
+
+        // then — capture and verify the saved JSON has passwordChangeRequired=false
+        val captor = org.mockito.ArgumentCaptor.forClass(String::class.java)
+        verify(valueOperations).set(eq(REDIS_KEY_ADMINISTRATORS), captor.capture())
+        val saved = objectMapper.readValue(captor.value, object : com.fasterxml.jackson.core.type.TypeReference<List<Administrator>>() {})
+        assertThat(saved[0].passwordChangeRequired()).isFalse()
+    }
+
     // ── createAuthenticatedSession ────────────────────────────────────────────
 
     @Test
@@ -478,6 +498,8 @@ class AdminServiceTest {
         val mockRequest = org.mockito.Mockito.mock(HttpServletRequest::class.java)
         val mockSession = org.mockito.Mockito.mock(HttpSession::class.java)
         `when`(mockRequest.getSession(true)).thenReturn(mockSession)
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(null)
         SecurityContextHolder.clearContext()
 
         // when

@@ -13,6 +13,7 @@ const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribu
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 let _loggedIn = !!IS_LOGGED_IN;
+let _forcePasswordChange = false;
 
 function openLoginModal() {
     document.getElementById('login-username').value = '';
@@ -54,7 +55,11 @@ async function submitLogin() {
         if (data.success) {
             _loggedIn = true;
             closeLoginModal();
-            location.reload();
+            if (data.requirePasswordChange) {
+                openForcedPasswordChangeModal();
+            } else {
+                location.reload();
+            }
         } else {
             errEl.textContent = data.message || 'Login failed.';
             errEl.style.display = 'block';
@@ -328,6 +333,25 @@ async function submitCreateAdmin() {
 }
 
 function openChangePasswordModal() {
+    _forcePasswordChange = false;
+    document.getElementById('cp-modal-title').textContent = 'Change Password';
+    document.getElementById('cp-modal-close-btn').style.display = '';
+    document.getElementById('cp-force-notice').style.display = 'none';
+    document.getElementById('cp-current').value = '';
+    document.getElementById('cp-new').value = '';
+    document.getElementById('cp-confirm').value = '';
+    document.getElementById('cp-alert-success').style.display = 'none';
+    document.getElementById('cp-alert-error').style.display = 'none';
+    document.getElementById('cp-submit-btn').disabled = false;
+    document.getElementById('cp-submit-btn').textContent = 'Change Password';
+    document.getElementById('change-password-modal').style.display = 'flex';
+}
+
+function openForcedPasswordChangeModal() {
+    _forcePasswordChange = true;
+    document.getElementById('cp-modal-title').textContent = 'Password Change Required';
+    document.getElementById('cp-modal-close-btn').style.display = 'none';
+    document.getElementById('cp-force-notice').style.display = 'block';
     document.getElementById('cp-current').value = '';
     document.getElementById('cp-new').value = '';
     document.getElementById('cp-confirm').value = '';
@@ -339,6 +363,7 @@ function openChangePasswordModal() {
 }
 
 function closeChangePasswordModal() {
+    if (_forcePasswordChange) return;
     document.getElementById('change-password-modal').style.display = 'none';
 }
 
@@ -359,13 +384,17 @@ async function submitChangePassword() {
         const res  = await fetch('/api/auth/password', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'admin', currentPassword, newPassword, confirmPassword }),
+            body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
         });
         const data = await res.json();
 
         if (data.success) {
             sucEl.style.display = 'block';
-            setTimeout(() => closeChangePasswordModal(), 1500);
+            if (_forcePasswordChange) {
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                setTimeout(() => closeChangePasswordModal(), 1500);
+            }
         } else {
             errEl.textContent = data.message || 'Password change failed.';
             errEl.style.display = 'block';

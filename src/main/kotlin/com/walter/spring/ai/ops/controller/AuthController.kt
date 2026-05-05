@@ -11,6 +11,7 @@ import com.walter.spring.ai.ops.controller.dto.RemoveAdminsRequest
 import com.walter.spring.ai.ops.controller.dto.RemoveAdminsResponse
 import com.walter.spring.ai.ops.service.AdminService
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -28,8 +29,7 @@ class AuthController(
         if (!adminService.authenticate(request.username, request.password)) {
             return LoginResponse.loginFailure()
         }
-        adminService.createAuthenticatedSession(request.username, httpRequest)
-        return LoginResponse.loginSuccess()
+        return LoginResponse.loginSuccess(adminService.createAuthenticatedSession(request.username, httpRequest))
     }
 
     @PostMapping("/logout")
@@ -40,8 +40,10 @@ class AuthController(
 
     @PostMapping("/password")
     fun changePassword(@RequestBody request: ChangePasswordRequest): ChangePasswordResponse {
+        val username = SecurityContextHolder.getContext().authentication?.name
+            ?: return ChangePasswordResponse.changePasswordFailure(IllegalStateException("Not authenticated."))
         return try {
-            adminService.changePassword(request.username, request.currentPassword, request.newPassword, request.confirmPassword)
+            adminService.changePassword(username, request.currentPassword, request.newPassword, request.confirmPassword)
             ChangePasswordResponse.changePasswordSuccess()
         } catch (e: IllegalArgumentException) {
             ChangePasswordResponse.changePasswordFailure(e)

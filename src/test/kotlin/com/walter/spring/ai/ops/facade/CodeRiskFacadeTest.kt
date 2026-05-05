@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
@@ -71,7 +72,7 @@ class CodeRiskFacadeTest {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private fun makeRecord(appName: String = "my-app", url: String = githubUrl, success: Boolean = true): CodeRiskRecord =
-        CodeRiskRecord(LocalDateTime.now(), appName, url, "main", success, "## Summary", emptyList())
+        CodeRiskRecord(LocalDateTime.now(), appName, url, "main", null, success, "## Summary", emptyList())
 
     /**
      * Stubs the full single-call happy path.
@@ -95,7 +96,7 @@ class CodeRiskFacadeTest {
         `when`(aiModelService.estimateTokenCount("bundle")).thenReturn(tokenCount)
         `when`(aiModelService.executeAnalyzeCodeRisk("bundle")).thenReturn(rawResponse)
         // Use anyString()/anyList() — both @NotNull in Mockito, safe with Kotlin non-null params
-        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList()))
+        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList(), org.mockito.ArgumentMatchers.nullable(String::class.java)))
             .thenReturn(returnRecord)
     }
 
@@ -108,7 +109,7 @@ class CodeRiskFacadeTest {
         stubSingleCallHappyPath(tokenCount = 1000)
 
         // when
-        facade.analyze("my-app", "main")
+        facade.analyze("my-app", "main", null)
 
         // then
         verify(aiModelService).executeAnalyzeCodeRisk("bundle")
@@ -123,7 +124,7 @@ class CodeRiskFacadeTest {
         stubSingleCallHappyPath(returnRecord = record)
 
         // when
-        facade.analyze("my-app", "main")
+        facade.analyze("my-app", "main", null)
 
         // then
         verify(messageService).pushAnalysisResult(record)
@@ -137,7 +138,7 @@ class CodeRiskFacadeTest {
         stubSingleCallHappyPath(gitUrl = githubUrl)
 
         // when
-        facade.analyze("my-app", "main")
+        facade.analyze("my-app", "main", null)
 
         // then
         verify(githubService).getToken()
@@ -151,7 +152,7 @@ class CodeRiskFacadeTest {
         stubSingleCallHappyPath(gitUrl = gitlabUrl, returnRecord = makeRecord("my-app", gitlabUrl))
 
         // when
-        facade.analyze("my-app", "main")
+        facade.analyze("my-app", "main", null)
 
         // then
         verify(gitlabService).getToken()
@@ -168,7 +169,7 @@ class CodeRiskFacadeTest {
             .thenThrow(RuntimeException("Repository preparation failed"))
 
         // when / then
-        assertThatThrownBy { facade.analyze("my-app", "main") }
+        assertThatThrownBy { facade.analyze("my-app", "main", null) }
             .isInstanceOf(RuntimeException::class.java)
             .hasMessage("Repository preparation failed")
     }
@@ -182,11 +183,11 @@ class CodeRiskFacadeTest {
             .thenThrow(RuntimeException("LLM unavailable"))
 
         // when
-        facade.analyze("my-app", "main")
+        facade.analyze("my-app", "main", null)
 
         // then
         verify(repositoryService, Mockito.never()).saveAnalyzedResult(
-            anyString(), anyString(), anyString(), anyString(), anyList()
+            anyString(), anyString(), anyString(), anyString(), anyList(), org.mockito.ArgumentMatchers.nullable(String::class.java)
         )
     }
 
@@ -211,11 +212,11 @@ class CodeRiskFacadeTest {
         `when`(aiModelService.executeAnalyzeCodeRisk("bundle-chunk")).thenReturn("## Chunk")
         `when`(aiModelService.executeFinalAnalyzeCode(listOf("## Chunk"))).thenReturn("## Final")
         val record = makeRecord()
-        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList()))
+        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList(), ArgumentMatchers.nullable(String::class.java)))
             .thenReturn(record)
 
         // when
-        facade.analyze("my-app", "main")
+        facade.analyze("my-app", "main", null)
 
         // then
         verify(messageService).pushAnalysisResult(record)

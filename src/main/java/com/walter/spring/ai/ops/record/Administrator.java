@@ -8,5 +8,6 @@ public record Administrator(
     String username,
     String password,
     Instant createdAt,
-    Instant lastLoginAt
+    Instant lastLoginAt,
+    Boolean passwordChangeRequired
 ) { }
