@@ -40,23 +40,23 @@ class CodeRiskFacade(
         private const val ISSUES_END   = "---ISSUES_JSON_END---"
     }
 
-    fun analyze(appName: String, branch: String) {
+    fun analyze(appName: String, branch: String, requestedBy: String?) {
         val gitRepoUrl = applicationService.getGitRepoByAppName(appName)
         val accessToken = resolveAccessToken(gitRepoUrl)
         val sourcePath = repositoryService.prepareRepository(appName, gitRepoUrl, branch, accessToken)
         val files = repositoryService.collectSourceFiles(sourcePath)
         val bundle = repositoryService.buildBundle(sourcePath, files)
         val tokenCount = aiModelService.estimateTokenCount(bundle)
-        log.info("Code risk analysis started — app: {}, estimated tokens: {}", appName, tokenCount)
+        log.info("Code risk analysis started — app: {}, requested by: {}, estimated tokens: {}", appName, requestedBy, tokenCount)
 
         CompletableFuture.runAsync( {
             val (markdown, issues) = executeAnalyze(tokenCount, bundle, files, sourcePath)
             messageService.pushAnalysisStatus("Analysis complete. Saving results...")
-            val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues)
+            val record = repositoryService.saveAnalyzedResult(appName, gitRepoUrl, branch, markdown, issues, requestedBy)
             messageService.pushAnalysisResult(record)
         }, executor).exceptionally { ex ->
             log.error("Code risk analysis failed for app: {}, error: {}", appName, ex.message)
-            messageService.pushAnalysisResult(CodeRiskRecord.failure(appName, gitRepoUrl, branch, ex.message))
+            messageService.pushAnalysisResult(CodeRiskRecord.failure(appName, gitRepoUrl, branch, requestedBy, ex.message))
             null
         }
     }

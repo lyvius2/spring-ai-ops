@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.record;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -8,6 +9,7 @@ import java.util.List;
 
 @Schema(description = "Code risk analysis record persisted after LLM static analysis")
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record CodeRiskRecord(
     @Schema(description = "Timestamp when the analysis was performed")
     LocalDateTime analyzedAt,
@@ -17,6 +19,8 @@ public record CodeRiskRecord(
     String githubUrl,
     @Schema(description = "Branch that was analysed", example = "main")
     String branch,
+    @Schema(description = "Account that requested the analysis", nullable = true)
+    String requestedBy,
     @Schema(description = "Code risk analysis success status")
     Boolean isSuccess,
     @Schema(description = "LLM-generated overall analysis summary in Markdown")
@@ -24,7 +28,7 @@ public record CodeRiskRecord(
     @Schema(description = "List of individual risk issues extracted from the analysis", nullable = true)
     List<CodeRiskIssue> issues
 ) {
-    public static CodeRiskRecord failure(String application, String githubUrl, String branch, String resultMessage) {
-        return new CodeRiskRecord(LocalDateTime.now(), application, githubUrl, branch, false, resultMessage, null);
+    public static CodeRiskRecord failure(String application, String githubUrl, String branch, String requestedBy, String resultMessage) {
+        return new CodeRiskRecord(LocalDateTime.now(), application, githubUrl, branch, requestedBy, false, resultMessage, null);
     }
 }

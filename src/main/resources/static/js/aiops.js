@@ -2682,13 +2682,14 @@ function renderCodeRiskHistoryRows(appName) {
     const list        = appCodeRiskLists[appName] || [];
     const selectedIdx = appSelectedRiskIdx[appName] ?? 0;
     if (list.length === 0) {
-        return `<tr><td colspan="4" style="padding:14px;color:#999;text-align:center;">No analysis records yet.</td></tr>`;
+        return `<tr><td colspan="5" style="padding:14px;color:#999;text-align:center;">No analysis records yet.</td></tr>`;
     }
     return list.map((rec, idx) =>
         `<tr class="${idx === selectedIdx ? 'active' : ''}" data-idx="${idx}">
             <td>${idx + 1}</td>
             <td>${escHtml(rec.branch || 'default')}</td>
             <td>${rec.issues?.length ?? '—'}</td>
+            <td>${escHtml(rec.requestedBy || '—')}</td>
             <td>${formatOccupiedAt(rec.analyzedAt)}</td>
         </tr>`
     ).join('');
@@ -2864,7 +2865,7 @@ function renderCodeRiskContent(appName) {
         <div class="analysis-layer">
             <div class="layer-header">Analysis History</div>
             <table class="code-risk-history-table">
-                <thead><tr><th>#</th><th>Branch</th><th>Issues</th><th>Analyzed At</th></tr></thead>
+                <thead><tr><th>#</th><th>Branch</th><th>Issues</th><th>Requested By</th><th>Analyzed At</th></tr></thead>
                 <tbody id="code-risk-history-body">${renderCodeRiskHistoryRows(appName)}</tbody>
             </table>
         </div>

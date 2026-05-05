@@ -7,6 +7,7 @@ import com.walter.spring.ai.ops.facade.CodeRiskFacade
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -36,7 +37,8 @@ class CodeRiskController(
     @PostMapping
     fun analyzeCodeRisk(@RequestBody request: CodeRiskRequest): CodeRiskResponse {
         return try {
-            codeRiskFacade.analyze(request.appName, request.branch)
+            val requestedBy = SecurityContextHolder.getContext().authentication?.name
+            codeRiskFacade.analyze(request.appName, request.branch, requestedBy)
             CodeRiskResponse.success()
         } catch (e: Exception) {
             CodeRiskResponse.failure(e)
