@@ -1498,6 +1498,7 @@ const appSelectedCommitIdx = {};   // { appName: number }
 const appCodeRiskLists     = {};   // { appName: CodeRiskRecord[] }       newest-first
 const appSelectedRiskIdx   = {};   // { appName: number }
 const appRiskFilePage      = {};   // { appName: number }  current file-page (0-based)
+const appCommitFilePage    = {};   // { appName: number }  current changed-file-page (0-based)
 let stompClient = null;
 
 // ── Analysis Running Indicator ────────────────────────────────────────────────
@@ -1654,6 +1655,7 @@ async function handleCommitRecord(record) {
     // Fetch the latest list from the API, then render.
     await loadCommitList(appName);
     appSelectedCommitIdx[appName] = 0;
+    appCommitFilePage[appName] = 0;
 
     // Always show notification
     showCommitNotification(appName);
@@ -2198,15 +2200,23 @@ function renderCommitUrlSection(record) {
         </div>`;
 }
 
-function renderChangedFilesSection(record) {
+const COMMIT_FILE_PAGE_SIZE = 10;
+
+function renderChangedFilesSection(record, appName) {
     if (!record || !record.changedFiles || record.changedFiles.length === 0) return '';
-    const rows = record.changedFiles.map((file, idx) => {
+    const totalFiles  = record.changedFiles.length;
+    const totalPages  = Math.ceil(totalFiles / COMMIT_FILE_PAGE_SIZE);
+    const currentPage = Math.min(appCommitFilePage[appName] ?? 0, Math.max(totalPages - 1, 0));
+    const pageStart   = currentPage * COMMIT_FILE_PAGE_SIZE;
+    const pageFiles   = record.changedFiles.slice(pageStart, pageStart + COMMIT_FILE_PAGE_SIZE);
+
+    const rows = pageFiles.map((file, idx) => {
         const label = fileStatusLabel(file.status);
         const cls   = fileStatusClass(file.status);
         const stats = `<span class="diff-stat-add">+${file.additions}</span>&nbsp;<span class="diff-stat-remove">-${file.deletions}</span>`;
         const diff  = renderDiffPatch(file.patch);
         return `
-            <div class="file-row" data-file-idx="${idx}">
+            <div class="file-row" data-file-idx="${pageStart + idx}">
                 <div class="file-row-header" onclick="toggleFileDiff(this)">
                     <span class="file-row-expand">▶</span>
                     <span class="file-row-name">${escHtml(file.filename || '')}</span>
@@ -2218,10 +2228,19 @@ function renderChangedFilesSection(record) {
                 </div>
             </div>`;
     }).join('');
+
+    const paginationHtml = totalPages > 1 ? `
+        <div class="risk-file-pagination">
+            <button class="risk-page-btn commit-file-page-btn" data-app="${escHtml(appName)}" data-page="${currentPage - 1}" ${currentPage === 0 ? 'disabled' : ''}>&#8249;</button>
+            <span class="risk-page-info">${pageStart + 1}–${Math.min(pageStart + COMMIT_FILE_PAGE_SIZE, totalFiles)} / ${totalFiles} files</span>
+            <button class="risk-page-btn commit-file-page-btn" data-app="${escHtml(appName)}" data-page="${currentPage + 1}" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>&#8250;</button>
+        </div>` : '';
+
     return `
         <div class="changed-files-section">
-            <div class="layer-header">Changed Files (${record.changedFiles.length})</div>
+            <div class="layer-header">Changed Files (${totalFiles})</div>
             <div class="file-list">${rows}</div>
+            ${paginationHtml}
         </div>`;
 }
 
@@ -2277,13 +2296,14 @@ function buildCodeReviewHtml(appName) {
     const idx    = appSelectedCommitIdx[appName] ?? 0;
     const record = list[idx] || null;
     const layers = record
-        ? renderCommitUrlSection(record) + renderChangedFilesSection(record) + renderCodeReviewSection(record)
+        ? renderCommitUrlSection(record) + renderChangedFilesSection(record, appName) + renderCodeReviewSection(record)
         : `<div class="info-message">Please register <code>/webhook/git/${escHtml(appName)}</code> as the Webhook URL triggered on push events in your GitHub/GitLab Repository.</div>`;
     return layers + renderCommitListSection(appName);
 }
 
 function selectCommitRecord(appName, idx) {
     appSelectedCommitIdx[appName] = idx;
+    appCommitFilePage[appName] = 0;
     const content = document.getElementById('codereview-content');
     if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
 }
@@ -2468,6 +2488,13 @@ document.addEventListener('click', async function (e) {
     const sourceSuggestionLink = e.target.closest('.source-suggestion-link[data-suggestion-idx]');
     if (sourceSuggestionLink) {
         openSourceSuggestionModal(parseInt(sourceSuggestionLink.dataset.suggestionIdx, 10));
+        return;
+    }
+
+    // Changed files pagination — checked before risk-page-btn (shares the style class)
+    const commitFilePageBtn = e.target.closest('.commit-file-page-btn[data-app]');
+    if (commitFilePageBtn && !commitFilePageBtn.disabled) {
+        goToCommitFilePage(commitFilePageBtn.dataset.app, parseInt(commitFilePageBtn.dataset.page, 10));
         return;
     }
 
@@ -2829,6 +2856,12 @@ function renderRiskIssuesSection(issues, appName) {
 function goToRiskFilePage(appName, page) {
     appRiskFilePage[appName] = page;
     renderCodeRiskContent(appName);
+}
+
+function goToCommitFilePage(appName, page) {
+    appCommitFilePage[appName] = page;
+    const content = document.getElementById('codereview-content');
+    if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
 }
 
 function renderCodeRiskContent(appName) {
