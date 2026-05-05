@@ -39,11 +39,12 @@ class AuthController(
     }
 
     @PostMapping("/password")
-    fun changePassword(@RequestBody request: ChangePasswordRequest): ChangePasswordResponse {
+    fun changePassword(@RequestBody request: ChangePasswordRequest, httpRequest: HttpServletRequest): ChangePasswordResponse {
         val username = SecurityContextHolder.getContext().authentication?.name
             ?: return ChangePasswordResponse.changePasswordFailure(IllegalStateException("Not authenticated."))
         return try {
             adminService.changePassword(username, request.currentPassword, request.newPassword, request.confirmPassword)
+            httpRequest.changeSessionId()
             ChangePasswordResponse.changePasswordSuccess()
         } catch (e: IllegalArgumentException) {
             ChangePasswordResponse.changePasswordFailure(e)

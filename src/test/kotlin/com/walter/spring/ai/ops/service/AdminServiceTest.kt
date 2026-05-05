@@ -489,6 +489,56 @@ class AdminServiceTest {
         assertThat(saved[0].passwordChangeRequired()).isFalse()
     }
 
+    // ── isPasswordChangeRequired ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("passwordChangeRequired가 true이면 true를 반환한다")
+    fun givenPasswordChangeRequiredTrue_whenIsPasswordChangeRequired_thenReturnsTrue() {
+        // given
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc", null, null, true)))
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
+
+        // when / then
+        assertThat(adminService.isPasswordChangeRequired("admin")).isTrue()
+    }
+
+    @Test
+    @DisplayName("passwordChangeRequired가 false이면 false를 반환한다")
+    fun givenPasswordChangeRequiredFalse_whenIsPasswordChangeRequired_thenReturnsFalse() {
+        // given
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc", null, null, false)))
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
+
+        // when / then
+        assertThat(adminService.isPasswordChangeRequired("admin")).isFalse()
+    }
+
+    @Test
+    @DisplayName("passwordChangeRequired가 null이면 false를 반환한다")
+    fun givenPasswordChangeRequiredNull_whenIsPasswordChangeRequired_thenReturnsFalse() {
+        // given
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc", null, null, null)))
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
+
+        // when / then
+        assertThat(adminService.isPasswordChangeRequired("admin")).isFalse()
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 username이면 false를 반환한다")
+    fun givenUnknownUsername_whenIsPasswordChangeRequired_thenReturnsFalse() {
+        // given
+        val json = objectMapper.writeValueAsString(listOf(Administrator("admin", "enc", null, null, true)))
+        `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
+        `when`(valueOperations.get(REDIS_KEY_ADMINISTRATORS)).thenReturn(json)
+
+        // when / then
+        assertThat(adminService.isPasswordChangeRequired("unknown")).isFalse()
+    }
+
     // ── createAuthenticatedSession ────────────────────────────────────────────
 
     @Test

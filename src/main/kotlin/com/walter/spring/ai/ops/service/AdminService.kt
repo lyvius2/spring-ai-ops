@@ -83,7 +83,7 @@ class AdminService(
         saveAdmins(updated)
     }
 
-    private fun isPasswordChangeRequired(username: String): Boolean {
+    fun isPasswordChangeRequired(username: String): Boolean {
         return getAdminByUsername(username)?.passwordChangeRequired() == true
     }
 

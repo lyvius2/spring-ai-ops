@@ -8,9 +8,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 class WebMvcConfig(
     private val csrfTokenInterceptor: CsrfTokenInterceptor,
     private val authenticationInterceptor: AuthenticationInterceptor,
+    private val passwordChangeRequiredInterceptor: PasswordChangeRequiredInterceptor,
 ) : WebMvcConfigurer {
 
     override fun addInterceptors(registry: InterceptorRegistry) {
+        registry.addInterceptor(passwordChangeRequiredInterceptor)
+            .addPathPatterns("/api/**")
         registry.addInterceptor(authenticationInterceptor)
             .addPathPatterns("/api/**")
         registry.addInterceptor(csrfTokenInterceptor)
