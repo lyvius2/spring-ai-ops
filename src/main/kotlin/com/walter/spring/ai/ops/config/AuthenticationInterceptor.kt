@@ -25,13 +25,27 @@ class AuthenticationInterceptor : HandlerInterceptor {
 
     private fun requiresAuthentication(request: HttpServletRequest): Boolean {
         val method = request.method
-        val path   = request.requestURI
-        return (method == "POST"   && path == "/api/apps")
-            || (method == "PUT"    && path.startsWith("/api/apps/"))
-            || (method == "DELETE" && path.startsWith("/api/apps/"))
-            || (method == "POST"   && path == "/api/code-risk")
-            || (method == "POST"   && path == "/api/auth/admin")
-            || (method == "GET"    && path == "/api/auth/admins")
-            || (method == "DELETE" && path == "/api/auth/admins")
+        val path = request.requestURI
+        return PROTECTED_ROUTES.any { (m, p, exact) ->
+            method == m && if (exact) path == p else path.startsWith(p)
+        }
+    }
+
+    companion object {
+        private data class Route(val method: String, val path: String, val exact: Boolean = true)
+        private val PROTECTED_ROUTES = listOf(
+            Route("POST", "/api/apps"),
+            Route("PUT", "/api/apps/", exact = false),
+            Route("DELETE", "/api/apps/", exact = false),
+            Route("POST", "/api/code-risk"),
+            Route("POST", "/api/auth/admin"),
+            Route("GET", "/api/auth/admins"),
+            Route("DELETE", "/api/auth/admins"),
+            Route("POST", "/api/loki/config"),
+            Route("POST", "/api/prometheus/config"),
+            Route("POST", "/api/github/config"),
+            Route("POST", "/api/llm/config"),
+            Route("POST", "/api/llm/select-provider"),
+        )
     }
 }
