@@ -7,6 +7,7 @@
 ![OpenAI](https://img.shields.io/badge/OpenAI-supported-412991?logo=openai&logoColor=white)
 ![Anthropic](https://img.shields.io/badge/Anthropic-supported-191919)
 ![DeepSeek](https://img.shields.io/badge/DeepSeek-supported-4D6BFE)
+![EXAONE](https://img.shields.io/badge/EXAONE-supported-A50034)
 ![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F)
 ![Redis](https://img.shields.io/badge/Redis-enabled-DC382D?logo=redis&logoColor=white)
 ![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
@@ -15,7 +16,7 @@
 ![Spring Security](https://img.shields.io/badge/Spring%20Security-enabled-6DB33F?logo=springsecurity&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic, DeepSeek)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집합니다. 또한 등록된 애플리케이션 Git 저장소를 checkout하고, JVM stack trace와 관련된 소스 코드 snippet만 추출하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
+AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab** 웹훅을 수신하여 LLM(OpenAI, Anthropic, DeepSeek, EXAONE via FriendliAI)으로 오류 분석, 코드 리뷰, 정적 코드 위험 분석을 실시간으로 수행합니다. Grafana 알림 분석 시에는 Loki 로그를 조회하고, Prometheus URL이 설정되어 있으면 같은 알림 시간 구간의 Prometheus 메트릭도 함께 수집합니다. 또한 등록된 애플리케이션 Git 저장소를 checkout하고, JVM stack trace와 관련된 소스 코드 snippet만 추출하여 LLM에 전달합니다. 결과는 WebSocket 기반 라이브 대시보드로 전달됩니다.
 
 ---
 
@@ -74,7 +75,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 | **소스 수정 권고안** | 장애 분석 결과에 구조화된 소스 수정 권고안(`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) 포함. AI Analysis 하단에서 파일 경로를 클릭하면 원본 코드와 수정 제안을 좌우 비교 popup으로 확인하고 복사 가능 |
 | **Persistent Repository Storage** | `repository.local-path` 하위에 등록 애플리케이션 저장소를 선택적으로 보관하여 반복 checkout 비용을 줄입니다. Redis lock으로 branch switch/reset 작업을 보호하고, 실패 시 기존 임시 clone 방식으로 fallback합니다 |
 | **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
-| **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI / Anthropic / DeepSeek 전환. 각 제공자의 API 키는 독립적으로 저장·관리되며 개별 업데이트 가능 |
+| **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI / Anthropic / DeepSeek / EXAONE(FriendliAI) 전환. 각 제공자의 API 키는 독립적으로 저장·관리되며 개별 업데이트 가능 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
 | **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
 | **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 20) |
@@ -375,7 +376,7 @@ POST /webhook/grafana[/{application}]
 |---|---|
 | 언어 | Kotlin 2.2 / Java 21 |
 | 프레임워크 | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI 호환 API) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI 호환 API), EXAONE (`LGAI-EXAONE/K-EXAONE-236B-A23B`, FriendliAI 서버리스 API, OpenAI 호환) |
 | 관측성 | Loki (로그 조회), Prometheus (메트릭 조회, 선택) |
 | 저장소 | Redis (유일한 데이터 저장소, RDB 미사용) |
 | 개발용 Redis | Embedded Redis (자동 기동, 별도 설치 불필요) |
@@ -394,7 +395,7 @@ POST /webhook/grafana[/{application}]
 
 - JDK 21 이상
 - Redis에 저장되는 인증 정보를 암호화하기 위한 비어 있지 않은 `CRYPTO_SECRET_KEY`
-- OpenAI, Anthropic, DeepSeek API 키 (하나 이상)
+- OpenAI, Anthropic, DeepSeek, 또는 FriendliAI(EXAONE) API 키 (하나 이상)
 - Grafana 장애 분석용 접근 가능한 Loki 서버
 - (선택) Prometheus 메트릭 조회용 Prometheus 서버 URL
 - (선택) Trace 전송을 받을 OTLP 호환 백엔드 또는 OpenTelemetry Collector
@@ -417,6 +418,10 @@ ai:
     model: deepseek-v4-pro               # DeepSeek 모델 이름
     api-key: ${AI_DEEP_SEEK_API_KEY:}    # 환경변수 AI_DEEP_SEEK_API_KEY
     base-url: ${AI_DEEP_SEEK_BASE_URL:https://api.deepseek.com}  # DeepSeek API 기본 URL
+  exaone:
+    model: LGAI-EXAONE/K-EXAONE-236B-A23B  # FriendliAI를 통해 서비스되는 EXAONE 모델
+    api-key: ${AI_EXAONE_API_KEY:}          # 환경변수 AI_EXAONE_API_KEY (friendli.ai에서 발급)
+    base-url: ${AI_EXAONE_BASE_URL:https://api.friendli.ai/serverless}  # FriendliAI 서버리스 엔드포인트
 
 loki:
   url: ${LOKI_URL:}                      # Loki 서버 주소 (예: http://localhost:3100) — 인증 미지원
