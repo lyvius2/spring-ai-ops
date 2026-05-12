@@ -48,6 +48,9 @@ class AiModelService(
     @Value("\${ai.deepseek.model:deepseek-v4-pro}") private val deepseekModel: String,
     @Value("\${ai.deepseek.api-key:}") private val deepseekApiKey: String,
     @Value("\${ai.deepseek.base-url:https://api.deepseek.com}") private val deepseekBaseUrl: String,
+    @Value("\${ai.exaone.model:LGAI-EXAONE/K-EXAONE-236B-A23B}") private val exaoneModel: String,
+    @Value("\${ai.exaone.api-key:}") private val exaoneApiKey: String,
+    @Value("\${ai.exaone.base-url:https://api.friendli.ai/serverless}") private val exaoneBaseUrl: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
@@ -107,6 +110,7 @@ class AiModelService(
             LlmProvider.OPEN_AI -> openAiApiKey
             LlmProvider.ANTHROPIC -> anthropicApiKey
             LlmProvider.DEEP_SEEK -> deepseekApiKey
+            LlmProvider.EXAONE -> exaoneApiKey
         }
         val encryptedKey = rawKey.takeIf { it.isNotBlank() }?.let { cryptoProvider.encrypt(it) }
         return LlmConfig(provider, encryptedKey)
@@ -122,6 +126,7 @@ class AiModelService(
             LlmProvider.OPEN_AI -> openAiApiKey
             LlmProvider.ANTHROPIC -> anthropicApiKey
             LlmProvider.DEEP_SEEK -> deepseekApiKey
+            LlmProvider.EXAONE -> exaoneApiKey
         }
         if (apiKey.isBlank()) {
             throw IllegalStateException("API key for '${provider.key}' is not configured in application.yml")
@@ -217,6 +222,11 @@ class AiModelService(
             LlmProvider.DEEP_SEEK -> {
                 val api = OpenAiApi.builder().apiKey(apiKey).baseUrl(deepseekBaseUrl).build() // DeepSeek is compatible with OpenAI API
                 val options = OpenAiChatOptions.builder().model(deepseekModel).build()
+                OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
+            }
+            LlmProvider.EXAONE -> {
+                val api = OpenAiApi.builder().apiKey(apiKey).baseUrl(exaoneBaseUrl).build() // ExaOne is compatible with OpenAI API
+                val options = OpenAiChatOptions.builder().model(exaoneModel).build()
                 OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
         }

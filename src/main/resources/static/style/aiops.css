@@ -172,6 +172,7 @@ body {
 /* ── Radio buttons ── */
 .radio-group {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 18px;
 }

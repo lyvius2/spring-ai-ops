@@ -79,6 +79,10 @@ ai:
     model: deepseek-v4-pro              # Set DeepSeek Model: Default is deepseek-v4-pro
     api-key: ${AI_DEEP_SEEK_API_KEY:}   # Set your DeepSeek API key for authentication
     base-url: ${AI_DEEP_SEEK_BASE_URL:https://api.deepseek.com}
+  exaone:
+    model: LGAI-EXAONE/K-EXAONE-236B-A23B
+    api-key: ${AI_EXAONE_API_KEY:}
+    base-url: ${AI_EXAONE_BASE_URL:https://api.friendli.ai/serverless}
 
 prometheus:
   url: ${PROMETHEUS_URL:}               # Set your Prometheus URL (e.g., http://localhost:9090). Optional; leave blank to skip metric queries.
