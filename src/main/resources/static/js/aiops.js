@@ -510,7 +510,13 @@ function updateLlmKeyInput() {
         }
     } else {
         apiKeyInput.value = '';
-        apiKeyInput.placeholder = selected.value === 'anthropic' ? 'sk-ant-...' : 'sk-...';
+        if (selected.value === 'anthropic') {
+            apiKeyInput.placeholder = 'sk-ant-...';
+        } else if (selected.value === 'exaone') {
+            apiKeyInput.placeholder = 'Get your API key from FriendliAI (friendli.ai) and enter it here';
+        } else {
+            apiKeyInput.placeholder = 'sk-...';
+        }
         saveConnBtn.innerHTML = 'Save &amp; Connect';
         saveKeyBtn.style.display = 'none';
     }
@@ -2215,17 +2221,23 @@ function renderCommitUrlSection(record) {
     }
     // fallback: old records without commitSummaries
     const msg = escHtml(record.commitMessage || record.githubUrl || '—');
-    const url = escHtml(record.githubUrl || '');
+    const rawUrl = (record.githubUrl || '').trim();
+    const isValidUrl = rawUrl.startsWith('http://') || rawUrl.startsWith('https://');
+    const url = escHtml(rawUrl);
     return `
         <div class="commit-url-section">
             <div class="layer-header" style="display:flex;align-items:center;justify-content:space-between;">
                 <span>Commit</span>
                 <span class="branch-badge">&#9135; ${escHtml(branch)}</span>
             </div>
-            <a class="commit-link" href="${url}" target="_blank" rel="noopener noreferrer">
+            ${isValidUrl
+                ? `<a class="commit-link" href="${url}" target="_blank" rel="noopener noreferrer">
                 <span class="commit-message-text">${msg}</span>
                 <span class="commit-url-text">${url}</span>
-            </a>
+            </a>`
+                : `<span class="commit-link">
+                <span class="commit-message-text">${msg}</span>
+            </span>`}
         </div>`;
 }
 
@@ -2905,11 +2917,17 @@ function renderCodeRiskContent(appName) {
         return;
     }
 
+    const githubUrlSafe = (rec.githubUrl || '').trim();
+    const isValidGithubUrl = githubUrlSafe.startsWith('http://') || githubUrlSafe.startsWith('https://');
+    const githubUrlHtml = isValidGithubUrl
+        ? `<a href="${escHtml(githubUrlSafe)}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(githubUrlSafe)}</a>`
+        : `<span style="color:#999;">${escHtml(githubUrlSafe) || '—'}</span>`;
+
     content.innerHTML = `
         <div class="analysis-layer">
             <div class="layer-header">Git Repository</div>
             <div style="padding:10px 14px; font-size:0.88rem; word-break:break-all;">
-                <a href="${escHtml(rec.githubUrl || '')}" target="_blank" rel="noopener noreferrer" style="color:inherit; text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(rec.githubUrl || '—')}</a>
+                ${githubUrlHtml}
             </div>
         </div>
         <div class="analysis-layer">
