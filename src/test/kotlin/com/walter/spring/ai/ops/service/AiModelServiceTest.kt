@@ -64,6 +64,7 @@ class AiModelServiceTest {
             "gpt-4o-mini", openAiApiKey,
             "claude-sonnet-4-6", anthropicApiKey, 4096,
             "deepseek-v4-pro", deepseekApiKey, "https://api.deepseek.com",
+            "LGAI-EXAONE/K-EXAONE-236B-A23B", "", "https://api.friendli.ai/serverless",
             "en"
         )
 

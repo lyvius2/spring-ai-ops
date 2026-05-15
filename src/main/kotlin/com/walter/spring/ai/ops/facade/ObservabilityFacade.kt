@@ -3,6 +3,7 @@ package com.walter.spring.ai.ops.facade
 import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
+import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
@@ -67,7 +68,7 @@ class ObservabilityFacade(
         log.info("Grafana webhook received — status: {}, alerts: {}, title: {}", request.status, request.alerts.size, request.title)
         runCatching {
             val targetApplication = application ?: "Unknown Application"
-            applicationService.addApp(targetApplication)
+            applicationService.addApp(AppUpdateRequest(targetApplication))
 
             val logFuture = CompletableFuture.supplyAsync({ executeFindLog(request) }, executor)
             val metricFuture = CompletableFuture.supplyAsync({ executeFindMetric(request) }, executor)
@@ -105,7 +106,7 @@ class ObservabilityFacade(
         }
 
     private fun getSourcePath(targetApplication: String): Path? {
-        val appConfig = applicationService.getGitConfig(targetApplication)
+        val appConfig = applicationService.getAppConfig(targetApplication)
         return if (appConfig != null && appConfig.isValidConfig()) {
             val accessToken = resolveAccessToken(appConfig.gitUrl!!)
             repositoryService.prepareRepository(
@@ -177,7 +178,7 @@ class ObservabilityFacade(
         recordAuditLog(request)
         runCatching {
             val targetApplication = application ?: "Unknown Application"
-            applicationService.addApp(targetApplication)
+            applicationService.addApp(AppUpdateRequest(targetApplication))
             val gitService = resolveGitServiceBySource(request.source)
 
             if (!gitService.isTokenConfigured()) {

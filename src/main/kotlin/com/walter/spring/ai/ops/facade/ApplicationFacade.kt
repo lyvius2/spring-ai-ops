@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.config.annotation.Facade
+import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
@@ -26,25 +27,25 @@ class ApplicationFacade(
 
     fun getApps(): List<String> = applicationService.getApps()
 
-    fun getGitConfig(name: String) = applicationService.getGitConfig(name)
+    fun getAppConfig(name: String) = applicationService.getAppConfig(name)
 
-    fun addApp(name: String, gitUrl: String?, deployBranch: String?) {
-        applicationService.addApp(name, gitUrl, deployBranch)
-        checkoutSourceCodeInBackground(name, gitUrl, deployBranch)
+    fun addApp(appUpdateRequest: AppUpdateRequest) {
+        applicationService.addApp(appUpdateRequest)
+        checkoutSourceCodeInBackground(appUpdateRequest)
     }
 
-    fun updateApp(oldName: String, newName: String, gitUrl: String?, deployBranch: String?) {
-        val previousConfig = applicationService.getGitConfig(oldName)
+    fun updateApp(oldName: String, appUpdateRequest: AppUpdateRequest) {
+        val previousConfig = applicationService.getAppConfig(oldName)
         val previousGitUrl = previousConfig?.gitUrl
         previousGitUrl
-            ?.takeIf { shouldDeletePreviousRepository(oldName, newName, it, gitUrl) }
+            ?.takeIf { shouldDeletePreviousRepository(oldName, appUpdateRequest.name, it, appUpdateRequest.gitUrl) }
             ?.let { repositoryService.deletePersistentRepository(oldName, it) }
-        applicationService.updateApp(oldName, newName, gitUrl, deployBranch)
-        checkoutSourceCodeInBackground(newName, gitUrl, deployBranch)
+        applicationService.updateApp(oldName, appUpdateRequest)
+        checkoutSourceCodeInBackground(appUpdateRequest)
     }
 
     fun removeApp(name: String) {
-        val previousConfig = applicationService.getGitConfig(name)
+        val previousConfig = applicationService.getAppConfig(name)
         applicationService.removeApp(name)
         val previousGitUrl = previousConfig?.gitUrl
         if (!previousGitUrl.isNullOrBlank()) {
@@ -59,30 +60,36 @@ class ApplicationFacade(
         return oldName != newName || previousGitUrl != newGitUrl
     }
 
-    private fun checkoutSourceCodeInBackground(appName: String, gitUrl: String?, deployBranch: String?) {
-        if (gitUrl.isNullOrBlank()) {
+    private fun checkoutSourceCodeInBackground(appUpdateRequest: AppUpdateRequest) {
+        val appName = appUpdateRequest.name
+        if (appUpdateRequest.gitUrl.isNullOrBlank()) {
             return
         }
         CompletableFuture.runAsync({
+            val gitUrl = appUpdateRequest.gitUrl
             val accessToken = resolveAccessToken(gitUrl)
             try {
-                val branch = deployBranch?.trim().orEmpty()
+                val branch = appUpdateRequest.deployBranch?.trim().orEmpty()
                 repositoryService.preparePersistentRepository(appName, gitUrl, branch, accessToken)
             } catch (e: Exception) {
-                if (deployBranch.isNullOrBlank()) {
+                if (appUpdateRequest.deployBranch.isNullOrBlank()) {
                     log.warn("Background source code checkout failed — app: {}, branch: default, cause: {}", appName, e.message)
                     messageService.pushAlert(AlertMessage.checkoutFailed(appName, e))
                     return@runAsync
                 }
-                checkoutDefaultBranchAfterInvalidDeployBranch(appName, gitUrl, deployBranch, accessToken, e)
+                checkoutDefaultBranchAfterInvalidDeployBranch(appUpdateRequest, accessToken, e)
             }
         }, executor)
     }
 
-    private fun checkoutDefaultBranchAfterInvalidDeployBranch(appName: String, gitUrl: String, deployBranch: String, accessToken: String?, branchFailure: Exception) {
+    private fun checkoutDefaultBranchAfterInvalidDeployBranch(appUpdateRequest: AppUpdateRequest, accessToken: String?, branchFailure: Exception) {
+        val appName = appUpdateRequest.name
+        val gitUrl = appUpdateRequest.gitUrl ?: StringUtils.EMPTY
+        val deployBranch = appUpdateRequest.deployBranch ?: StringUtils.EMPTY
         try {
             repositoryService.preparePersistentRepository(appName, gitUrl, StringUtils.EMPTY, accessToken)
-            applicationService.saveGitConfig(appName, gitUrl, null)
+            appUpdateRequest.deployBranch = null
+            applicationService.saveAppConfig(appUpdateRequest)
             messageService.pushAlert(AlertMessage.fallbackFailed(appName, deployBranch, branchFailure))
         } catch (defaultFailure: Exception) {
             log.warn(

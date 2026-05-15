@@ -32,7 +32,7 @@ class ApplicationController(
     @Operation(summary = "Get application config (name, git URL, deploy branch)")
     @GetMapping("/{name}")
     fun getApp(@Parameter(description = "Application name", required = true) @PathVariable name: String): AppGitResponse {
-        return AppGitResponse.of(name, applicationFacade.getGitConfig(name))
+        return AppGitResponse.of(name, applicationFacade.getAppConfig(name))
     }
 
     @Operation(
@@ -42,7 +42,7 @@ class ApplicationController(
     @PostMapping
     fun addApp(@RequestBody request: AppUpdateRequest): AppUpdateResponse {
         return try {
-            applicationFacade.addApp(request.name, request.gitUrl, request.deployBranch)
+            applicationFacade.addApp(request)
             AppUpdateResponse.success()
         } catch (e: Exception) {
             AppUpdateResponse.failure(e)
@@ -53,7 +53,7 @@ class ApplicationController(
     @PutMapping("/{name}")
     fun updateApp(@Parameter(description = "Current application name", required = true) @PathVariable name: String, @RequestBody request: AppUpdateRequest): AppUpdateResponse {
         return try {
-            applicationFacade.updateApp(name, request.name, request.gitUrl, request.deployBranch)
+            applicationFacade.updateApp(name, request)
             AppUpdateResponse.success()
         } catch (e: Exception) {
             AppUpdateResponse.failure(e)

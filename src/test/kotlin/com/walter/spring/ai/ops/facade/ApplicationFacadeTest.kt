@@ -1,13 +1,14 @@
 package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.code.AlertMessageType
+import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.AlertMessage
-import com.walter.spring.ai.ops.service.dto.AppGitConfig
+import com.walter.spring.ai.ops.service.dto.AppConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -66,14 +67,14 @@ class ApplicationFacadeTest {
     }
 
     @Test
-    @DisplayName("앱 git config 조회는 ApplicationService에 위임한다")
-    fun givenAppName_whenGetGitConfig_thenDelegatesToApplicationService() {
+    @DisplayName("앱 config 조회는 ApplicationService에 위임한다")
+    fun givenAppName_whenGetAppConfig_thenDelegatesToApplicationService() {
         // given
-        val config = AppGitConfig("https://github.com/org/repo.git", "main")
-        `when`(applicationService.getGitConfig("my-app")).thenReturn(config)
+        val config = AppConfig("https://github.com/org/repo.git", "main")
+        `when`(applicationService.getAppConfig("my-app")).thenReturn(config)
 
         // when
-        val result = applicationFacade.getGitConfig("my-app")
+        val result = applicationFacade.getAppConfig("my-app")
 
         // then
         assertThat(result).isEqualTo(config)
@@ -88,10 +89,10 @@ class ApplicationFacadeTest {
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/repo"))
 
         // when
-        applicationFacade.addApp("my-app", gitUrl, "main")
+        applicationFacade.addApp(AppUpdateRequest("my-app", gitUrl, "main"))
 
         // then
-        verify(applicationService).addApp("my-app", gitUrl, "main")
+        verify(applicationService).addApp(AppUpdateRequest("my-app", gitUrl, "main"))
         verify(repositoryService).preparePersistentRepository("my-app", gitUrl, "main", "github-token")
     }
 
@@ -102,10 +103,10 @@ class ApplicationFacadeTest {
         val gitUrl = " "
 
         // when
-        applicationFacade.addApp("my-app", gitUrl, "main")
+        applicationFacade.addApp(AppUpdateRequest("my-app", gitUrl, "main"))
 
         // then
-        verify(applicationService).addApp("my-app", gitUrl, "main")
+        verify(applicationService).addApp(AppUpdateRequest("my-app", gitUrl, "main"))
         verifyNoInteractions(repositoryService)
     }
 
@@ -118,10 +119,10 @@ class ApplicationFacadeTest {
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "", "github-token")).thenReturn(Path.of("/tmp/repo"))
 
         // when
-        applicationFacade.addApp("my-app", gitUrl, " ")
+        applicationFacade.addApp(AppUpdateRequest("my-app", gitUrl, " "))
 
         // then
-        verify(applicationService).addApp("my-app", gitUrl, " ")
+        verify(applicationService).addApp(AppUpdateRequest("my-app", gitUrl, " "))
         verify(repositoryService).preparePersistentRepository("my-app", gitUrl, "", "github-token")
     }
 
@@ -142,10 +143,10 @@ class ApplicationFacadeTest {
         }.`when`(messageService).pushAlert(anyObject())
 
         // when
-        applicationFacade.addApp("my-app", gitUrl, "main")
+        applicationFacade.addApp(AppUpdateRequest("my-app", gitUrl, "main"))
 
         // then
-        verify(applicationService).saveGitConfig("my-app", gitUrl, null)
+        verify(applicationService).saveAppConfig(AppUpdateRequest("my-app", gitUrl, null))
         assertThat(alertMessage?.type).isEqualTo(AlertMessageType.INVALID_DEPLOY_BRANCH_FALLBACK)
         assertThat(alertMessage?.applicationName).isEqualTo("my-app")
         assertThat(alertMessage?.deployBranch).isEqualTo("main")
@@ -169,7 +170,7 @@ class ApplicationFacadeTest {
         }.`when`(messageService).pushAlert(anyObject())
 
         // when
-        applicationFacade.addApp("my-app", gitUrl, "main")
+        applicationFacade.addApp(AppUpdateRequest("my-app", gitUrl, "main"))
 
         // then
         assertThat(alertMessage?.type).isEqualTo(AlertMessageType.SOURCE_CHECKOUT_FAILED)
@@ -186,10 +187,10 @@ class ApplicationFacadeTest {
         `when`(repositoryService.preparePersistentRepository("new-app", gitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/repo"))
 
         // when
-        applicationFacade.updateApp("old-app", "new-app", gitUrl, "main")
+        applicationFacade.updateApp("old-app", AppUpdateRequest("new-app", gitUrl, "main"))
 
         // then
-        verify(applicationService).updateApp("old-app", "new-app", gitUrl, "main")
+        verify(applicationService).updateApp("old-app", AppUpdateRequest("new-app", gitUrl, "main"))
         verify(repositoryService).preparePersistentRepository("new-app", gitUrl, "main", "github-token")
     }
 
@@ -199,18 +200,18 @@ class ApplicationFacadeTest {
         // given
         val oldGitUrl = "https://github.com/org/old-repo.git"
         val newGitUrl = "https://github.com/org/new-repo.git"
-        `when`(applicationService.getGitConfig("old-app")).thenReturn(AppGitConfig(oldGitUrl, "main"))
+        `when`(applicationService.getAppConfig("old-app")).thenReturn(AppConfig(oldGitUrl, "main"))
         `when`(repositoryService.deletePersistentRepository("old-app", oldGitUrl)).thenReturn(true)
         `when`(githubService.getToken()).thenReturn("github-token")
         `when`(repositoryService.preparePersistentRepository("new-app", newGitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/new-repo"))
 
         // when
-        applicationFacade.updateApp("old-app", "new-app", newGitUrl, "main")
+        applicationFacade.updateApp("old-app", AppUpdateRequest("new-app", newGitUrl, "main"))
 
         // then
         val ordered = inOrder(repositoryService, applicationService)
         ordered.verify(repositoryService).deletePersistentRepository("old-app", oldGitUrl)
-        ordered.verify(applicationService).updateApp("old-app", "new-app", newGitUrl, "main")
+        ordered.verify(applicationService).updateApp("old-app", AppUpdateRequest("new-app", newGitUrl, "main"))
         verify(repositoryService).preparePersistentRepository("new-app", newGitUrl, "main", "github-token")
     }
 
@@ -219,7 +220,7 @@ class ApplicationFacadeTest {
     fun givenAppWithGitConfig_whenRemoveApp_thenDeletesPersistentRepositoryAfterRemovingAppMetadata() {
         // given
         val gitUrl = "https://github.com/org/repo.git"
-        `when`(applicationService.getGitConfig("my-app")).thenReturn(AppGitConfig(gitUrl, "main"))
+        `when`(applicationService.getAppConfig("my-app")).thenReturn(AppConfig(gitUrl, "main"))
         `when`(repositoryService.deletePersistentRepository("my-app", gitUrl)).thenReturn(true)
 
         // when

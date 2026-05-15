@@ -3,7 +3,8 @@ package com.walter.spring.ai.ops.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
-import com.walter.spring.ai.ops.service.dto.AppGitConfig
+import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
+import com.walter.spring.ai.ops.service.dto.AppConfig
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
@@ -25,16 +26,17 @@ class ApplicationService(
         }
     }
 
-    fun addApp(name: String, gitUrl: String? = null, deployBranch: String? = null) {
+    fun addApp(appUpdateRequest: AppUpdateRequest) {
+        val appName = appUpdateRequest.name
         runCatching {
-            redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
+            redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, appName)
         }.getOrElse { e ->
-            log.warn("Failed to add app '{}' to Set '{}' — deleting stale key and retrying. cause: {}", name, REDIS_KEY_APPLICATIONS, e.message)
+            log.warn("Failed to add app '{}' to Set '{}' — deleting stale key and retrying. cause: {}", appName, REDIS_KEY_APPLICATIONS, e.message)
             redisTemplate.delete(REDIS_KEY_APPLICATIONS)
-            redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, name)
+            redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, appName)
         }
-        if (gitUrl != null || deployBranch != null) {
-            saveGitConfig(name, gitUrl, deployBranch)
+        if (appUpdateRequest.gitUrl != null || appUpdateRequest.deployBranch != null) {
+            saveAppConfig(appUpdateRequest)
         }
     }
 
@@ -43,12 +45,12 @@ class ApplicationService(
         redisTemplate.delete("$REDIS_KEY_APP_GIT$name")
     }
 
-    fun getGitUrl(name: String): String? = getGitConfig(name)?.gitUrl
+    fun getGitUrl(name: String): String? = getAppConfig(name)?.gitUrl
 
-    fun getGitConfig(name: String): AppGitConfig? {
+    fun getAppConfig(name: String): AppConfig? {
         val value = redisTemplate.opsForValue().get("$REDIS_KEY_APP_GIT$name") ?: return null
         return runCatching {
-            objectMapper.readValue(value, AppGitConfig::class.java)
+            objectMapper.readValue(value, AppConfig::class.java)
         }.getOrElse { e ->
             log.warn("Failed to parse git config for app '{}' — returning null. cause: {}", name, e.message)
             null
@@ -60,19 +62,17 @@ class ApplicationService(
             ?: throw IllegalStateException("Git repository URL is not configured for application '$appName'")
     }
 
-    fun saveGitConfig(name: String, gitUrl: String?, deployBranch: String?) {
-        if (!deployBranch.isNullOrBlank() && gitUrl.isNullOrBlank()) {
+    fun saveAppConfig(appUpdateRequest: AppUpdateRequest) {
+        val gitUrl = appUpdateRequest.gitUrl
+        if (!appUpdateRequest.deployBranch.isNullOrBlank() && gitUrl.isNullOrBlank()) {
             throw IllegalArgumentException("Git Repository URL is required when Deploy Branch is specified.")
         }
-        val key = "$REDIS_KEY_APP_GIT$name"
+        val key = "$REDIS_KEY_APP_GIT${appUpdateRequest.name}"
         if (gitUrl.isNullOrBlank()) {
             redisTemplate.delete(key)
         } else {
             validateGitUrl(gitUrl)
-            val config = AppGitConfig(
-                gitUrl = gitUrl,
-                deployBranch = deployBranch.takeIf { !it.isNullOrBlank() }
-            )
+            val config = AppConfig(appUpdateRequest)
             redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(config))
         }
     }
@@ -83,12 +83,13 @@ class ApplicationService(
         }
     }
 
-    fun updateApp(oldName: String, newName: String, gitUrl: String?, deployBranch: String?) {
+    fun updateApp(oldName: String, appUpdateRequest: AppUpdateRequest) {
+        val newName = appUpdateRequest.name
         if (oldName != newName) {
             redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, oldName)
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, newName)
             redisTemplate.delete("$REDIS_KEY_APP_GIT$oldName")
         }
-        saveGitConfig(newName, gitUrl, deployBranch)
+        saveAppConfig(appUpdateRequest)
     }
 }

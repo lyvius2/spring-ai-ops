@@ -9,5 +9,9 @@ data class AppUpdateRequest(
     @Schema(description = "Git repository URL to link (optional, HTTP/HTTPS only)", example = "https://github.com/org/repo", nullable = true)
     val gitUrl: String? = null,
     @Schema(description = "Deploy branch — the branch deployed to production (optional). Requires gitUrl.", example = "main", nullable = true)
-    val deployBranch: String? = null,
+    var deployBranch: String? = null,
+    @Schema(description = "Send notification to Slack channel (optional)", example = "true", nullable = true)
+    val isSend: Boolean = false,
+    @Schema(description = "Slack channel to send notifications to (optional)", example = "#general", nullable = true)
+    val slackChannel: String? = null,
 )

@@ -1,9 +1,11 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
-import com.walter.spring.ai.ops.service.dto.AppGitConfig
+import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
+import com.walter.spring.ai.ops.service.dto.AppConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -31,7 +33,7 @@ class ApplicationServiceTest {
     @Mock
     private lateinit var valueOperations: ValueOperations<String, String>
 
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper: ObjectMapper = Jackson2ObjectMapperBuilder.json().build()
 
     // ── getApps ───────────────────────────────────────────────────────────────
 
@@ -75,7 +77,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.addApp("app1")
+        applicationService.addApp(AppUpdateRequest("app1"))
 
         // then
         verify(setOperations).add(REDIS_KEY_APPLICATIONS, "app1")
@@ -88,10 +90,10 @@ class ApplicationServiceTest {
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
-        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", null))
+        val expectedJson = objectMapper.writeValueAsString(AppConfig("https://github.com/owner/repo.git", null))
 
         // when
-        applicationService.addApp("app1", "https://github.com/owner/repo.git")
+        applicationService.addApp(AppUpdateRequest("app1", "https://github.com/owner/repo.git"))
 
         // then
         verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
@@ -104,10 +106,10 @@ class ApplicationServiceTest {
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
-        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", "main"))
+        val expectedJson = objectMapper.writeValueAsString(AppConfig("https://github.com/owner/repo.git", "main"))
 
         // when
-        applicationService.addApp("app1", "https://github.com/owner/repo.git", "main")
+        applicationService.addApp(AppUpdateRequest("app1", "https://github.com/owner/repo.git", "main"))
 
         // then
         verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
@@ -122,21 +124,21 @@ class ApplicationServiceTest {
 
         // when & then
         assertThrows<IllegalArgumentException> {
-            applicationService.addApp("app1", null, "main")
+            applicationService.addApp(AppUpdateRequest("app1", null, "main"))
         }
     }
 
     @Test
-    @DisplayName("gitUrl이 null인 경우 기존 git config를 덮어쓰지 않음 (saveGitConfig 미호출)")
+    @DisplayName("gitUrl이 null인 경우 기존 git config를 덮어쓰지 않음 (saveAppConfig 미호출)")
     fun givenGitUrlIsNull_whenAddApp_thenExistingGitUrlIsPreserved() {
         // given
         `when`(redisTemplate.opsForSet()).thenReturn(setOperations)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.addApp("app1", null)
+        applicationService.addApp(AppUpdateRequest("app1", null))
 
-        // then — saveGitConfig가 호출되지 않으므로 git 키에 대한 delete/set 없음
+        // then — saveAppConfig가 호출되지 않으므로 git 키에 대한 delete/set 없음
         verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}app1")
         verify(redisTemplate, never()).opsForValue()
     }
@@ -149,7 +151,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.addApp("app1", null, null)
+        applicationService.addApp(AppUpdateRequest("app1", null, null))
 
         // then
         verify(redisTemplate, never()).delete(anyString())
@@ -165,7 +167,7 @@ class ApplicationServiceTest {
 
         // when & then
         assertThrows<IllegalArgumentException> {
-            applicationService.addApp("app1", "git@github.com:owner/repo.git")
+            applicationService.addApp(AppUpdateRequest("app1", "git@github.com:owner/repo.git"))
         }
     }
 
@@ -186,19 +188,19 @@ class ApplicationServiceTest {
         verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
     }
 
-    // ── getGitConfig ──────────────────────────────────────────────────────────
+    // ── getAppConfig ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Redis에 JSON이 저장된 경우 AppGitConfig로 역직렬화하여 반환")
+    @DisplayName("Redis에 JSON이 저장된 경우 AppConfig로 역직렬화하여 반환")
     fun getGitConfig_returnsConfig_whenRedisHasJson() {
         // given
-        val config = AppGitConfig("https://github.com/owner/repo.git", "main")
+        val config = AppConfig("https://github.com/owner/repo.git", "main")
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        val result = applicationService.getGitConfig("app1")
+        val result = applicationService.getAppConfig("app1")
 
         // then
         assertThat(result?.gitUrl).isEqualTo("https://github.com/owner/repo.git")
@@ -209,13 +211,13 @@ class ApplicationServiceTest {
     @DisplayName("Redis에 deployBranch 없이 저장된 경우 gitUrl만 반환")
     fun getGitConfig_returnsConfigWithNullBranch_whenDeployBranchNotSet() {
         // given
-        val config = AppGitConfig("https://github.com/owner/repo.git", null)
+        val config = AppConfig("https://github.com/owner/repo.git", null)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        val result = applicationService.getGitConfig("app1")
+        val result = applicationService.getAppConfig("app1")
 
         // then
         assertThat(result?.gitUrl).isEqualTo("https://github.com/owner/repo.git")
@@ -231,7 +233,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        val result = applicationService.getGitConfig("app1")
+        val result = applicationService.getAppConfig("app1")
 
         // then
         assertThat(result).isNull()
@@ -246,7 +248,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        val result = applicationService.getGitConfig("app1")
+        val result = applicationService.getAppConfig("app1")
 
         // then
         assertThat(result).isNull()
@@ -258,7 +260,7 @@ class ApplicationServiceTest {
     @DisplayName("Redis에 git URL이 있는 경우 해당 URL 반환")
     fun getGitRepoByAppName_returnsUrl_whenRedisHasValue() {
         // given
-        val config = AppGitConfig("https://github.com/owner/repo.git", null)
+        val config = AppConfig("https://github.com/owner/repo.git", null)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
         val applicationService = ApplicationService(redisTemplate, objectMapper)
@@ -284,7 +286,7 @@ class ApplicationServiceTest {
         }
     }
 
-    // ── saveGitConfig ─────────────────────────────────────────────────────────
+    // ── saveAppConfig ─────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("gitUrl이 빈 문자열인 경우 git 키 삭제")
@@ -293,7 +295,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.saveGitConfig("app1", "", null)
+        applicationService.saveAppConfig(AppUpdateRequest("app1", ""))
 
         // then
         verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
@@ -307,7 +309,7 @@ class ApplicationServiceTest {
 
         // when & then
         assertThrows<IllegalArgumentException> {
-            applicationService.saveGitConfig("app1", null, "main")
+            applicationService.saveAppConfig(AppUpdateRequest("app1", null, "main"))
         }
     }
 
@@ -321,7 +323,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.updateApp("oldApp", "newApp", null, null)
+        applicationService.updateApp("oldApp", AppUpdateRequest("newApp", null, null))
 
         // then
         verify(setOperations).remove(REDIS_KEY_APPLICATIONS, "oldApp")
@@ -335,10 +337,10 @@ class ApplicationServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
-        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", null))
+        val expectedJson = objectMapper.writeValueAsString(AppConfig("https://github.com/owner/repo.git", null))
 
         // when
-        applicationService.updateApp("app1", "app1", "https://github.com/owner/repo.git", null)
+        applicationService.updateApp("app1", AppUpdateRequest("app1", "https://github.com/owner/repo.git", null))
 
         // then
         verify(redisTemplate, never()).opsForSet()
@@ -351,10 +353,10 @@ class ApplicationServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
-        val expectedJson = objectMapper.writeValueAsString(AppGitConfig("https://github.com/owner/repo.git", "main"))
+        val expectedJson = objectMapper.writeValueAsString(AppConfig("https://github.com/owner/repo.git", "main"))
 
         // when
-        applicationService.updateApp("app1", "app1", "https://github.com/owner/repo.git", "main")
+        applicationService.updateApp("app1", AppUpdateRequest("app1", "https://github.com/owner/repo.git", "main"))
 
         // then
         verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
@@ -368,7 +370,7 @@ class ApplicationServiceTest {
 
         // when & then
         assertThrows<IllegalArgumentException> {
-            applicationService.updateApp("app1", "app1", null, "main")
+            applicationService.updateApp("app1", AppUpdateRequest("app1", null, "main"))
         }
     }
 
@@ -379,7 +381,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.updateApp("app1", "app1", null, null)
+        applicationService.updateApp("app1", AppUpdateRequest("app1", null, null))
 
         // then — 명시적 수정 요청이므로 null은 삭제 의도로 처리
         verify(redisTemplate, never()).opsForSet()
@@ -394,7 +396,7 @@ class ApplicationServiceTest {
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
-        applicationService.updateApp("oldApp", "newApp", null, null)
+        applicationService.updateApp("oldApp", AppUpdateRequest("newApp", null, null))
 
         // then — 이름 변경으로 oldApp git 키는 삭제되고, newApp git 키도 null 처리로 삭제됨
         verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
@@ -410,7 +412,7 @@ class ApplicationServiceTest {
 
         // when & then
         assertThrows<IllegalArgumentException> {
-            applicationService.updateApp("oldApp", "newApp", "git@github.com:owner/repo.git", null)
+            applicationService.updateApp("oldApp", AppUpdateRequest("newApp", "git@github.com:owner/repo.git", null))
         }
     }
 }

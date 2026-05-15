@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
+import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlert
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
@@ -16,7 +17,7 @@ import com.walter.spring.ai.ops.service.LokiService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
 import com.walter.spring.ai.ops.service.RepositoryService
-import com.walter.spring.ai.ops.service.dto.AppGitConfig
+import com.walter.spring.ai.ops.service.dto.AppConfig
 import com.walter.spring.ai.ops.service.dto.IncidentSourceContext
 import com.walter.spring.ai.ops.service.dto.SourceSnippet
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
@@ -155,7 +156,7 @@ class ObservabilityFacadeTest {
         incidentAnalyzeFacade.analyzeFiring(request, "my-app")
 
         // then
-        verify(applicationService).addApp("my-app")
+        verify(applicationService).addApp(AppUpdateRequest("my-app"))
     }
 
     @Test
@@ -192,8 +193,8 @@ class ObservabilityFacadeTest {
             unresolvedFrames = emptyList(),
         )
         stubHappyPath(request)
-        `when`(applicationService.getGitConfig("my-app"))
-            .thenReturn(AppGitConfig("https://example.com/test.git", "main"))
+        `when`(applicationService.getAppConfig("my-app"))
+            .thenReturn(AppConfig("https://example.com/test.git", "main"))
         `when`(repositoryService.prepareRepository("my-app", "https://example.com/test.git", "main", null))
             .thenReturn(sourcePath)
         `when`(incidentSourceContextService.createContext(anyObject(), Mockito.eq(sourcePath)))
@@ -217,8 +218,8 @@ class ObservabilityFacadeTest {
         val request = createRequest()
         val sourcePath = Files.createTempDirectory("incident-source-context-github-test")
         stubHappyPath(request)
-        `when`(applicationService.getGitConfig("my-app"))
-            .thenReturn(AppGitConfig("https://github.com/owner/repo.git", "main"))
+        `when`(applicationService.getAppConfig("my-app"))
+            .thenReturn(AppConfig("https://github.com/owner/repo.git", "main"))
         `when`(githubService.getToken()).thenReturn("github-token")
         `when`(repositoryService.prepareRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token"))
             .thenReturn(sourcePath)
@@ -238,8 +239,8 @@ class ObservabilityFacadeTest {
         val request = createRequest()
         val sourcePath = Files.createTempDirectory("incident-source-context-gitlab-test")
         stubHappyPath(request)
-        `when`(applicationService.getGitConfig("my-app"))
-            .thenReturn(AppGitConfig("https://gitlab.com/owner/repo.git", "main"))
+        `when`(applicationService.getAppConfig("my-app"))
+            .thenReturn(AppConfig("https://gitlab.com/owner/repo.git", "main"))
         `when`(gitlabService.getToken()).thenReturn("gitlab-token")
         `when`(repositoryService.prepareRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token"))
             .thenReturn(sourcePath)
@@ -258,8 +259,8 @@ class ObservabilityFacadeTest {
         // given
         val request = createRequest()
         stubHappyPath(request)
-        `when`(applicationService.getGitConfig("my-app"))
-            .thenReturn(AppGitConfig("https://example.com/test.git", null))
+        `when`(applicationService.getAppConfig("my-app"))
+            .thenReturn(AppConfig("https://example.com/test.git", null))
 
         // when
         incidentAnalyzeFacade.analyzeFiring(request, "my-app")
