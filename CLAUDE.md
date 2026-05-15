@@ -286,6 +286,16 @@ app.async.virtual.llm-max-concurrency: 20
   ```kotlin
   fun getApp(@Parameter(description = "Application name", required = true) @PathVariable name: String): AppGitResponse
   ```
+- After `if (...) {`, the body must always start on a new line — never on the same line as the condition. Example:
+  ```kotlin
+  // Good
+  if (condition) {
+      doSomething()
+  }
+
+  // Bad
+  if (condition) { doSomething() }
+  ```
 
 ## Layer Responsibilities
 
