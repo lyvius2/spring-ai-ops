@@ -1234,6 +1234,9 @@ function openAddAppModal() {
     document.getElementById('add-app-input').value = '';
     document.getElementById('add-app-git-input').value = '';
     document.getElementById('add-app-branch-input').value = '';
+    document.getElementById('add-app-slack-toggle').checked = false;
+    document.getElementById('add-app-slack-channel').value = '';
+    document.getElementById('add-app-slack-channel-group').style.display = 'none';
     document.getElementById('add-app-alert-success').style.display = 'none';
     document.getElementById('add-app-alert-error').style.display   = 'none';
     document.getElementById('add-app-save-btn').disabled = false;
@@ -1278,6 +1281,8 @@ async function saveApp() {
     const name         = document.getElementById('add-app-input').value.trim();
     const gitUrl       = document.getElementById('add-app-git-input').value.trim() || null;
     const deployBranch = document.getElementById('add-app-branch-input').value.trim() || null;
+    const isSend       = document.getElementById('add-app-slack-toggle').checked;
+    const slackChannel = document.getElementById('add-app-slack-channel').value.trim() || null;
     const btn    = document.getElementById('add-app-save-btn');
     const errEl  = document.getElementById('add-app-alert-error');
     const sucEl  = document.getElementById('add-app-alert-success');
@@ -1298,7 +1303,7 @@ async function saveApp() {
         const res  = await fetch('/api/apps', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, gitUrl, deployBranch }),
+            body: JSON.stringify({ name, gitUrl, deployBranch, isSend, slackChannel }),
         });
 
         if (res.status === 401) {
@@ -1420,6 +1425,9 @@ async function openEditAppModal(name) {
     document.getElementById('edit-app-name-input').value = name;
     document.getElementById('edit-app-git-input').value = '';
     document.getElementById('edit-app-branch-input').value = '';
+    document.getElementById('edit-app-slack-toggle').checked = false;
+    document.getElementById('edit-app-slack-channel').value = '';
+    document.getElementById('edit-app-slack-channel-group').style.display = 'none';
     document.getElementById('edit-app-alert-success').style.display = 'none';
     document.getElementById('edit-app-alert-error').style.display   = 'none';
     document.getElementById('edit-app-save-btn').disabled = false;
@@ -1431,6 +1439,10 @@ async function openEditAppModal(name) {
         const data = await res.json();
         document.getElementById('edit-app-git-input').value    = data.gitUrl       || '';
         document.getElementById('edit-app-branch-input').value = data.deployBranch || '';
+        const isSend = data.isSend || false;
+        document.getElementById('edit-app-slack-toggle').checked = isSend;
+        document.getElementById('edit-app-slack-channel').value  = data.slackChannel || '';
+        document.getElementById('edit-app-slack-channel-group').style.display = isSend ? 'block' : 'none';
     } catch (_) {
         // Proceed with empty fields if fetch fails
     }
@@ -1451,6 +1463,8 @@ async function saveEditApp() {
     const name         = document.getElementById('edit-app-name-input').value.trim();
     const gitUrl       = document.getElementById('edit-app-git-input').value.trim() || null;
     const deployBranch = document.getElementById('edit-app-branch-input').value.trim() || null;
+    const isSend       = document.getElementById('edit-app-slack-toggle').checked;
+    const slackChannel = document.getElementById('edit-app-slack-channel').value.trim() || null;
     const btn    = document.getElementById('edit-app-save-btn');
     const errEl  = document.getElementById('edit-app-alert-error');
     const sucEl  = document.getElementById('edit-app-alert-success');
@@ -1471,7 +1485,7 @@ async function saveEditApp() {
         const res  = await fetch(`/api/apps/${encodeURIComponent(originalName)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, gitUrl, deployBranch }),
+            body: JSON.stringify({ name, gitUrl, deployBranch, isSend, slackChannel }),
         });
 
         if (res.status === 401) {

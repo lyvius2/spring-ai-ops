@@ -276,6 +276,86 @@ body {
     box-shadow: 0 0 0 3px rgba(109, 179, 63, 0.15);
 }
 
+/* ── Form toggle (Slack notification switch) ── */
+.form-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.form-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.form-toggle-switch {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    border-radius: 18px;
+    background: #cfcfcf;
+    transition: background 0.18s ease;
+    flex-shrink: 0;
+}
+
+.form-toggle-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.18s ease;
+}
+
+.form-toggle input:checked + .form-toggle-switch {
+    background: #6db33f;
+}
+
+.form-toggle input:checked + .form-toggle-switch::after {
+    transform: translateX(16px);
+}
+
+.form-toggle-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+}
+
+/* ── Input with fixed prefix (e.g. https://hooks.slack.com) ── */
+.input-prefix-group {
+    display: flex;
+    align-items: stretch;
+    max-width: 460px;
+}
+
+.input-prefix {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 10px;
+    background: #f4f4f4;
+    border: 1px solid #ccc;
+    border-right: none;
+    border-radius: 3px 0 0 3px;
+    font-size: 0.78rem;
+    color: #777;
+    white-space: nowrap;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.input-prefix-field {
+    max-width: none !important;
+    flex: 1;
+    border-radius: 0 3px 3px 0 !important;
+}
+
 /* ── Primary button ── */
 .btn-primary {
     padding: 7px 20px;

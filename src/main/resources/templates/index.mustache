@@ -143,6 +143,21 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
                 <input type="text" id="add-app-branch-input" class="form-input"
                        placeholder="main" autocomplete="off" />
             </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label class="form-toggle">
+                    <input type="checkbox" id="add-app-slack-toggle" onchange="document.getElementById('add-app-slack-channel-group').style.display = this.checked ? 'block' : 'none'">
+                    <span class="form-toggle-switch"></span>
+                    <span class="form-toggle-label">Send Slack Notification on Code Review</span>
+                </label>
+            </div>
+            <div class="form-group" id="add-app-slack-channel-group" style="display:none;">
+                <label class="form-label" for="add-app-slack-channel">Slack Webhook Path</label>
+                <div class="input-prefix-group">
+                    <span class="input-prefix">https://hooks.slack.com</span>
+                    <input type="text" id="add-app-slack-channel" class="form-input input-prefix-field"
+                           placeholder="/services/T.../B.../..." autocomplete="off" />
+                </div>
+            </div>
             <button class="btn-primary" id="add-app-save-btn" onclick="saveApp()">Add</button>
             <div class="alert alert-success" id="add-app-alert-success">Application registered successfully.</div>
             <div class="alert alert-error"   id="add-app-alert-error"></div>
@@ -172,6 +187,21 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
                 <label class="form-label" for="edit-app-branch-input">Deploy Branch <span style="color:#999;font-weight:400;">(optional — requires Git URL)</span></label>
                 <input type="text" id="edit-app-branch-input" class="form-input"
                        placeholder="main" autocomplete="off" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px;">
+                <label class="form-toggle">
+                    <input type="checkbox" id="edit-app-slack-toggle" onchange="document.getElementById('edit-app-slack-channel-group').style.display = this.checked ? 'block' : 'none'">
+                    <span class="form-toggle-switch"></span>
+                    <span class="form-toggle-label">Send Slack Notification on Code Review</span>
+                </label>
+            </div>
+            <div class="form-group" id="edit-app-slack-channel-group" style="display:none;">
+                <label class="form-label" for="edit-app-slack-channel">Slack Webhook Path</label>
+                <div class="input-prefix-group">
+                    <span class="input-prefix">https://hooks.slack.com</span>
+                    <input type="text" id="edit-app-slack-channel" class="form-input input-prefix-field"
+                           placeholder="/services/T.../B.../..." autocomplete="off" />
+                </div>
             </div>
             <button class="btn-primary" id="edit-app-save-btn" onclick="saveEditApp()">Save</button>
             <div class="alert alert-success" id="edit-app-alert-success">Application updated successfully.</div>
