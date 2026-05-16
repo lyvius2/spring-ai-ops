@@ -47,7 +47,7 @@ class SlackChannelService(
             if (!record.changedFiles().isNullOrEmpty()) {
                 add("*Changed files:* ${record.changedFiles().size}")
             }
-            val directUrl = buildDirectUrl(record.application())
+            val directUrl = buildDirectUrl(record)
             if (directUrl != null) {
                 add("*View:* <$directUrl|Open in AIOps>")
             }
@@ -76,9 +76,12 @@ class SlackChannelService(
         }
     }
 
-    private fun buildDirectUrl(appName: String): String? {
+    private fun buildDirectUrl(record: CodeReviewRecord): String? {
         val base = appBaseUrl.trimEnd('/')
         if (base.isBlank()) return null
-        return "$base/#${appName}/codereview"
+        val ts = record.pushedAt()?.toString() ?: return null
+        val encodedApp = java.net.URLEncoder.encode(record.application(), "UTF-8")
+        val encodedTs  = java.net.URLEncoder.encode(ts, "UTF-8")
+        return "$base/#$encodedApp/codereview/$encodedTs"
     }
 }
