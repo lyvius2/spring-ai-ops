@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.controller.dto
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.walter.spring.ai.ops.service.dto.AppConfig
 import io.swagger.v3.oas.annotations.media.Schema
 
@@ -12,6 +13,7 @@ data class AppGitResponse(
     @Schema(description = "Deploy branch — the branch deployed to production", nullable = true)
     val deployBranch: String?,
     @Schema(description = "Whether to send Slack notification on code review completion")
+    @JsonProperty("isSend")
     val isSend: Boolean,
     @Schema(description = "Slack webhook path (the part after https://hooks.slack.com)", nullable = true)
     val slackChannel: String?,
