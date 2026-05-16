@@ -70,7 +70,8 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 | 기능 | 설명 |
 |---|---|
 | **정적 코드 위험 분석** | Git 저장소를 클론하여 AI 기반 전체 코드베이스 리뷰 수행 — 보안 취약점, 코드 품질 이슈, 개선 권고사항. 코드베이스 크기에 따라 단일 호출 또는 맵-리듀스 전략 자동 선택 |
-| **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항 |
+| **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항. 코드 리뷰 완료 시 Slack 채널로 결과 전송 가능 |
+| **Slack 코드 리뷰 알림** | 코드 리뷰가 완료되면 Markdown 리뷰 결과를 Slack mrkdwn으로 변환하여 애플리케이션별로 설정한 Slack Incoming Webhook 채널에 전송합니다. UI의 애플리케이션 설정에서 토글(`Send Slack Notification on Code Review`)과 Webhook path를 앱별로 구성할 수 있습니다 |
 | **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 + Prometheus 메트릭 시계열(선택) + stack trace 관련 소스 snippet → 근본 원인, 영향 범위, 관련 파일, 조치 방법 |
 | **소스 수정 권고안** | 장애 분석 결과에 구조화된 소스 수정 권고안(`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) 포함. AI Analysis 하단에서 파일 경로를 클릭하면 원본 코드와 수정 제안을 좌우 비교 popup으로 확인하고 복사 가능 |
 | **Persistent Repository Storage** | `repository.local-path` 하위에 등록 애플리케이션 저장소를 선택적으로 보관하여 반복 checkout 비용을 줄입니다. Redis lock으로 branch switch/reset 작업을 보호하고, 실패 시 기존 임시 clone 방식으로 fallback합니다 |
@@ -195,7 +196,20 @@ POST /webhook/git[/{application}]
         │
         ├─ CodeReviewRecord를 Redis에 저장 (key: commit:{application})
         │
-        └─ WebSocket /topic/commit 으로 결과 Push
+        ├─ WebSocket /topic/commit 으로 결과 Push
+        │       │
+        │       ▼
+        │  브라우저 Code Review 탭에 결과 표시
+        │
+        └─ CodeReviewCompletedEvent 발행
+                │
+                ▼ (비동기 EventListener)
+           애플리케이션에 Slack 알림이 활성화된 경우
+                │
+                ├─ Markdown 리뷰 결과 → Slack mrkdwn 변환
+                │
+                └─ POST https://hooks.slack.com/{slackChannel}
+                        (Incoming Webhook — Block Kit 메시지)
 ```
 
 ---
@@ -222,7 +236,20 @@ POST /webhook/git[/{application}]
         │
         ├─ CodeReviewRecord를 Redis에 저장 (key: commit:{application})
         │
-        └─ WebSocket /topic/commit 으로 결과 Push
+        ├─ WebSocket /topic/commit 으로 결과 Push
+        │       │
+        │       ▼
+        │  브라우저 Code Review 탭에 결과 표시
+        │
+        └─ CodeReviewCompletedEvent 발행
+                │
+                ▼ (비동기 EventListener)
+           애플리케이션에 Slack 알림이 활성화된 경우
+                │
+                ├─ Markdown 리뷰 결과 → Slack mrkdwn 변환
+                │
+                └─ POST https://hooks.slack.com/{slackChannel}
+                        (Incoming Webhook — Block Kit 메시지)
 ```
 
 ---

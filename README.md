@@ -74,7 +74,8 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | Feature | Description |
 |---|---|
 | **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
-| **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations |
+| **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations. Optionally sends the result to a Slack channel via Incoming Webhook |
+| **Slack Code Review Notification** | When a code review completes, the result (converted from Markdown to Slack mrkdwn) is posted to a per-application Slack Incoming Webhook channel. Toggle and webhook path are configurable per application in the UI |
 | **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) + stack-trace-related source snippets → root cause, affected components, source file references, and recommended actions |
 | **Source Fix Suggestions** | Incident analysis can return structured source code suggestions (`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) shown at the bottom of the AI Analysis panel with a side-by-side popup and copy action |
 | **Persistent Repository Storage** | Optionally keep registered application repositories under `repository.local-path` to avoid repeated fresh checkouts; Redis locks protect branch switch/reset operations and failures fall back to temporary clones |
@@ -202,10 +203,20 @@ POST /webhook/git[/{application}]
         │
         ├─ Save CodeReviewRecord to Redis  (key: commit:{application})
         │
-        └─ Push to /topic/commit via WebSocket
+        ├─ Push to /topic/commit via WebSocket
+        │       │
+        │       ▼
+        │  Browser opens Code Review tab with result
+        │
+        └─ Publish CodeReviewCompletedEvent
                 │
-                ▼
-           Browser opens Code Review tab with result
+                ▼ (async EventListener)
+           If Slack notification is enabled for the application
+                │
+                ├─ Convert Markdown review result → Slack mrkdwn
+                │
+                └─ POST https://hooks.slack.com/{slackChannel}
+                        (Incoming Webhook — Block Kit message)
 ```
 
 ---
@@ -233,10 +244,20 @@ POST /webhook/git[/{application}]
         │
         ├─ Save CodeReviewRecord to Redis  (key: commit:{application})
         │
-        └─ Push to /topic/commit via WebSocket
+        ├─ Push to /topic/commit via WebSocket
+        │       │
+        │       ▼
+        │  Browser opens Code Review tab with result
+        │
+        └─ Publish CodeReviewCompletedEvent
                 │
-                ▼
-           Browser opens Code Review tab with result
+                ▼ (async EventListener)
+           If Slack notification is enabled for the application
+                │
+                ├─ Convert Markdown review result → Slack mrkdwn
+                │
+                └─ POST https://hooks.slack.com/{slackChannel}
+                        (Incoming Webhook — Block Kit message)
 ```
 
 ---
@@ -794,6 +815,7 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
+| 2026-05-16 | Added Slack Incoming Webhook notification for code reviews — when a code review completes, the result is converted from Markdown to Slack mrkdwn and posted to a per-application Slack channel. Toggle (`Send Slack Notification on Code Review`) and webhook path are configurable per application in the UI |
 | 2026-05-12 | Added EXAONE (LG AI Research) as a supported LLM provider — served via FriendliAI's serverless API (OpenAI-compatible); configurable via `ai.exaone.*` in application.yml or env vars `AI_EXAONE_API_KEY` / `AI_EXAONE_BASE_URL`. API key must be obtained from [friendli.ai](https://friendli.ai). Placeholder message in the LLM configuration UI guides users to FriendliAI when no key is saved |
 | 2026-05-04 | Added role-based admin authentication via Spring Security — `admin` super-account is auto-created on first startup with a one-time password logged to the console; only `admin` can create or delete other administrator accounts; App registration, update, deletion, and Code Risk Analysis require authentication |
 | 2026-05-03 | Added DeepSeek as a supported LLM provider — uses the OpenAI-compatible API (`deepseek-v4-pro` default); configurable via `ai.deepseek.*` in application.yml or env vars `AI_DEEP_SEEK_API_KEY` / `AI_DEEP_SEEK_BASE_URL`. Multiple provider API keys can be saved independently via the UI and switched at runtime |
