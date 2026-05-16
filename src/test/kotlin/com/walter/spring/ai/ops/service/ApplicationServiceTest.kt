@@ -2,7 +2,7 @@ package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_CONFIG
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.service.dto.AppConfig
@@ -96,7 +96,7 @@ class ApplicationServiceTest {
         applicationService.addApp(AppUpdateRequest("app1", "https://github.com/owner/repo.git"))
 
         // then
-        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+        verify(valueOperations).set("${REDIS_KEY_APP_CONFIG}app1", expectedJson)
     }
 
     @Test
@@ -112,7 +112,7 @@ class ApplicationServiceTest {
         applicationService.addApp(AppUpdateRequest("app1", "https://github.com/owner/repo.git", "main"))
 
         // then
-        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+        verify(valueOperations).set("${REDIS_KEY_APP_CONFIG}app1", expectedJson)
     }
 
     @Test
@@ -139,7 +139,7 @@ class ApplicationServiceTest {
         applicationService.addApp(AppUpdateRequest("app1", null))
 
         // then — saveAppConfig가 호출되지 않으므로 git 키에 대한 delete/set 없음
-        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_GIT}app1")
+        verify(redisTemplate, never()).delete("${REDIS_KEY_APP_CONFIG}app1")
         verify(redisTemplate, never()).opsForValue()
     }
 
@@ -185,7 +185,7 @@ class ApplicationServiceTest {
 
         // then
         verify(setOperations).remove(REDIS_KEY_APPLICATIONS, "app1")
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_CONFIG}app1")
     }
 
     // ── getAppConfig ──────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ class ApplicationServiceTest {
         // given
         val config = AppConfig("https://github.com/owner/repo.git", "main")
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
+        `when`(valueOperations.get("${REDIS_KEY_APP_CONFIG}app1")).thenReturn(objectMapper.writeValueAsString(config))
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
@@ -213,7 +213,7 @@ class ApplicationServiceTest {
         // given
         val config = AppConfig("https://github.com/owner/repo.git", null)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
+        `when`(valueOperations.get("${REDIS_KEY_APP_CONFIG}app1")).thenReturn(objectMapper.writeValueAsString(config))
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
@@ -229,7 +229,7 @@ class ApplicationServiceTest {
     fun getGitConfig_returnsNull_whenRedisHasNoValue() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(null)
+        `when`(valueOperations.get("${REDIS_KEY_APP_CONFIG}app1")).thenReturn(null)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
@@ -244,7 +244,7 @@ class ApplicationServiceTest {
     fun getGitConfig_returnsNull_whenValueIsNotValidJson() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn("https://github.com/owner/repo.git")
+        `when`(valueOperations.get("${REDIS_KEY_APP_CONFIG}app1")).thenReturn("https://github.com/owner/repo.git")
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
@@ -262,7 +262,7 @@ class ApplicationServiceTest {
         // given
         val config = AppConfig("https://github.com/owner/repo.git", null)
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(objectMapper.writeValueAsString(config))
+        `when`(valueOperations.get("${REDIS_KEY_APP_CONFIG}app1")).thenReturn(objectMapper.writeValueAsString(config))
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when
@@ -277,7 +277,7 @@ class ApplicationServiceTest {
     fun getGitRepoByAppName_throwsIllegalStateException_whenRedisHasNoValue() {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        `when`(valueOperations.get("${REDIS_KEY_APP_GIT}app1")).thenReturn(null)
+        `when`(valueOperations.get("${REDIS_KEY_APP_CONFIG}app1")).thenReturn(null)
         val applicationService = ApplicationService(redisTemplate, objectMapper)
 
         // when & then
@@ -298,7 +298,7 @@ class ApplicationServiceTest {
         applicationService.saveAppConfig(AppUpdateRequest("app1", ""))
 
         // then
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_CONFIG}app1")
     }
 
     @Test
@@ -328,7 +328,7 @@ class ApplicationServiceTest {
         // then
         verify(setOperations).remove(REDIS_KEY_APPLICATIONS, "oldApp")
         verify(setOperations).add(REDIS_KEY_APPLICATIONS, "newApp")
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_CONFIG}oldApp")
     }
 
     @Test
@@ -344,7 +344,7 @@ class ApplicationServiceTest {
 
         // then
         verify(redisTemplate, never()).opsForSet()
-        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+        verify(valueOperations).set("${REDIS_KEY_APP_CONFIG}app1", expectedJson)
     }
 
     @Test
@@ -359,7 +359,7 @@ class ApplicationServiceTest {
         applicationService.updateApp("app1", AppUpdateRequest("app1", "https://github.com/owner/repo.git", "main"))
 
         // then
-        verify(valueOperations).set("${REDIS_KEY_APP_GIT}app1", expectedJson)
+        verify(valueOperations).set("${REDIS_KEY_APP_CONFIG}app1", expectedJson)
     }
 
     @Test
@@ -385,7 +385,7 @@ class ApplicationServiceTest {
 
         // then — 명시적 수정 요청이므로 null은 삭제 의도로 처리
         verify(redisTemplate, never()).opsForSet()
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}app1")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_CONFIG}app1")
     }
 
     @Test
@@ -399,8 +399,8 @@ class ApplicationServiceTest {
         applicationService.updateApp("oldApp", AppUpdateRequest("newApp", null, null))
 
         // then — 이름 변경으로 oldApp git 키는 삭제되고, newApp git 키도 null 처리로 삭제됨
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}oldApp")
-        verify(redisTemplate).delete("${REDIS_KEY_APP_GIT}newApp")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_CONFIG}oldApp")
+        verify(redisTemplate).delete("${REDIS_KEY_APP_CONFIG}newApp")
     }
 
     @Test

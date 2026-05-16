@@ -1,7 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_GIT
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APP_CONFIG
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_APPLICATIONS
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.service.dto.AppConfig
@@ -42,13 +42,13 @@ class ApplicationService(
 
     fun removeApp(name: String) {
         redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, name)
-        redisTemplate.delete("$REDIS_KEY_APP_GIT$name")
+        redisTemplate.delete("$REDIS_KEY_APP_CONFIG$name")
     }
 
     fun getGitUrl(name: String): String? = getAppConfig(name)?.gitUrl
 
     fun getAppConfig(name: String): AppConfig? {
-        val value = redisTemplate.opsForValue().get("$REDIS_KEY_APP_GIT$name") ?: return null
+        val value = redisTemplate.opsForValue().get("$REDIS_KEY_APP_CONFIG$name") ?: return null
         return runCatching {
             objectMapper.readValue(value, AppConfig::class.java)
         }.getOrElse { e ->
@@ -67,7 +67,7 @@ class ApplicationService(
         if (!appUpdateRequest.deployBranch.isNullOrBlank() && gitUrl.isNullOrBlank()) {
             throw IllegalArgumentException("Git Repository URL is required when Deploy Branch is specified.")
         }
-        val key = "$REDIS_KEY_APP_GIT${appUpdateRequest.name}"
+        val key = "$REDIS_KEY_APP_CONFIG${appUpdateRequest.name}"
         if (gitUrl.isNullOrBlank()) {
             redisTemplate.delete(key)
         } else {
@@ -88,7 +88,7 @@ class ApplicationService(
         if (oldName != newName) {
             redisTemplate.opsForSet().remove(REDIS_KEY_APPLICATIONS, oldName)
             redisTemplate.opsForSet().add(REDIS_KEY_APPLICATIONS, newName)
-            redisTemplate.delete("$REDIS_KEY_APP_GIT$oldName")
+            redisTemplate.delete("$REDIS_KEY_APP_CONFIG$oldName")
         }
         saveAppConfig(appUpdateRequest)
     }
