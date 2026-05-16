@@ -902,6 +902,85 @@ async function saveObservabilityConfig() {
     }
 }
 
+// ── Deep-link / Hash Routing ─────────────────────────────────────────────────
+
+const VALID_TABS = ['exception', 'codereview', 'coderisk'];
+
+/**
+ * Parse window.location.hash into { app, tab }.
+ * Expected format: #<appname>/<tabname>  or  #<appname>
+ */
+function parseHash() {
+    const raw = decodeURIComponent(window.location.hash.slice(1)); // strip leading '#'
+    if (!raw) return { app: null, tab: null };
+    const slashIdx = raw.indexOf('/');
+    if (slashIdx === -1) return { app: raw, tab: null };
+    return { app: raw.slice(0, slashIdx), tab: raw.slice(slashIdx + 1) || null };
+}
+
+/**
+ * Update the URL hash without triggering popstate.
+ * Passing null/empty for tab keeps only the app segment.
+ */
+function updateHash(app, tab) {
+    if (!app) {
+        if (window.location.hash) {
+            history.replaceState(null, '', window.location.pathname);
+        }
+        return;
+    }
+    const fragment = tab ? `${encodeURIComponent(app)}/${tab}` : encodeURIComponent(app);
+    const newHash  = '#' + fragment;
+    if (window.location.hash !== newHash) {
+        history.pushState(null, '', newHash);
+    }
+}
+
+// Handle browser back/forward.
+window.addEventListener('popstate', async () => {
+    const { app, tab } = parseHash();
+    if (app && _appNames.includes(app)) {
+        await _navigateToAppTab(app, tab, false);
+    } else {
+        renderDefaultAppDetail();
+    }
+});
+
+/**
+ * Navigate to (app, tab) programmatically.
+ * updateUrl=true  → push a new history entry (user-initiated click).
+ * updateUrl=false → do NOT push (hash-driven navigation, popstate).
+ */
+async function _navigateToAppTab(app, tab, updateUrl = true) {
+    const items = document.querySelectorAll('.app-item');
+    items.forEach(el => el.classList.toggle('active', el.dataset.app === app));
+    selectedApp = app;
+    if (updateUrl) updateHash(app, tab || 'codereview');
+
+    stopPrometheusAutoRefresh();
+    showPanelLoading('app-detail-panel');
+    await Promise.all([
+        loadFiringList(app),
+        loadCodeRiskList(app),
+    ]);
+    appSelectedFiringIdx[app] = 0;
+    appSelectedRiskIdx[app] = appSelectedRiskIdx[app] ?? 0;
+    const panel = document.getElementById('app-detail-panel');
+    panel.innerHTML = buildAppDetailHtml(app);
+    applyHighlighting(panel);
+
+    const targetTab = tab && VALID_TABS.includes(tab) ? tab : null;
+    if (targetTab === 'coderisk' && (appCodeRiskLists[app] || []).length > 0) {
+        switchToTab('coderisk', false);
+        renderCodeRiskContent(app);
+    } else if (targetTab === 'exception') {
+        switchToTab('exception', false);
+    } else {
+        switchToTab('codereview', false);
+        await loadAndRenderCodeReview(app);
+    }
+}
+
 // ── Main Section ─────────────────────────────────────────────────────────────
 
 function showMainSection() {
@@ -925,7 +1004,12 @@ async function loadApps() {
         const apps = await res.json();
         _appNames = Array.isArray(apps) ? apps : [];
         renderAppList(apps);
-        if (!selectedApp) renderDefaultAppDetail();
+        const { app: hashApp, tab: hashTab } = parseHash();
+        if (hashApp && _appNames.includes(hashApp)) {
+            await _navigateToAppTab(hashApp, hashTab, false);
+        } else if (!selectedApp) {
+            renderDefaultAppDetail();
+        }
     } catch (e) {
         container.innerHTML =
             '<div class="list-placeholder list-error">Failed to load applications.</div>';
@@ -958,6 +1042,7 @@ function createAppItem(name) {
         document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
         item.classList.add('active');
         selectedApp = name;
+        updateHash(name, null);
         await renderAppDetail(name);
     });
     return item;
@@ -975,6 +1060,7 @@ function renderAppList(apps) {
 
 function renderDefaultAppDetail() {
     selectedApp = null;
+    updateHash(null, null);
     document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
     startPrometheusAutoRefresh();
     const panel = document.getElementById('app-detail-panel');
@@ -2524,9 +2610,12 @@ async function renderAppDetail(appName) {
     panel.innerHTML = buildAppDetailHtml(appName);
     applyHighlighting(panel);
     if ((appCodeRiskLists[appName] || []).length > 0) {
-        switchToTab('coderisk');
+        switchToTab('coderisk', false);
+        updateHash(appName, 'coderisk');
         renderCodeRiskContent(appName);
     } else {
+        switchToTab('codereview', false);
+        updateHash(appName, 'codereview');
         await loadAndRenderCodeReview(appName);
     }
 }
@@ -2730,14 +2819,15 @@ function inferSourceLanguage(filePath) {
     return '';
 }
 
-function switchToTab(tabName) {
+function switchToTab(tabName, updateUrl = true) {
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === tabName);
     });
-    ['exception', 'codereview', 'coderisk'].forEach(t => {
+    VALID_TABS.forEach(t => {
         const pane = document.getElementById('tab-pane-' + t);
         if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
     });
+    if (updateUrl && selectedApp) updateHash(selectedApp, tabName);
 }
 
 function syncCodeRiskTabVisibility(appName) {
