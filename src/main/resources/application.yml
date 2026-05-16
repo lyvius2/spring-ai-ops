@@ -95,6 +95,8 @@ github:
 gitlab:
   url: ${GITLAB_URL:https://gitlab.com/api/v4}  # Set your GitLab URL (e.g., https://gitlab.com/api/v4)
   access-token: ${GITLAB_ACCESS_TOKEN:}         # Set your GitLab access token for authentication
+slack:
+  url: ${SLACK_URL:https://hooks.slack.com}     # Set your Slack URL (e.g., https://hooks.slack.com/services/...): Required for Slack notifications
 
 crypto:
   secret-key: ${CRYPTO_SECRET_KEY:}  # Required. App startup fails if blank. AES-256-GCM key for Redis-stored credentials.
