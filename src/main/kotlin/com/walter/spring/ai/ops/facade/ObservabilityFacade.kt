@@ -10,6 +10,7 @@ import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
+import com.walter.spring.ai.ops.event.CodeReviewCompletedEvent
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.record.CommitSummary
@@ -29,6 +30,7 @@ import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
 import com.walter.spring.ai.ops.util.extension.toISO8601
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.context.ApplicationEventPublisher
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.concurrent.CompletableFuture
@@ -47,6 +49,7 @@ class ObservabilityFacade(
     private val incidentSourceContextService: IncidentSourceContextService,
     private val messageService: MessageService,
     private val codeAnalysisResultHandler: CodeAnalysisResultHandler,
+    private val eventPublisher: ApplicationEventPublisher,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
     private val log = LoggerFactory.getLogger(ObservabilityFacade::class.java)
@@ -199,6 +202,7 @@ class ObservabilityFacade(
             val record = createCodeReviewRecord(request, targetApplication, compareResult, reviewResult)
             gitService.saveCodeReviewRecord(record)
             messageService.pushCodeReview(record)
+            eventPublisher.publishEvent(CodeReviewCompletedEvent(record,targetApplication))
         }.onFailure { log.error("Failed to analyze code review record : {}", it.message, it) }
     }
 

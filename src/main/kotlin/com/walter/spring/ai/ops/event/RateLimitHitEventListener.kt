@@ -5,8 +5,9 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 @Component
-class RateLimitHitEventListener(private val messageService: MessageService) {
-
+class RateLimitHitEventListener(
+    private val messageService: MessageService
+) {
     @EventListener
     fun onRateLimitHit(event: RateLimitHitEvent) {
         messageService.pushAnalysisStatus(
