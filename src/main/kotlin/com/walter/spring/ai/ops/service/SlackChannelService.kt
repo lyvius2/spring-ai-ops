@@ -49,10 +49,14 @@ class SlackChannelService(
         val dividerBlock = SlackBlock(type = "divider")
         val reviewMrkdwn = markdownConverter.toSlackMrkdwn(record.reviewResult() ?: "")
         val truncated = markdownConverter.truncate(reviewMrkdwn)
-        val reviewBlock = SlackBlock.section(truncated)
+        val blocks = if (truncated.isBlank()) {
+            listOf(headerBlock, metaBlock)
+        } else {
+            listOf(headerBlock, metaBlock, dividerBlock, SlackBlock.section(truncated))
+        }
         return SlackMessageRequest(
             text = fallbackText,
-            blocks = listOf(headerBlock, metaBlock, dividerBlock, reviewBlock),
+            blocks = blocks,
         )
     }
 
