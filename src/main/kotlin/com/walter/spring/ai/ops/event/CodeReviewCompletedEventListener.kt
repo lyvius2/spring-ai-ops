@@ -12,7 +12,14 @@ class CodeReviewCompletedEventListener(
 ) {
     @EventListener
     fun onCodeReviewCompleted(event: CodeReviewCompletedEvent) {
-        // TODO : Inquiry set Slack channel path
-        // TODO : Implement logic to send message to Slack using slackChannelService
+        val applicationConfig = applicationService.getAppConfig(event.applicationName)
+        if (applicationConfig == null || !applicationConfig.isSend) {
+            return
+        }
+        val slackChannelPath = applicationConfig.slackChannel
+        if (slackChannelPath.isNullOrBlank()) {
+            return
+        }
+        slackChannelService.sendCodeReviewResult(event.review, slackChannelPath)
     }
 }

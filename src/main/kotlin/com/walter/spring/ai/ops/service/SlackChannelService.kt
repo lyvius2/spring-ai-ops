@@ -1,10 +1,67 @@
 package com.walter.spring.ai.ops.service
 
 import com.walter.spring.ai.ops.connector.SlackChannelConnector
+import com.walter.spring.ai.ops.connector.dto.SlackBlock
+import com.walter.spring.ai.ops.connector.dto.SlackMessageRequest
+import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.util.MarkdownConverter
 import org.springframework.stereotype.Service
 
 @Service
 class SlackChannelService(
     private val slackChannelConnector: SlackChannelConnector,
+    private val markdownConverter: MarkdownConverter,
 ) {
+    fun sendCodeReviewResult(codeReviewRecord: CodeReviewRecord, slackChannelPath: String) {
+        val message = buildSlackMessage(codeReviewRecord)
+        slackChannelConnector.sendMessage(message, slackChannelPath)
+    }
+
+    /**
+     * Builds a Slack Block Kit message from a [CodeReviewRecord].
+     *
+     * Layout:
+     * ┌─────────────────────────────────────────────┐
+     * │  header  — Code Review: {app} [{branch}]    │
+     * │  section — Repository / Commit metadata     │
+     * │  divider                                    │
+     * │  section — LLM review result (mrkdwn)       │
+     * └─────────────────────────────────────────────┘
+     *
+     * The top-level `text` field serves as the notification fallback.
+     */
+    private fun buildSlackMessage(record: CodeReviewRecord): SlackMessageRequest {
+        val fallbackText = "Code Review completed — ${record.application()} [${record.branch()}]"
+
+        val headerText = "Code Review: ${record.application()} [${record.branch()}]"
+        val headerBlock = SlackBlock.header(headerText)
+        val metaLines = buildList {
+            add("*Repository:* ${buildRepoLink(record)}")
+            add("*Branch:* `${record.branch()}`")
+            if (!record.commitMessage().isNullOrBlank()) {
+                add("*Commit:* ${record.commitMessage()}")
+            }
+            if (!record.changedFiles().isNullOrEmpty()) {
+                add("*Changed files:* ${record.changedFiles().size}")
+            }
+        }
+        val metaBlock = SlackBlock.section(metaLines.joinToString("\n"))
+        val dividerBlock = SlackBlock(type = "divider")
+        val reviewMrkdwn = markdownConverter.toSlackMrkdwn(record.reviewResult() ?: "")
+        val truncated = markdownConverter.truncate(reviewMrkdwn)
+        val reviewBlock = SlackBlock.section(truncated)
+        return SlackMessageRequest(
+            text = fallbackText,
+            blocks = listOf(headerBlock, metaBlock, dividerBlock, reviewBlock),
+        )
+    }
+
+    private fun buildRepoLink(record: CodeReviewRecord): String {
+        val url = record.githubUrl()
+        return if (!url.isNullOrBlank()) {
+            "<$url|${record.application()}>"
+        } else {
+            record.application()
+        }
+    }
 }
