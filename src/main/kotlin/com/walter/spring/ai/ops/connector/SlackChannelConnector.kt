@@ -16,11 +16,12 @@ class SlackChannelConnector(
     private val client = RestClient.create(slackUrl)
 
     fun sendMessage(message: SlackMessageRequest, channelPath: String): SlackMessageResponse {
-        return client.post()
+        val body = client.post()
             .uri(channelPath)
             .contentType(MediaType.APPLICATION_JSON)
             .body(message)
             .retrieve()
-            .body<SlackMessageResponse>() ?: throw RuntimeException("Failed to send message to Slack")
+            .body<String>() ?: throw RuntimeException("Failed to send message to Slack")
+        return SlackMessageResponse(body)
     }
 }
