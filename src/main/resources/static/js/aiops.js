@@ -907,30 +907,40 @@ async function saveObservabilityConfig() {
 const VALID_TABS = ['exception', 'codereview', 'coderisk'];
 
 /**
- * Parse window.location.hash into { app, tab }.
- * Expected format: #<appname>/<tabname>  or  #<appname>
+ * Parse window.location.hash into { app, tab, idx }.
+ * Expected format: #<appname>/<tabname>/<index>  or  #<appname>/<tabname>  or  #<appname>
  */
 function parseHash() {
     const raw = decodeURIComponent(window.location.hash.slice(1)); // strip leading '#'
-    if (!raw) return { app: null, tab: null };
-    const slashIdx = raw.indexOf('/');
-    if (slashIdx === -1) return { app: raw, tab: null };
-    return { app: raw.slice(0, slashIdx), tab: raw.slice(slashIdx + 1) || null };
+    if (!raw) return { app: null, tab: null, idx: null };
+    const parts = raw.split('/');
+    const app  = parts[0] || null;
+    const tab  = parts[1] || null;
+    const idxRaw = parts[2];
+    const idx  = idxRaw !== undefined && idxRaw !== '' ? parseInt(idxRaw, 10) : null;
+    return { app, tab, idx: (idx !== null && !isNaN(idx)) ? idx : null };
 }
 
 /**
  * Update the URL hash without triggering popstate.
  * Passing null/empty for tab keeps only the app segment.
+ * Passing a numeric idx appends the record index.
  */
-function updateHash(app, tab) {
+function updateHash(app, tab, idx) {
     if (!app) {
         if (window.location.hash) {
             history.replaceState(null, '', window.location.pathname);
         }
         return;
     }
-    const fragment = tab ? `${encodeURIComponent(app)}/${tab}` : encodeURIComponent(app);
-    const newHash  = '#' + fragment;
+    let fragment = encodeURIComponent(app);
+    if (tab) {
+        fragment += '/' + tab;
+        if (idx !== undefined && idx !== null) {
+            fragment += '/' + idx;
+        }
+    }
+    const newHash = '#' + fragment;
     if (window.location.hash !== newHash) {
         history.pushState(null, '', newHash);
     }
@@ -938,24 +948,25 @@ function updateHash(app, tab) {
 
 // Handle browser back/forward.
 window.addEventListener('popstate', async () => {
-    const { app, tab } = parseHash();
+    const { app, tab, idx } = parseHash();
     if (app && _appNames.includes(app)) {
-        await _navigateToAppTab(app, tab, false);
+        await _navigateToAppTab(app, tab, idx, false);
     } else {
         renderDefaultAppDetail();
     }
 });
 
 /**
- * Navigate to (app, tab) programmatically.
+ * Navigate to (app, tab, idx) programmatically.
  * updateUrl=true  → push a new history entry (user-initiated click).
  * updateUrl=false → do NOT push (hash-driven navigation, popstate).
+ * idx             → optional record index within the tab's history list.
  */
-async function _navigateToAppTab(app, tab, updateUrl = true) {
+async function _navigateToAppTab(app, tab, idx, updateUrl = true) {
     const items = document.querySelectorAll('.app-item');
     items.forEach(el => el.classList.toggle('active', el.dataset.app === app));
     selectedApp = app;
-    if (updateUrl) updateHash(app, tab || 'codereview');
+    if (updateUrl) updateHash(app, tab || 'codereview', idx);
 
     stopPrometheusAutoRefresh();
     showPanelLoading('app-detail-panel');
@@ -972,12 +983,32 @@ async function _navigateToAppTab(app, tab, updateUrl = true) {
     const targetTab = tab && VALID_TABS.includes(tab) ? tab : null;
     if (targetTab === 'coderisk' && (appCodeRiskLists[app] || []).length > 0) {
         switchToTab('coderisk', false);
+        const riskList = appCodeRiskLists[app] || [];
+        if (idx !== null && idx >= 0 && idx < riskList.length) {
+            appSelectedRiskIdx[app] = idx;
+        }
         renderCodeRiskContent(app);
     } else if (targetTab === 'exception') {
         switchToTab('exception', false);
+        const firingList = appFiringLists[app] || [];
+        if (idx !== null && idx >= 0 && idx < firingList.length) {
+            appSelectedFiringIdx[app] = idx;
+            const layersEl = document.getElementById('exception-layers');
+            if (layersEl) { layersEl.innerHTML = renderAnalysisLayers(app, firingList[idx]); applyHighlighting(layersEl); }
+            const tbody = document.getElementById('firing-list-body');
+            if (tbody) tbody.innerHTML = renderFiringListRows(app);
+        }
     } else {
         switchToTab('codereview', false);
         await loadAndRenderCodeReview(app);
+        if (idx !== null) {
+            const commitList = appCommitLists[app] || [];
+            if (idx >= 0 && idx < commitList.length) {
+                appSelectedCommitIdx[app] = idx;
+                const content = document.getElementById('codereview-content');
+                if (content) { content.innerHTML = buildCodeReviewHtml(app); applyHighlighting(content); }
+            }
+        }
     }
 }
 
@@ -1004,9 +1035,9 @@ async function loadApps() {
         const apps = await res.json();
         _appNames = Array.isArray(apps) ? apps : [];
         renderAppList(apps);
-        const { app: hashApp, tab: hashTab } = parseHash();
+        const { app: hashApp, tab: hashTab, idx: hashIdx } = parseHash();
         if (hashApp && _appNames.includes(hashApp)) {
-            await _navigateToAppTab(hashApp, hashTab, false);
+            await _navigateToAppTab(hashApp, hashTab, hashIdx, false);
         } else if (!selectedApp) {
             renderDefaultAppDetail();
         }
@@ -1039,11 +1070,7 @@ function createAppItem(name) {
             openEditAppModal(name);
             return;
         }
-        document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
-        item.classList.add('active');
-        selectedApp = name;
-        updateHash(name, null);
-        await renderAppDetail(name);
+        await _navigateToAppTab(name, null, null, true);
     });
     return item;
 }
@@ -2239,6 +2266,7 @@ function selectFiringRecord(appName, idx) {
     if (layersEl) { layersEl.innerHTML = renderAnalysisLayers(appName, record); applyHighlighting(layersEl); }
     const tbody = document.getElementById('firing-list-body');
     if (tbody) tbody.innerHTML = renderFiringListRows(appName);
+    updateHash(appName, 'exception', idx);
 }
 
 // ── Code Review ─────────────────────────────────────────────────────────────
@@ -2447,6 +2475,7 @@ function selectCommitRecord(appName, idx) {
     appCommitFilePage[appName] = 0;
     const content = document.getElementById('codereview-content');
     if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
+    updateHash(appName, 'codereview', idx);
 }
 
 async function loadAndRenderCodeReview(appName) {
@@ -2827,7 +2856,13 @@ function switchToTab(tabName, updateUrl = true) {
         const pane = document.getElementById('tab-pane-' + t);
         if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
     });
-    if (updateUrl && selectedApp) updateHash(selectedApp, tabName);
+    if (updateUrl && selectedApp) {
+        let currentIdx = null;
+        if (tabName === 'exception') currentIdx = appSelectedFiringIdx[selectedApp] ?? 0;
+        else if (tabName === 'codereview') currentIdx = appSelectedCommitIdx[selectedApp] ?? null;
+        else if (tabName === 'coderisk') currentIdx = appSelectedRiskIdx[selectedApp] ?? 0;
+        updateHash(selectedApp, tabName, currentIdx !== null && currentIdx > 0 ? currentIdx : null);
+    }
 }
 
 function syncCodeRiskTabVisibility(appName) {
@@ -3061,6 +3096,7 @@ function selectCodeRiskRecord(appName, idx) {
     appSelectedRiskIdx[appName] = idx;
     appRiskFilePage[appName] = 0;
     renderCodeRiskContent(appName);
+    updateHash(appName, 'coderisk', idx);
 }
 
 // ── Run Static Analysis Modal ─────────────────────────────────────────────────

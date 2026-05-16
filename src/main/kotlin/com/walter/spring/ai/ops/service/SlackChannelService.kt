@@ -5,12 +5,15 @@ import com.walter.spring.ai.ops.connector.dto.SlackBlock
 import com.walter.spring.ai.ops.connector.dto.SlackMessageRequest
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.util.MarkdownConverter
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 @Service
 class SlackChannelService(
     private val slackChannelConnector: SlackChannelConnector,
     private val markdownConverter: MarkdownConverter,
+    @Value("\${app.base-url:}")
+    private val appBaseUrl: String,
 ) {
     fun sendCodeReviewResult(codeReviewRecord: CodeReviewRecord, slackChannelPath: String) {
         val message = buildSlackMessage(codeReviewRecord)
@@ -44,6 +47,10 @@ class SlackChannelService(
             if (!record.changedFiles().isNullOrEmpty()) {
                 add("*Changed files:* ${record.changedFiles().size}")
             }
+            val directUrl = buildDirectUrl(record.application())
+            if (directUrl != null) {
+                add("*View:* <$directUrl|Open in AIOps>")
+            }
         }
         val metaBlock = SlackBlock.section(metaLines.joinToString("\n"))
         val dividerBlock = SlackBlock(type = "divider")
@@ -67,5 +74,11 @@ class SlackChannelService(
         } else {
             record.application()
         }
+    }
+
+    private fun buildDirectUrl(appName: String): String? {
+        val base = appBaseUrl.trimEnd('/')
+        if (base.isBlank()) return null
+        return "$base/#${appName}/codereview"
     }
 }
