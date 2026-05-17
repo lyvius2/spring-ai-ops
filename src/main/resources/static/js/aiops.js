@@ -907,28 +907,38 @@ async function saveObservabilityConfig() {
 const VALID_TABS = ['exception', 'codereview', 'coderisk'];
 
 /**
- * Returns the stable timestamp string used as a ZSet score proxy for a record.
- * Each record type stores the analysis/push/reception time in a different field.
+ * Converts an ISO-8601 LocalDateTime string (without timezone) to epoch milliseconds.
+ * Appends 'Z' to treat the value as UTC, matching the JVM Instant.now() used as ZSet score.
  */
-function getRecordTs(rec) {
-    if (!rec) return null;
-    return rec.occupiedAt || rec.pushedAt || rec.analyzedAt || null;
+function toEpochMs(dateStr) {
+    if (!dateStr) return null;
+    const ms = Date.parse(String(dateStr).includes('Z') ? dateStr : dateStr + 'Z');
+    return isNaN(ms) ? null : ms;
 }
 
 /**
- * Finds the list index of the record whose timestamp matches the given score string.
+ * Returns the epoch-millis score for a record by converting the relevant timestamp field.
+ * Each record type stores the time in a different field (occupiedAt / pushedAt / analyzedAt).
+ */
+function getRecordScore(rec) {
+    if (!rec) return null;
+    return toEpochMs(rec.occupiedAt || rec.pushedAt || rec.analyzedAt || null);
+}
+
+/**
+ * Finds the list index of the record whose epoch-millis score matches the given score.
  * Returns null if not found.
  */
-function findRecordIdxByTs(list, score) {
-    if (!score || !Array.isArray(list)) return null;
-    const idx = list.findIndex(r => getRecordTs(r) === score);
+function findRecordIdxByScore(list, score) {
+    if (score == null || !Array.isArray(list)) return null;
+    const idx = list.findIndex(r => getRecordScore(r) === score);
     return idx >= 0 ? idx : null;
 }
 
 /**
  * Parse window.location.hash into { app, tab, score }.
- * Expected format: #<appname>/<tabname>/<timestamp>  or  #<appname>/<tabname>  or  #<appname>
- * <timestamp> is the ISO-8601 string of the record's timestamp field (occupiedAt / pushedAt / analyzedAt).
+ * Expected format: #<appname>/<tabname>/<epochMs>  or  #<appname>/<tabname>  or  #<appname>
+ * <epochMs> is the epoch-milliseconds integer matching the ZSet score.
  */
 function parseHash() {
     const raw = decodeURIComponent(window.location.hash.slice(1)); // strip leading '#'
@@ -936,14 +946,14 @@ function parseHash() {
     const parts = raw.split('/');
     const app   = parts[0] || null;
     const tab   = parts[1] || null;
-    // Timestamp may contain '/' only if malformed — re-join remaining segments just in case.
-    const score = parts.length > 2 ? parts.slice(2).join('/') || null : null;
-    return { app, tab, score };
+    const scoreRaw = parts[2];
+    const score = scoreRaw ? parseInt(scoreRaw, 10) : null;
+    return { app, tab, score: (score !== null && !isNaN(score)) ? score : null };
 }
 
 /**
  * Update the URL hash without triggering popstate.
- * score — ISO-8601 timestamp string identifying a specific history record; omit to link to the tab root.
+ * score — epoch-milliseconds integer identifying a specific history record; omit to link to the tab root.
  */
 function updateHash(app, tab, score) {
     if (!app) {
@@ -955,8 +965,8 @@ function updateHash(app, tab, score) {
     let fragment = encodeURIComponent(app);
     if (tab) {
         fragment += '/' + tab;
-        if (score) {
-            fragment += '/' + encodeURIComponent(score);
+        if (score != null) {
+            fragment += '/' + score;
         }
     }
     const newHash = '#' + fragment;
@@ -979,7 +989,7 @@ window.addEventListener('popstate', async () => {
  * Navigate to (app, tab, score) programmatically.
  * updateUrl=true  → push a new history entry (user-initiated click).
  * updateUrl=false → do NOT push (hash-driven navigation, popstate).
- * score           → ISO-8601 timestamp string identifying a specific history record.
+ * score           → epoch-milliseconds integer identifying a specific history record.
  */
 async function _navigateToAppTab(app, tab, score, updateUrl = true) {
     const items = document.querySelectorAll('.app-item');
@@ -1002,8 +1012,7 @@ async function _navigateToAppTab(app, tab, score, updateUrl = true) {
     const targetTab = tab && VALID_TABS.includes(tab) ? tab : null;
     if (targetTab === 'coderisk' && (appCodeRiskLists[app] || []).length > 0) {
         switchToTab('coderisk', false);
-        const riskList = appCodeRiskLists[app] || [];
-        const riskIdx = findRecordIdxByTs(riskList, score);
+        const riskIdx = findRecordIdxByScore(appCodeRiskLists[app] || [], score);
         if (riskIdx !== null) {
             appSelectedRiskIdx[app] = riskIdx;
         }
@@ -1011,7 +1020,7 @@ async function _navigateToAppTab(app, tab, score, updateUrl = true) {
     } else if (targetTab === 'exception') {
         switchToTab('exception', false);
         const firingList = appFiringLists[app] || [];
-        const firingIdx = findRecordIdxByTs(firingList, score);
+        const firingIdx = findRecordIdxByScore(firingList, score);
         if (firingIdx !== null) {
             appSelectedFiringIdx[app] = firingIdx;
             const layersEl = document.getElementById('exception-layers');
@@ -1020,14 +1029,19 @@ async function _navigateToAppTab(app, tab, score, updateUrl = true) {
             if (tbody) tbody.innerHTML = renderFiringListRows(app);
         }
     } else {
-        switchToTab('codereview', false);
-        await loadAndRenderCodeReview(app);
-        const commitList = appCommitLists[app] || [];
-        const commitIdx = findRecordIdxByTs(commitList, score);
-        if (commitIdx !== null) {
-            appSelectedCommitIdx[app] = commitIdx;
-            const content = document.getElementById('codereview-content');
-            if (content) { content.innerHTML = buildCodeReviewHtml(app); applyHighlighting(content); }
+        // No tab specified or tab=codereview: check for coderisk data first (same logic as original renderAppDetail)
+        if (!targetTab && (appCodeRiskLists[app] || []).length > 0) {
+            switchToTab('coderisk', false);
+            renderCodeRiskContent(app);
+        } else {
+            switchToTab('codereview', false);
+            await loadAndRenderCodeReview(app);
+            const commitIdx = findRecordIdxByScore(appCommitLists[app] || [], score);
+            if (commitIdx !== null) {
+                appSelectedCommitIdx[app] = commitIdx;
+                const content = document.getElementById('codereview-content');
+                if (content) { content.innerHTML = buildCodeReviewHtml(app); applyHighlighting(content); }
+            }
         }
     }
 }
@@ -1809,24 +1823,27 @@ async function handleFiringRecord(record) {
             }
             const tbody = document.getElementById('firing-list-body');
             if (tbody) tbody.innerHTML = renderFiringListRows(appName);
-            switchToTab('exception');
+            switchToTab('exception', false);
+            updateHash(appName, 'exception', getRecordScore((appFiringLists[appName] || [])[0]));
         } else {
             // Different app selected: render, then activate this app.
             renderAppDetailFromLocal(appName);
-            switchToTab('exception');
+            switchToTab('exception', false);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             existing.classList.add('active');
             selectedApp = appName;
+            updateHash(appName, 'exception', getRecordScore((appFiringLists[appName] || [])[0]));
         }
     } else {
         // New app: add it, then render and activate it after the highlight animation.
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
-            switchToTab('exception');
+            switchToTab('exception', false);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
+            updateHash(appName, 'exception', getRecordScore((appFiringLists[appName] || [])[0]));
         }, { once: true });
     }
 }
@@ -1846,10 +1863,11 @@ async function handleCommitRecord(record) {
     const existing = Array.from(container.querySelectorAll('.app-item'))
         .find(el => el.dataset.app === appName);
 
-    const switchToDefaultTab = (appName) => {
-        switchToTab('codereview');
+    const switchToDefaultTab = (forApp) => {
+        switchToTab('codereview', false);
         const content = document.getElementById('codereview-content');
-        if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
+        if (content) { content.innerHTML = buildCodeReviewHtml(forApp); applyHighlighting(content); }
+        updateHash(forApp, 'codereview', getRecordScore((appCommitLists[forApp] || [])[0]));
     };
 
     if (existing) {
@@ -1859,20 +1877,20 @@ async function handleCommitRecord(record) {
         } else {
             // Different app selected: render, switch to the default tab, and activate this app.
             renderAppDetailFromLocal(appName);
-            switchToDefaultTab(appName);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             existing.classList.add('active');
             selectedApp = appName;
+            switchToDefaultTab(appName);
         }
     } else {
         // New app: add it, then render, switch to the default tab, and activate it after the highlight animation.
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
-            switchToDefaultTab(appName);
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
+            switchToDefaultTab(appName);
         }, { once: true });
     }
 }
@@ -1899,31 +1917,32 @@ async function handleCodeRiskRecord(record) {
     const existing = Array.from(container.querySelectorAll('.app-item'))
         .find(el => el.dataset.app === appName);
 
-    const switchToCodeRiskTab = () => {
+    const switchToCodeRiskTab = (forApp) => {
         const tabBtn = document.getElementById('tab-btn-coderisk');
         if (tabBtn) tabBtn.style.display = '';
-        switchToTab('coderisk');
-        renderCodeRiskContent(appName);
+        switchToTab('coderisk', false);
+        renderCodeRiskContent(forApp);
+        updateHash(forApp, 'coderisk', getRecordScore((appCodeRiskLists[forApp] || [])[0]));
     };
 
     if (existing) {
         if (selectedApp === appName) {
-            switchToCodeRiskTab();
+            switchToCodeRiskTab(appName);
         } else {
             renderAppDetailFromLocal(appName);
-            switchToCodeRiskTab();
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             existing.classList.add('active');
             selectedApp = appName;
+            switchToCodeRiskTab(appName);
         }
     } else {
         const item = addAppToList(appName);
         item.addEventListener('animationend', () => {
             renderAppDetailFromLocal(appName);
-            switchToCodeRiskTab();
             document.querySelectorAll('.app-item').forEach(el => el.classList.remove('active'));
             item.classList.add('active');
             selectedApp = appName;
+            switchToCodeRiskTab(appName);
         }, { once: true });
     }
 }
@@ -2286,7 +2305,7 @@ function selectFiringRecord(appName, idx) {
     if (layersEl) { layersEl.innerHTML = renderAnalysisLayers(appName, record); applyHighlighting(layersEl); }
     const tbody = document.getElementById('firing-list-body');
     if (tbody) tbody.innerHTML = renderFiringListRows(appName);
-    updateHash(appName, 'exception', getRecordTs(record));
+    updateHash(appName, 'exception', getRecordScore(record));
 }
 
 // ── Code Review ─────────────────────────────────────────────────────────────
@@ -2496,7 +2515,7 @@ function selectCommitRecord(appName, idx) {
     const content = document.getElementById('codereview-content');
     if (content) { content.innerHTML = buildCodeReviewHtml(appName); applyHighlighting(content); }
     const record = (appCommitLists[appName] || [])[idx];
-    updateHash(appName, 'codereview', getRecordTs(record));
+    updateHash(appName, 'codereview', getRecordScore(record));
 }
 
 async function loadAndRenderCodeReview(appName) {
@@ -2881,15 +2900,15 @@ function switchToTab(tabName, updateUrl = true) {
         let score = null;
         if (tabName === 'exception') {
             const idx = appSelectedFiringIdx[selectedApp] ?? 0;
-            score = getRecordTs((appFiringLists[selectedApp] || [])[idx]);
+            score = getRecordScore((appFiringLists[selectedApp] || [])[idx]);
         } else if (tabName === 'codereview') {
             const idx = appSelectedCommitIdx[selectedApp] ?? 0;
-            score = getRecordTs((appCommitLists[selectedApp] || [])[idx]);
+            score = getRecordScore((appCommitLists[selectedApp] || [])[idx]);
         } else if (tabName === 'coderisk') {
             const idx = appSelectedRiskIdx[selectedApp] ?? 0;
-            score = getRecordTs((appCodeRiskLists[selectedApp] || [])[idx]);
+            score = getRecordScore((appCodeRiskLists[selectedApp] || [])[idx]);
         }
-        updateHash(selectedApp, tabName, score || null);
+        updateHash(selectedApp, tabName, score ?? null);
     }
 }
 
@@ -3125,7 +3144,7 @@ function selectCodeRiskRecord(appName, idx) {
     appRiskFilePage[appName] = 0;
     renderCodeRiskContent(appName);
     const record = (appCodeRiskLists[appName] || [])[idx];
-    updateHash(appName, 'coderisk', getRecordTs(record));
+    updateHash(appName, 'coderisk', getRecordScore(record));
 }
 
 // ── Run Static Analysis Modal ─────────────────────────────────────────────────

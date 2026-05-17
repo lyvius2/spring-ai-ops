@@ -79,9 +79,9 @@ class SlackChannelService(
     private fun buildDirectUrl(record: CodeReviewRecord): String? {
         val base = appBaseUrl.trimEnd('/')
         if (base.isBlank()) return null
-        val ts = record.pushedAt()?.toString() ?: return null
+        val pushedAt = record.pushedAt() ?: return null
+        val epochMs = pushedAt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
         val encodedApp = java.net.URLEncoder.encode(record.application(), "UTF-8")
-        val encodedTs  = java.net.URLEncoder.encode(ts, "UTF-8")
-        return "$base/#$encodedApp/codereview/$encodedTs"
+        return "$base/#$encodedApp/codereview/$epochMs"
     }
 }
