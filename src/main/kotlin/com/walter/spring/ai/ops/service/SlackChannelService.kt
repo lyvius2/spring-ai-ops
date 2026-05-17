@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service
 class SlackChannelService(
     private val slackChannelConnector: SlackChannelConnector,
     private val markdownConverter: MarkdownConverter,
-    @Value("\${slack.url:https://hooks.slack.com}")
-    private val slackBaseUrl: String,
+    @Value("\${app.base-url:https://ai-ops.duckdns.org}")
+    private val baseUrl: String,
 ) {
     fun sendCodeReviewResult(codeReviewRecord: CodeReviewRecord, slackChannelPath: String) {
         val message = buildSlackMessage(codeReviewRecord)
@@ -77,7 +77,7 @@ class SlackChannelService(
     }
 
     private fun buildDirectUrl(record: CodeReviewRecord): String? {
-        val base = slackBaseUrl.trimEnd('/')
+        val base = baseUrl.trimEnd('/')
         if (base.isBlank()) return null
         val pushedAt = record.pushedAt() ?: return null
         val epochMs = pushedAt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
