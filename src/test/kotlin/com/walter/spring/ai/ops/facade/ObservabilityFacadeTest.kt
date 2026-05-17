@@ -22,6 +22,7 @@ import com.walter.spring.ai.ops.service.dto.IncidentSourceContext
 import com.walter.spring.ai.ops.service.dto.SourceSnippet
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
 import org.assertj.core.api.Assertions.assertThat
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.task.AsyncTaskExecutor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -54,6 +55,7 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var incidentSourceContextService: IncidentSourceContextService
     @Mock private lateinit var messageService: MessageService
     @Mock private lateinit var codeAnalysisResultHandler: CodeAnalysisResultHandler
+    @Mock private lateinit var eventPublisher: ApplicationEventPublisher
     @Mock private lateinit var taskExecutor: AsyncTaskExecutor
 
     private lateinit var incidentAnalyzeFacade: ObservabilityFacade
@@ -64,6 +66,7 @@ class ObservabilityFacadeTest {
             applicationService, grafanaService, lokiService, prometheusService,
             githubService, gitlabService, aiModelService, repositoryService, incidentSourceContextService, messageService,
             codeAnalysisResultHandler,
+            eventPublisher,
             taskExecutor,
         )
     }

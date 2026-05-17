@@ -62,11 +62,11 @@ class MarkdownConverter {
         text = INLINE_CODE.replace(text) { m ->
             protect("`${m.groupValues[1]}`")
         }
-        text = HEADER.replace(text) { "*${it.groupValues[1].trim()}*" }
         text = ITALIC_ASTERISK.replace(text) { "_${it.groupValues[1]}_" }
         text = ITALIC_UNDERSCORE.replace(text) { "_${it.groupValues[1]}_" }
         text = BOLD_ASTERISK.replace(text) { "*${it.groupValues[1]}*" }
         text = BOLD_UNDERSCORE.replace(text) { "*${it.groupValues[1]}*" }
+        text = HEADER.replace(text) { "*${it.groupValues[1].trim()}*" }
         text = STRIKETHROUGH.replace(text) { "~${it.groupValues[1]}~" }
         text = LINK.replace(text) { "<${it.groupValues[2]}|${it.groupValues[1]}>" }
         text = UNORDERED_LIST.replace(text) { "• ${it.groupValues[1]}" }
@@ -99,11 +99,11 @@ class MarkdownConverter {
         }
         val cutPoint = (maxLength - suffix.length).coerceAtLeast(0)
         return if (cutPoint == 0) {
-            suffix
+            suffix.take(maxLength)
         } else {
-            text.substring(0, cutPoint).trimEnd() + suffix
+            text.substring(0, minOf(cutPoint, text.length)).trimEnd() + suffix
         }
     }
 
-    private fun buildLinkSuffix(url: String): String = "\n\n_...truncated. View full message at_ <$url|this link>"
+    internal fun buildLinkSuffix(url: String): String = "\n\n_...truncated. View full message at_ <$url|this link>"
 }
