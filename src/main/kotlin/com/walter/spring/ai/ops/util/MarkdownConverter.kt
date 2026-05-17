@@ -101,3 +101,4 @@ class MarkdownConverter {
         return text.substring(0, cutPoint).trimEnd() + LINK_SUFFIX.replace("{url}", linkUrl)
     }
 }
+
