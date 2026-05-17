@@ -98,6 +98,6 @@ class MarkdownConverter {
             return text.substring(0, cutPoint).trimEnd() + TRUNCATION_SUFFIX
         }
         val cutPoint = maxLength - LINK_SUFFIX.length - linkUrl.length
-        return text.substring(0, cutPoint).trimEnd() + LINK_SUFFIX.replace("url", linkUrl)
+        return text.substring(0, cutPoint).trimEnd() + LINK_SUFFIX.replace("{url}", linkUrl)
     }
 }
