@@ -25,6 +25,7 @@ class MarkdownConverter {
     companion object {
         const val SLACK_MAX_LENGTH = 3_000
         private const val TRUNCATION_SUFFIX = "\n\n_[message truncated]_"
+        private const val LINK_SUFFIX = "\n\n_...truncated. View full message at <{url}|this link>_"
 
         private val FENCED_CODE_BLOCK = Regex("```(\\w+)?\\n([\\s\\S]*?)```")
         private val INLINE_CODE = Regex("`([^`\\n]+?)`")
@@ -88,12 +89,16 @@ class MarkdownConverter {
      * @param maxLength maximum allowed character count (default: [SLACK_MAX_LENGTH])
      * @return the original string if within limit, otherwise the truncated string with suffix
      */
-    fun truncate(text: String, maxLength: Int = SLACK_MAX_LENGTH): String {
+    fun truncate(text: String, linkUrl: String? = null, maxLength: Int = SLACK_MAX_LENGTH): String {
         if (text.length <= maxLength) {
             return text
         }
-        val cutPoint = maxLength - TRUNCATION_SUFFIX.length
-        return text.substring(0, cutPoint).trimEnd() + TRUNCATION_SUFFIX
+        if (linkUrl.isNullOrBlank()) {
+            val cutPoint = maxLength - TRUNCATION_SUFFIX.length
+            return text.substring(0, cutPoint).trimEnd() + TRUNCATION_SUFFIX
+        }
+        val cutPoint = maxLength - LINK_SUFFIX.length - linkUrl.length
+        return text.substring(0, cutPoint).trimEnd() + LINK_SUFFIX.format(linkUrl)
     }
 }
 

@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service
 class SlackChannelService(
     private val slackChannelConnector: SlackChannelConnector,
     private val markdownConverter: MarkdownConverter,
-    @Value("\${app.base-url:}")
-    private val appBaseUrl: String,
+    @Value("\${slack.url:https://hooks.slack.com}")
+    private val slackBaseUrl: String,
 ) {
     fun sendCodeReviewResult(codeReviewRecord: CodeReviewRecord, slackChannelPath: String) {
         val message = buildSlackMessage(codeReviewRecord)
@@ -38,6 +38,7 @@ class SlackChannelService(
 
         val headerText = "Code Review: ${record.application()} [${record.branch()}]"
         val headerBlock = SlackBlock.header(headerText)
+        val directUrl = buildDirectUrl(record)
         val metaLines = buildList {
             add("*Repository:* ${buildRepoLink(record)}")
             add("*Branch:* `${record.branch()}`")
@@ -47,7 +48,6 @@ class SlackChannelService(
             if (!record.changedFiles().isNullOrEmpty()) {
                 add("*Changed files:* ${record.changedFiles().size}")
             }
-            val directUrl = buildDirectUrl(record)
             if (directUrl != null) {
                 add("*View:* <$directUrl|Open in AIOps>")
             }
@@ -55,7 +55,7 @@ class SlackChannelService(
         val metaBlock = SlackBlock.section(metaLines.joinToString("\n"))
         val dividerBlock = SlackBlock(type = "divider")
         val reviewMrkdwn = markdownConverter.toSlackMrkdwn(record.reviewResult() ?: "")
-        val truncated = markdownConverter.truncate(reviewMrkdwn)
+        val truncated = markdownConverter.truncate(reviewMrkdwn, directUrl)
         val blocks = if (truncated.isBlank()) {
             listOf(headerBlock, metaBlock)
         } else {
@@ -77,7 +77,7 @@ class SlackChannelService(
     }
 
     private fun buildDirectUrl(record: CodeReviewRecord): String? {
-        val base = appBaseUrl.trimEnd('/')
+        val base = slackBaseUrl.trimEnd('/')
         if (base.isBlank()) return null
         val pushedAt = record.pushedAt() ?: return null
         val epochMs = pushedAt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
