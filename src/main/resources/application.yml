@@ -111,7 +111,7 @@ analysis:
     map-reduce-delay-ms: 1000       # Delay (ms) after each chunk call before releasing the concurrency slot: Default is 1000
 
 app:
-  base-url: ${APP_BASE_URL:}          # External base URL of this app (e.g., http://my-host:7079). Used to build direct deep-link URLs in Slack notifications. Leave blank to omit links.
+  base-url: ${APP_BASE_URL:https://ai-ops.duckdns.org}  # External base URL of this app (e.g., http://my-host:7079). Used to build direct deep-link URLs in Slack notifications. Leave blank to omit links.
   async:
     virtual:
       executor-concurrency-limit: 200 # Max concurrent tasks for async operations using virtual threads.

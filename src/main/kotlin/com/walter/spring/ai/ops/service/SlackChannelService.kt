@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service
 class SlackChannelService(
     private val slackChannelConnector: SlackChannelConnector,
     private val markdownConverter: MarkdownConverter,
-    @Value("\${app.base-url:https://ai-ops.duckdns.org}")
+    @Value("\${app.base-url}")
     private val baseUrl: String,
 ) {
     fun sendCodeReviewResult(codeReviewRecord: CodeReviewRecord, slackChannelPath: String) {
