@@ -85,8 +85,6 @@ class CodeRiskFacadeTest {
     ) {
         val files = listOf<Path>()
         `when`(applicationService.getGitRepoByAppName(appName)).thenReturn(gitUrl)
-        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("gh-token")
-        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("gl-token")
         `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gh-token")).thenReturn(sourcePath)
         `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gl-token")).thenReturn(sourcePath)
         `when`(repositoryService.collectSourceFiles(sourcePath)).thenReturn(files)

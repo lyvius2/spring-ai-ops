@@ -68,8 +68,8 @@ class AiModelService(
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
     private val languageOptions = "The analysis results should be derived in the '${resultLanguage}' language."
 
-    @Volatile
-    private var chatModel: ChatModel? = null
+    @Volatile private var chatModel: ChatModel? = null
+    @Volatile private var bedrockChatModel: BedrockProxyChatModel? = null
 
     @EventListener(ApplicationStartedEvent::class)
     fun initialize() {
@@ -111,11 +111,8 @@ class AiModelService(
         }
 
         val matchedLlmConfig: LlmConfig? = llmConfigs.firstOrNull { it.provider.key == usageLlm }
-        if (matchedLlmConfig?.provider == LlmProvider.BEDROCK) {
-            runCatching { chatModel = buildBedrockChatModel() }
-                .onFailure { log.warn("Failed to restore Bedrock LLM config from application settings: {}", it.message) }
-            return
-        }
+        runCatching { bedrockChatModel = buildBedrockChatModel() }
+            .onFailure { log.warn("Failed to initialize Bedrock LLM config from application settings: {}", it.message) }
         if (matchedLlmConfig != null) {
             val apiKey = cryptoProvider.decrypt(matchedLlmConfig.apiKey)
             if (apiKey.isNotBlank()) {
@@ -140,11 +137,7 @@ class AiModelService(
 
     fun isSelectProviderRequired(): Boolean {
         val configuredCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey, exaoneApiKey).count { it.isNotBlank() }
-        val bedrockConfigured = if (bedrockRegion.isNotBlank()) {
-            1
-        } else {
-            0
-        }
+        val bedrockConfigured = if (listOf(bedrockRegion, bedrockAccessKey, bedrockSecretKey, bedrockModel).all { it.isNotBlank() }) 1 else 0
         return (configuredCount + bedrockConfigured) >= 2 && chatModel == null
     }
 
@@ -168,7 +161,7 @@ class AiModelService(
                 throw IllegalStateException("Bedrock region is not configured in application.yml or environment variables")
             }
             redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
-            chatModel = buildBedrockChatModel()
+            chatModel = bedrockChatModel ?: buildBedrockChatModel()
             return
         }
         val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
@@ -268,7 +261,9 @@ class AiModelService(
                 val options = OpenAiChatOptions.builder().model(exaoneModel).build()
                 OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
-            LlmProvider.BEDROCK -> buildBedrockChatModel()
+            LlmProvider.BEDROCK -> {
+                bedrockChatModel ?: buildBedrockChatModel()
+            }
         }
     }
 
