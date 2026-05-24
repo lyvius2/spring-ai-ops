@@ -21,7 +21,6 @@ import com.walter.spring.ai.ops.service.dto.SourceSnippet
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
 import com.walter.spring.ai.ops.util.GitRemoteResolver
 import org.assertj.core.api.Assertions.assertThat
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.task.AsyncTaskExecutor
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -41,7 +40,7 @@ import java.nio.file.Files
 private fun <T> anyObject(): T = Mockito.any() as T
 
 @ExtendWith(MockitoExtension::class)
-class ObservabilityFacadeTest {
+class IncidentAnalyzeFacadeTest {
 
     @Mock private lateinit var applicationService: ApplicationService
     @Mock private lateinit var grafanaService: GrafanaService
@@ -53,18 +52,16 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var incidentSourceContextService: IncidentSourceContextService
     @Mock private lateinit var messageService: MessageService
     @Mock private lateinit var codeAnalysisResultHandler: CodeAnalysisResultHandler
-    @Mock private lateinit var eventPublisher: ApplicationEventPublisher
     @Mock private lateinit var taskExecutor: AsyncTaskExecutor
 
-    private lateinit var incidentAnalyzeFacade: ObservabilityFacade
+    private lateinit var incidentAnalyzeFacade: IncidentAnalyzeFacade
 
     @BeforeEach
     fun setUp() {
-        incidentAnalyzeFacade = ObservabilityFacade(
+        incidentAnalyzeFacade = IncidentAnalyzeFacade(
             applicationService, grafanaService, lokiService, prometheusService,
             gitRemoteResolver, aiModelService, repositoryService, incidentSourceContextService, messageService,
             codeAnalysisResultHandler,
-            eventPublisher,
             taskExecutor,
         )
     }
