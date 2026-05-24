@@ -7,7 +7,8 @@ enum class LlmProvider(
     OPEN_AI("ChatGPT", "openai"),
     ANTHROPIC("Claude", "anthropic"),
     DEEP_SEEK("DeepSeek", "deepseek"),
-    EXAONE("LG AI Research", "exaone");
+    EXAONE("LG AI Research", "exaone"),
+    BEDROCK("Amazon Bedrock", "bedrock");
 
     companion object {
         fun fromKey(key: String): LlmProvider =

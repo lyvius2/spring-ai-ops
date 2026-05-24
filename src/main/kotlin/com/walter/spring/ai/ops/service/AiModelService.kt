@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
 import org.springframework.ai.anthropic.AnthropicChatOptions
 import org.springframework.ai.anthropic.api.AnthropicApi
+import org.springframework.ai.bedrock.converse.BedrockChatOptions
+import org.springframework.ai.bedrock.converse.BedrockProxyChatModel
 import org.springframework.ai.chat.messages.SystemMessage
 import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.ai.chat.model.ChatModel
@@ -24,6 +26,12 @@ import org.springframework.ai.openai.OpenAiChatOptions
 import org.springframework.ai.openai.api.OpenAiApi
 import org.springframework.ai.retry.NonTransientAiException
 import org.springframework.ai.retry.RetryUtils
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeAsyncClient
+import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -51,6 +59,10 @@ class AiModelService(
     @Value("\${ai.exaone.model:LGAI-EXAONE/K-EXAONE-236B-A23B}") private val exaoneModel: String,
     @Value("\${ai.exaone.api-key:}") private val exaoneApiKey: String,
     @Value("\${ai.exaone.base-url:https://api.friendli.ai/serverless}") private val exaoneBaseUrl: String,
+    @Value("\${ai.bedrock.region:us-east-1}") private val bedrockRegion: String,
+    @Value("\${ai.bedrock.model:us.amazon.nova-pro-v1:0}") private val bedrockModel: String,
+    @Value("\${ai.bedrock.access-key:}") private val bedrockAccessKey: String,
+    @Value("\${ai.bedrock.secret-key:}") private val bedrockSecretKey: String,
     @Value("\${analysis.result-language:en}") private val resultLanguage: String,
 ) {
     private val log = LoggerFactory.getLogger(AiModelService::class.java)
@@ -84,17 +96,26 @@ class AiModelService(
         }
 
         val ymlKeyCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey).count { it.isNotBlank() }
-        val fallbackUsage = if (ymlKeyCount < 2) llmConfigs.firstOrNull { !it.apiKey.isNullOrBlank() }?.provider?.key else null
+        val fallbackUsage = if (ymlKeyCount < 2) {
+            llmConfigs.firstOrNull { !it.apiKey.isNullOrBlank() }?.provider?.key
+        } else {
+            null
+        }
         val savedUsageLlm = redisTemplate.opsForValue().get(REDIS_KEY_USAGE_LLM)?.takeIf { it.isNotBlank() }
         val usageLlm: String = savedUsageLlm ?: fallbackUsage ?: ""
-
         if (usageLlm.isBlank()) {
             return
         }
         if (savedUsageLlm == null) {
             redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, usageLlm)
         }
+
         val matchedLlmConfig: LlmConfig? = llmConfigs.firstOrNull { it.provider.key == usageLlm }
+        if (matchedLlmConfig?.provider == LlmProvider.BEDROCK) {
+            runCatching { chatModel = buildBedrockChatModel() }
+                .onFailure { log.warn("Failed to restore Bedrock LLM config from application settings: {}", it.message) }
+            return
+        }
         if (matchedLlmConfig != null) {
             val apiKey = cryptoProvider.decrypt(matchedLlmConfig.apiKey)
             if (apiKey.isNotBlank()) {
@@ -111,14 +132,20 @@ class AiModelService(
             LlmProvider.ANTHROPIC -> anthropicApiKey
             LlmProvider.DEEP_SEEK -> deepseekApiKey
             LlmProvider.EXAONE -> exaoneApiKey
+            LlmProvider.BEDROCK -> ""
         }
         val encryptedKey = rawKey.takeIf { it.isNotBlank() }?.let { cryptoProvider.encrypt(it) }
         return LlmConfig(provider, encryptedKey)
     }
 
     fun isSelectProviderRequired(): Boolean {
-        val configuredCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey).count { it.isNotBlank() }
-        return configuredCount >= 2 && chatModel == null
+        val configuredCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey, exaoneApiKey).count { it.isNotBlank() }
+        val bedrockConfigured = if (bedrockRegion.isNotBlank()) {
+            1
+        } else {
+            0
+        }
+        return (configuredCount + bedrockConfigured) >= 2 && chatModel == null
     }
 
     fun configureFromYml(provider: LlmProvider) {
@@ -127,14 +154,23 @@ class AiModelService(
             LlmProvider.ANTHROPIC -> anthropicApiKey
             LlmProvider.DEEP_SEEK -> deepseekApiKey
             LlmProvider.EXAONE -> exaoneApiKey
+            LlmProvider.BEDROCK -> ""
         }
-        if (apiKey.isBlank()) {
+        if (LlmProvider.BEDROCK != provider && apiKey.isBlank()) {
             throw IllegalStateException("API key for '${provider.key}' is not configured in application.yml")
         }
         configure(provider, apiKey)
     }
 
     fun configure(provider: LlmProvider, apiKey: String) {
+        if (provider == LlmProvider.BEDROCK) {
+            if (bedrockRegion.isBlank()) {
+                throw IllegalStateException("Bedrock region is not configured in application.yml or environment variables")
+            }
+            redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
+            chatModel = buildBedrockChatModel()
+            return
+        }
         val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
         val existingConfig = llmConfigs.firstOrNull { it.provider == provider }
         val effectiveApiKey = apiKey.ifBlank {
@@ -172,6 +208,9 @@ class AiModelService(
     }
 
     fun hasApiKey(provider: LlmProvider): Boolean {
+        if (provider == LlmProvider.BEDROCK) {
+            return bedrockRegion.isNotBlank()
+        }
         val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
         return llmConfigs.any { it.provider == provider && !it.apiKey.isNullOrBlank() }
     }
@@ -229,7 +268,30 @@ class AiModelService(
                 val options = OpenAiChatOptions.builder().model(exaoneModel).build()
                 OpenAiChatModel(api, options, toolCallingManager, retryTemplate, observationRegistry)
             }
+            LlmProvider.BEDROCK -> buildBedrockChatModel()
         }
+    }
+
+    private fun buildBedrockChatModel(): BedrockProxyChatModel {
+        val toolCallingManager = ToolCallingManager.builder().build()
+        val observationRegistry = ObservationRegistry.NOOP
+
+        val credentialsProvider = if (bedrockAccessKey.isNotBlank() && bedrockSecretKey.isNotBlank()) {
+            StaticCredentialsProvider.create(AwsBasicCredentials.create(bedrockAccessKey, bedrockSecretKey))
+        } else {
+            DefaultCredentialsProvider.builder().build()
+        }
+        val region = Region.of(bedrockRegion)
+        val syncClient = BedrockRuntimeClient.builder()
+            .region(region)
+            .credentialsProvider(credentialsProvider)
+            .build()
+        val asyncClient = BedrockRuntimeAsyncClient.builder()
+            .region(region)
+            .credentialsProvider(credentialsProvider)
+            .build()
+        val options = BedrockChatOptions.builder().model(bedrockModel).build()
+        return BedrockProxyChatModel(syncClient, asyncClient, options, observationRegistry, toolCallingManager)
     }
 
     fun estimateTokenCount(bundle: String): Int {

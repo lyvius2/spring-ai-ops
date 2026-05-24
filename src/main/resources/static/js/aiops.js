@@ -492,6 +492,16 @@ function updateLlmKeyInput() {
     const saveConnBtn  = document.getElementById('llm-save-btn');
     const isReconfigure = document.getElementById('llm-modal-close').style.display !== 'none';
 
+    if (selected.value === 'bedrock') {
+        apiKeyInput.disabled = true;
+        apiKeyInput.value = '';
+        apiKeyInput.placeholder = 'Credentials managed via AWS environment variables or application settings';
+        saveConnBtn.innerHTML = 'Connect';
+        saveKeyBtn.style.display = 'none';
+        return;
+    }
+
+    apiKeyInput.disabled = false;
     const keyAlreadySaved = hasLlmKeyConfigured(selected.value);
     const isCurrentProvider = selected.value === _currentLlm;
 
@@ -561,7 +571,7 @@ async function saveLlmConfig() {
     const apiKey = document.getElementById('llm-api-key').value.trim();
     const btn    = document.getElementById('llm-save-btn');
 
-    if (!apiKey && !hasLlmKeyConfigured(llm)) {
+    if (llm !== 'bedrock' && !apiKey && !hasLlmKeyConfigured(llm)) {
         showLlmAlert('error', 'Please enter an API key.');
         return;
     }

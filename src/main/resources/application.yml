@@ -37,6 +37,9 @@ spring:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
       - org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration
+      - org.springframework.ai.model.bedrock.converse.autoconfigure.BedrockConverseProxyChatAutoConfiguration
+      - org.springframework.ai.model.bedrock.cohere.autoconfigure.BedrockCohereEmbeddingAutoConfiguration
+      - org.springframework.ai.model.bedrock.titan.autoconfigure.BedrockTitanEmbeddingAutoConfiguration
       - org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration
       - org.springframework.ai.model.chat.memory.autoconfigure.ChatMemoryAutoConfiguration
       - org.springframework.ai.model.chat.observation.autoconfigure.ChatObservationAutoConfiguration
@@ -83,6 +86,11 @@ ai:
     model: LGAI-EXAONE/K-EXAONE-236B-A23B
     api-key: ${AI_EXAONE_API_KEY:}
     base-url: ${AI_EXAONE_BASE_URL:https://api.friendli.ai/serverless}
+  bedrock:
+    region: ${AWS_BEDROCK_REGION:us-east-1}              # AWS region for Amazon Bedrock (e.g., us-east-1, ap-northeast-1)
+    model: ${AWS_BEDROCK_MODEL:us.amazon.nova-pro-v1:0}  # Bedrock model ID (e.g., anthropic.claude-3-5-sonnet-20241022-v2:0)
+    access-key: ${AWS_ACCESS_KEY_ID:}                    # AWS access key ID. Leave blank to use IAM role or default credential chain.
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}                # AWS secret access key. Leave blank to use IAM role or default credential chain.
 
 prometheus:
   url: ${PROMETHEUS_URL:}               # Set your Prometheus URL (e.g., http://localhost:9090). Optional; leave blank to skip metric queries.

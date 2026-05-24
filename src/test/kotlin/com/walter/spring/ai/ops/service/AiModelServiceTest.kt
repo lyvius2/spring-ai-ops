@@ -58,15 +58,22 @@ class AiModelServiceTest {
         aiModelService = buildService()
     }
 
-    private fun buildService(openAiApiKey: String = "", anthropicApiKey: String = "", deepseekApiKey: String = "") =
-        AiModelService(
-            redisTemplate, cryptoProvider, objectMapper, Semaphore(10), eventPublisher,
-            "gpt-4o-mini", openAiApiKey,
-            "claude-sonnet-4-6", anthropicApiKey, 4096,
-            "deepseek-v4-pro", deepseekApiKey, "https://api.deepseek.com",
-            "LGAI-EXAONE/K-EXAONE-236B-A23B", "", "https://api.friendli.ai/serverless",
-            "en"
-        )
+    private fun buildService(
+        openAiApiKey: String = "",
+        anthropicApiKey: String = "",
+        deepseekApiKey: String = "",
+        bedrockRegion: String = "",
+        bedrockAccessKey: String = "",
+        bedrockSecretKey: String = "",
+    ) = AiModelService(
+        redisTemplate, cryptoProvider, objectMapper, Semaphore(10), eventPublisher,
+        "gpt-4o-mini", openAiApiKey,
+        "claude-sonnet-4-6", anthropicApiKey, 4096,
+        "deepseek-v4-pro", deepseekApiKey, "https://api.deepseek.com",
+        "LGAI-EXAONE/K-EXAONE-236B-A23B", "", "https://api.friendli.ai/serverless",
+        bedrockRegion, "us.amazon.nova-pro-v1:0", bedrockAccessKey, bedrockSecretKey,
+        "en"
+    )
 
     // ── initialize ────────────────────────────────────────────────────────────
 
@@ -225,6 +232,111 @@ class AiModelServiceTest {
 
         // when / then
         assertThat(aiModelService.hasApiKey(LlmProvider.OPEN_AI)).isFalse()
+    }
+
+    // ── BEDROCK ───────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("BEDROCK configure 시 llmApis에 API key를 저장하지 않고 usageLlm만 저장됨")
+    fun givenBedrockProvider_whenConfigure_thenSkipsLlmApisRedisStorageAndSavesUsageLlm() {
+        // given
+        val service = buildService(bedrockRegion = "us-east-1", bedrockAccessKey = "fake-access", bedrockSecretKey = "fake-secret")
+
+        // when
+        service.configure(LlmProvider.BEDROCK, "")
+
+        // then
+        verify(valueOps).set(REDIS_KEY_USAGE_LLM, "bedrock")
+        verify(valueOps, org.mockito.Mockito.never()).set(eq(REDIS_KEY_LLM_APIS), anyString())
+        assertThat(service.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("BEDROCK hasApiKey는 bedrockRegion이 설정돼 있으면 true (Redis 조회 없음)")
+    fun givenBedrockRegionSet_whenHasApiKey_thenReturnsTrue() {
+        // given
+        val service = buildService(bedrockRegion = "us-east-1")
+
+        // when / then
+        assertThat(service.hasApiKey(LlmProvider.BEDROCK)).isTrue()
+    }
+
+    @Test
+    @DisplayName("BEDROCK hasApiKey는 bedrockRegion이 비어있으면 false")
+    fun givenBedrockRegionBlank_whenHasApiKey_thenReturnsFalse() {
+        // given
+        val service = buildService(bedrockRegion = "")
+
+        // when / then
+        assertThat(service.hasApiKey(LlmProvider.BEDROCK)).isFalse()
+    }
+
+    @Test
+    @DisplayName("usageLlm=bedrock이면 initialize 시 Bedrock ChatModel이 복원됨")
+    fun givenUsageLlmIsBedrock_whenInitialize_thenRestoresBedrockChatModel() {
+        // given
+        val configs = """[{"provider":"BEDROCK","apiKey":null}]"""
+        given(valueOps.get(REDIS_KEY_LLM_APIS)).willReturn(configs)
+        given(valueOps.get(REDIS_KEY_USAGE_LLM)).willReturn("bedrock")
+        val service = buildService(bedrockRegion = "us-east-1", bedrockAccessKey = "fake-access", bedrockSecretKey = "fake-secret")
+
+        // when
+        service.initialize()
+
+        // then
+        assertThat(service.isConfigured()).isTrue()
+    }
+
+    @Test
+    @DisplayName("usageLlm=bedrock이고 bedrockRegion이 비어있으면 initialize 후 ChatModel이 구성되지 않음")
+    fun givenUsageLlmIsBedrockButRegionBlank_whenInitialize_thenChatModelNotConfigured() {
+        // given
+        val configs = """[{"provider":"BEDROCK","apiKey":null}]"""
+        given(valueOps.get(REDIS_KEY_LLM_APIS)).willReturn(configs)
+        given(valueOps.get(REDIS_KEY_USAGE_LLM)).willReturn("bedrock")
+        val service = buildService(bedrockRegion = "")
+
+        // when
+        service.initialize()
+
+        // then
+        assertThat(service.isConfigured()).isFalse()
+    }
+
+    @Test
+    @DisplayName("configureFromYml(BEDROCK) 호출 시 Bedrock ChatModel이 구성됨")
+    fun givenBedrockRegionSet_whenConfigureFromYml_thenBedrockChatModelConfigured() {
+        // given
+        val service = buildService(openAiApiKey = "sk-key", bedrockRegion = "us-east-1", bedrockAccessKey = "fake-access", bedrockSecretKey = "fake-secret")
+
+        // when
+        service.configureFromYml(LlmProvider.BEDROCK)
+
+        // then
+        assertThat(service.isConfigured()).isTrue()
+        verify(valueOps).set(REDIS_KEY_USAGE_LLM, "bedrock")
+    }
+
+    @Test
+    @DisplayName("configureFromYml(BEDROCK) 호출 시 bedrockRegion이 비어있으면 IllegalStateException 발생")
+    fun givenBedrockRegionBlank_whenConfigureFromYml_thenThrowsIllegalStateException() {
+        // given
+        val service = buildService(bedrockRegion = "")
+
+        // when / then
+        assertThatThrownBy { service.configureFromYml(LlmProvider.BEDROCK) }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Bedrock region is not configured")
+    }
+
+    @Test
+    @DisplayName("BEDROCK과 다른 provider가 모두 설정되면 isSelectProviderRequired는 true")
+    fun givenBedrockAndAnotherProviderConfigured_whenIsSelectProviderRequired_thenReturnsTrue() {
+        // given
+        val service = buildService(openAiApiKey = "sk-key", bedrockRegion = "us-east-1")
+
+        // when / then
+        assertThat(service.isSelectProviderRequired()).isTrue()
     }
 
     // ── executeAnalyzeFiring ──────────────────────────────────────────────────
