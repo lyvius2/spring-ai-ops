@@ -8,6 +8,7 @@
 ![Anthropic](https://img.shields.io/badge/Anthropic-supported-191919)
 ![DeepSeek](https://img.shields.io/badge/DeepSeek-supported-4D6BFE)
 ![EXAONE](https://img.shields.io/badge/EXAONE-supported-A50034)
+![Amazon Bedrock](https://img.shields.io/badge/Amazon%20Bedrock-supported-FF9900?logo=amazonaws&logoColor=white)
 ![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2024.0.1-6DB33F)
 ![Redis](https://img.shields.io/badge/Redis-enabled-DC382D?logo=redis&logoColor=white)
 ![OpenFeign](https://img.shields.io/badge/OpenFeign-client-2C3E50)
@@ -18,7 +19,7 @@
 
 [한국어(Korean) 문서](README_KR.md)  
   
-An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic, DeepSeek, or EXAONE via FriendliAI) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs, optionally fetches Prometheus metrics over the same alert window, checks out the registered application source repository, and sends focused stack-trace-related source snippets to the LLM. Results are delivered to a live dashboard via WebSocket.  
+An AI-powered operations automation tool that receives webhooks from **Grafana Alerting**, **GitHub**, and **GitLab**, then uses an LLM (OpenAI, Anthropic, DeepSeek, EXAONE via FriendliAI, or Amazon Bedrock) to analyze errors, review code, and perform static code risk analysis in real time. For Grafana alerts, the application queries Loki logs, optionally fetches Prometheus metrics over the same alert window, checks out the registered application source repository, and sends focused stack-trace-related source snippets to the LLM. Results are delivered to a live dashboard via WebSocket.  
 
 ---
 
@@ -80,7 +81,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Source Fix Suggestions** | Incident analysis can return structured source code suggestions (`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) shown at the bottom of the AI Analysis panel with a side-by-side popup and copy action |
 | **Persistent Repository Storage** | Optionally keep registered application repositories under `repository.local-path` to avoid repeated fresh checkouts; Redis locks protect branch switch/reset operations and failures fall back to temporary clones |
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
-| **Dynamic LLM Configuration** | Switch between OpenAI, Anthropic, DeepSeek, and EXAONE (via FriendliAI) at runtime via the UI — no restart required. Each provider's API key is stored independently and can be updated separately |
+| **Dynamic LLM Configuration** | Switch between OpenAI, Anthropic, DeepSeek, EXAONE (via FriendliAI), and Amazon Bedrock at runtime via the UI — no restart required. Each provider's API key is stored independently and can be updated separately. Amazon Bedrock credentials are managed via `application.yml` or environment variables and are never stored in Redis |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
 | **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
 | **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 20 concurrent) |
@@ -413,7 +414,7 @@ POST /webhook/grafana[/{application}]
 |---|---|
 | Language | Kotlin 2.2 / Java 21 |
 | Framework | Spring Boot 3.4.4 |
-| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI-compatible), EXAONE (`LGAI-EXAONE/K-EXAONE-236B-A23B` via FriendliAI, OpenAI-compatible) |
+| AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI-compatible), EXAONE (`LGAI-EXAONE/K-EXAONE-236B-A23B` via FriendliAI, OpenAI-compatible), Amazon Bedrock (`us.amazon.nova-pro-v1:0` default, any Bedrock-supported model) |
 | Observability | Loki (log queries), Prometheus (metric queries, optional) |
 | Persistence | Redis (primary store, no RDBMS) |
 | Dev Redis | Embedded Redis (auto-start, no install needed) |
@@ -426,7 +427,9 @@ POST /webhook/grafana[/{application}]
 
 **Design note — Spring AI AutoConfiguration disabled**
 
-All Spring AI `AutoConfiguration` classes are explicitly excluded in `application.yml`. `AiModelService` builds `OpenAiChatModel` / `AnthropicChatModel` directly using `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP`. This gives full control over model instantiation and allows hot-swapping the LLM provider at runtime. DeepSeek and EXAONE both use the OpenAI-compatible API (`OpenAiChatModel` pointed at their respective base URLs — `https://api.deepseek.com` and FriendliAI's serverless endpoint `https://api.friendli.ai/serverless`). EXAONE requires a FriendliAI API key obtained from [friendli.ai](https://friendli.ai).
+All Spring AI `AutoConfiguration` classes are explicitly excluded in `application.yml`. `AiModelService` builds `OpenAiChatModel` / `AnthropicChatModel` / `BedrockProxyChatModel` directly using `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP`. This gives full control over model instantiation and allows hot-swapping the LLM provider at runtime. DeepSeek and EXAONE both use the OpenAI-compatible API (`OpenAiChatModel` pointed at their respective base URLs — `https://api.deepseek.com` and FriendliAI's serverless endpoint `https://api.friendli.ai/serverless`). EXAONE requires a FriendliAI API key obtained from [friendli.ai](https://friendli.ai).
+
+Amazon Bedrock uses `BedrockProxyChatModel` from `spring-ai-bedrock-converse`. AWS credentials are supplied via `ai.bedrock.access-key` / `ai.bedrock.secret-key` in `application.yml` or environment variables (`AI_BEDROCK_ACCESS_KEY` / `AI_BEDROCK_SECRET_KEY`). If both are blank, the AWS SDK's `DefaultCredentialsProvider` is used (IAM role, `~/.aws/credentials`, etc.). Bedrock credentials are **never** stored in Redis. When BEDROCK is selected as the active provider in the UI, the API key input field is disabled.
 
 **Design note — Virtual Thread concurrency**
 
@@ -446,7 +449,7 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 
 - JDK 21+
 - A non-empty `CRYPTO_SECRET_KEY` value for encrypting Redis-stored credentials
-- An API key for at least one LLM provider (OpenAI, Anthropic, DeepSeek, or FriendliAI for EXAONE)
+- An API key for at least one LLM provider (OpenAI, Anthropic, DeepSeek, FriendliAI for EXAONE, or AWS credentials for Amazon Bedrock)
 - A running Loki instance for Grafana error analysis
 - (Optional) A running Prometheus instance for metric queries
 - (Optional) An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
@@ -473,6 +476,11 @@ ai:
     model: LGAI-EXAONE/K-EXAONE-236B-A23B  # EXAONE model served via FriendliAI
     api-key: ${AI_EXAONE_API_KEY:}          # Or set env var AI_EXAONE_API_KEY (issued at friendli.ai)
     base-url: ${AI_EXAONE_BASE_URL:https://api.friendli.ai/serverless}  # FriendliAI serverless endpoint
+  bedrock:
+    region: ${AI_BEDROCK_REGION:us-east-1}            # AWS region for Bedrock
+    model: ${AI_BEDROCK_MODEL:us.amazon.nova-pro-v1:0} # Bedrock model ID
+    access-key: ${AI_BEDROCK_ACCESS_KEY:}             # AWS Access Key ID (optional — falls back to DefaultCredentialsProvider)
+    secret-key: ${AI_BEDROCK_SECRET_KEY:}             # AWS Secret Access Key (optional — falls back to DefaultCredentialsProvider)
 
 loki:
   url: ${LOKI_URL:}                      # e.g. http://localhost:3100 (authentication is not supported)
@@ -815,6 +823,7 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
+| 2026-05-24 | Added Amazon Bedrock as a supported LLM provider — uses `BedrockProxyChatModel` via `spring-ai-bedrock-converse`; AWS credentials are configured via `ai.bedrock.*` in `application.yml` or env vars `AI_BEDROCK_ACCESS_KEY` / `AI_BEDROCK_SECRET_KEY` (falls back to `DefaultCredentialsProvider` when blank); credentials are never stored in Redis; the API key input field is disabled in the UI when BEDROCK is selected |
 | 2026-05-16 | Added Slack Incoming Webhook notification for code reviews — when a code review completes, the result is converted from Markdown to Slack mrkdwn and posted to a per-application Slack channel. Toggle (`Send Slack Notification on Code Review`) and webhook path are configurable per application in the UI |
 | 2026-05-12 | Added EXAONE (LG AI Research) as a supported LLM provider — served via FriendliAI's serverless API (OpenAI-compatible); configurable via `ai.exaone.*` in application.yml or env vars `AI_EXAONE_API_KEY` / `AI_EXAONE_BASE_URL`. API key must be obtained from [friendli.ai](https://friendli.ai). Placeholder message in the LLM configuration UI guides users to FriendliAI when no key is saved |
 | 2026-05-04 | Added role-based admin authentication via Spring Security — `admin` super-account is auto-created on first startup with a one-time password logged to the console; only `admin` can create or delete other administrator accounts; App registration, update, deletion, and Code Risk Analysis require authentication |
