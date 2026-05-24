@@ -16,11 +16,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.nullable
 import org.mockito.Mock
-import org.mockito.Mockito
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
@@ -47,8 +47,6 @@ class CodeRiskFacadeTest {
     private val inlineExecutor = Executor { it.run() }
 
     private val githubUrl = "https://github.com/org/repo"
-    private val gitlabUrl = "https://gitlab.com/org/repo"
-    private val unknownUrl = "https://bitbucket.org/org/repo"
 
     @BeforeEach
     fun setUp() {
@@ -74,7 +72,9 @@ class CodeRiskFacadeTest {
 
     /**
      * Stubs the full single-call happy path.
-     * Uses anyString() / anyList() (both @NotNull) to avoid Kotlin null-check NPE that occurs with eq().
+     * getToken() is stubbed to return null (no token configured).
+     * prepareRepository uses nullable(String::class.java) for the token param
+     * to match the null that flows from getToken().
      */
     private fun stubSingleCallHappyPath(
         appName: String = "my-app",
@@ -85,14 +85,14 @@ class CodeRiskFacadeTest {
     ) {
         val files = listOf<Path>()
         `when`(applicationService.getGitRepoByAppName(appName)).thenReturn(gitUrl)
-        `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gh-token")).thenReturn(sourcePath)
-        `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gl-token")).thenReturn(sourcePath)
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn(null)
+        `when`(repositoryService.prepareRepository(anyString(), anyString(), anyString(), nullable(String::class.java)))
+            .thenReturn(sourcePath)
         `when`(repositoryService.collectSourceFiles(sourcePath)).thenReturn(files)
         `when`(repositoryService.buildBundle(sourcePath, files)).thenReturn("bundle")
         `when`(aiModelService.estimateTokenCount("bundle")).thenReturn(tokenCount)
         `when`(aiModelService.executeAnalyzeCodeRisk("bundle")).thenReturn(rawResponse)
-        // Use anyString()/anyList() — both @NotNull in Mockito, safe with Kotlin non-null params
-        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList(), org.mockito.ArgumentMatchers.nullable(String::class.java)))
+        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList(), nullable(String::class.java)))
             .thenReturn(returnRecord)
     }
 
@@ -109,7 +109,7 @@ class CodeRiskFacadeTest {
 
         // then
         verify(aiModelService).executeAnalyzeCodeRisk("bundle")
-        verify(aiModelService, Mockito.never()).executeFinalAnalyzeCode(anyList())
+        verify(aiModelService, never()).executeFinalAnalyzeCode(anyList())
     }
 
     @Test
@@ -153,14 +153,12 @@ class CodeRiskFacadeTest {
         facade.analyze("my-app", "main", null)
 
         // then
-        verify(repositoryService, Mockito.never()).saveAnalyzedResult(
-            anyString(), anyString(), anyString(), anyString(), anyList(), org.mockito.ArgumentMatchers.nullable(String::class.java)
+        verify(repositoryService, never()).saveAnalyzedResult(
+            anyString(), anyString(), anyString(), anyString(), anyList(), nullable(String::class.java)
         )
     }
 
     // ── analyze — map-reduce path ──────────────────────────────────────────────
-
-
 
     @Test
     @DisplayName("맵-리듀스 분석 완료 후 최종 레코드를 WebSocket으로 전송")
@@ -168,6 +166,7 @@ class CodeRiskFacadeTest {
         // given
         val files = listOf<Path>()
         val chunk = CodeChunk("pkg", "bundle-chunk")
+        val record = makeRecord()
 
         `when`(applicationService.getGitRepoByAppName("my-app")).thenReturn(githubUrl)
         `when`(gitRemoteResolver.getToken(githubUrl)).thenReturn("gh-token")
@@ -178,8 +177,7 @@ class CodeRiskFacadeTest {
         `when`(repositoryService.createChunks(sourcePath, files)).thenReturn(listOf(chunk))
         `when`(aiModelService.executeAnalyzeCodeRisk("bundle-chunk")).thenReturn("## Chunk")
         `when`(aiModelService.executeFinalAnalyzeCode(listOf("## Chunk"))).thenReturn("## Final")
-        val record = makeRecord()
-        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList(), ArgumentMatchers.nullable(String::class.java)))
+        `when`(repositoryService.saveAnalyzedResult(anyString(), anyString(), anyString(), anyString(), anyList(), nullable(String::class.java)))
             .thenReturn(record)
 
         // when
@@ -188,6 +186,8 @@ class CodeRiskFacadeTest {
         // then
         verify(messageService).pushAnalysisResult(record)
     }
+
+    // ── getCodeRiskRecords ─────────────────────────────────────────────────────
 
     @Test
     @DisplayName("저장된 레코드가 없으면 빈 리스트 반환")
