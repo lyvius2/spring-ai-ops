@@ -3,11 +3,10 @@ package com.walter.spring.ai.ops.facade
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.service.ApplicationService
-import com.walter.spring.ai.ops.service.GithubService
-import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.AlertMessage
+import com.walter.spring.ai.ops.util.GitRemoteResolver
 import org.apache.commons.lang3.StringUtils
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -18,8 +17,7 @@ import java.util.concurrent.Executor
 class ApplicationFacade(
     private val applicationService: ApplicationService,
     private val repositoryService: RepositoryService,
-    private val githubService: GithubService,
-    private val gitlabService: GitlabService,
+    private val gitRemoteResolver: GitRemoteResolver,
     private val messageService: MessageService,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
@@ -67,7 +65,7 @@ class ApplicationFacade(
         }
         CompletableFuture.runAsync({
             val gitUrl = appUpdateRequest.gitUrl
-            val accessToken = resolveAccessToken(gitUrl)
+            val accessToken = gitRemoteResolver.getToken(gitUrl)
             try {
                 val branch = appUpdateRequest.deployBranch?.trim().orEmpty()
                 repositoryService.preparePersistentRepository(appName, gitUrl, branch, accessToken)
@@ -100,15 +98,6 @@ class ApplicationFacade(
                 defaultFailure.message,
             )
             messageService.pushAlert(AlertMessage.checkoutFailed(appName, defaultFailure))
-        }
-    }
-
-    private fun resolveAccessToken(gitUrl: String): String? {
-        val lower = gitUrl.lowercase()
-        return when {
-            lower.contains("github") -> githubService.getToken()
-            lower.contains("gitlab") -> gitlabService.getToken()
-            else -> null
         }
     }
 }

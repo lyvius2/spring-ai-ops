@@ -1,6 +1,5 @@
 package com.walter.spring.ai.ops.facade
 
-import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
@@ -17,9 +16,6 @@ import com.walter.spring.ai.ops.record.CommitSummary
 import com.walter.spring.ai.ops.record.SourceCodeSuggestion
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
-import com.walter.spring.ai.ops.service.GithubService
-import com.walter.spring.ai.ops.service.GitlabService
-import com.walter.spring.ai.ops.service.GitRemoteService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.IncidentSourceContextService
 import com.walter.spring.ai.ops.service.LokiService
@@ -27,6 +23,7 @@ import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.PrometheusService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
+import com.walter.spring.ai.ops.util.GitRemoteResolver
 import com.walter.spring.ai.ops.util.extension.toISO8601
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -42,8 +39,7 @@ class ObservabilityFacade(
     private val grafanaService: GrafanaService,
     private val lokiService: LokiService,
     private val prometheusService: PrometheusService,
-    private val githubService: GithubService,
-    private val gitlabService: GitlabService,
+    private val gitRemoteResolver: GitRemoteResolver,
     private val aiModelService: AiModelService,
     private val repositoryService: RepositoryService,
     private val incidentSourceContextService: IncidentSourceContextService,
@@ -57,11 +53,6 @@ class ObservabilityFacade(
     companion object {
         private const val SOURCE_CODE_SUGGESTIONS_START = "---SOURCE_CODE_SUGGESTIONS_JSON_START---"
         private const val SOURCE_CODE_SUGGESTIONS_END = "---SOURCE_CODE_SUGGESTIONS_JSON_END---"
-    }
-
-    private fun resolveGitServiceBySource(source: GitRemoteProvider): GitRemoteService = when (source) {
-        GitRemoteProvider.GITHUB -> githubService
-        GitRemoteProvider.GITLAB -> gitlabService
     }
 
     fun analyzeFiring(request: GrafanaAlertingRequest, application: String?) {
@@ -111,7 +102,7 @@ class ObservabilityFacade(
     private fun getSourcePath(targetApplication: String): Path? {
         val appConfig = applicationService.getAppConfig(targetApplication)
         return if (appConfig != null && appConfig.isValidConfig()) {
-            val accessToken = resolveAccessToken(appConfig.gitUrl!!)
+            val accessToken = gitRemoteResolver.getToken(appConfig.gitUrl!!)
             repositoryService.prepareRepository(
                 appName = targetApplication,
                 gitUrl = appConfig.gitUrl,
@@ -120,15 +111,6 @@ class ObservabilityFacade(
             )
         } else {
             null
-        }
-    }
-
-    private fun resolveAccessToken(gitUrl: String): String? {
-        val lower = gitUrl.lowercase()
-        return when {
-            lower.contains("github") -> githubService.getToken()
-            lower.contains("gitlab") -> gitlabService.getToken()
-            else -> null
         }
     }
 
@@ -182,7 +164,7 @@ class ObservabilityFacade(
         runCatching {
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(AppUpdateRequest(targetApplication))
-            val gitService = resolveGitServiceBySource(request.source)
+            val gitService = gitRemoteResolver.detectProviderService(request.source)
 
             if (!gitService.isTokenConfigured()) {
                 log.warn("Git push webhook received but {} token is not configured", request.source)

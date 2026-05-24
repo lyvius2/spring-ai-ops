@@ -5,12 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
-import com.walter.spring.ai.ops.service.GithubService
-import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
+import com.walter.spring.ai.ops.util.GitRemoteResolver
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -38,8 +37,7 @@ class CodeRiskFacadeTest {
     @Mock private lateinit var repositoryService: RepositoryService
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var applicationService: ApplicationService
-    @Mock private lateinit var githubService: GithubService
-    @Mock private lateinit var gitlabService: GitlabService
+    @Mock private lateinit var gitRemoteResolver: GitRemoteResolver
     @Mock private lateinit var messageService: MessageService
     @Mock private lateinit var sourcePath: Path
 
@@ -61,7 +59,7 @@ class CodeRiskFacadeTest {
         val handler = CodeAnalysisResultHandler(lenientMapper)
         facade = CodeRiskFacade(
             repositoryService, aiModelService, applicationService,
-            githubService, gitlabService, messageService, handler,
+            gitRemoteResolver, messageService, handler,
             inlineExecutor,
             tokenThreshold = 27000,
             mapReduceConcurrency = 3,
@@ -87,8 +85,8 @@ class CodeRiskFacadeTest {
     ) {
         val files = listOf<Path>()
         `when`(applicationService.getGitRepoByAppName(appName)).thenReturn(gitUrl)
-        `when`(githubService.getToken()).thenReturn("gh-token")
-        `when`(gitlabService.getToken()).thenReturn("gl-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("gh-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("gl-token")
         `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gh-token")).thenReturn(sourcePath)
         `when`(repositoryService.prepareRepository(appName, gitUrl, "main", "gl-token")).thenReturn(sourcePath)
         `when`(repositoryService.collectSourceFiles(sourcePath)).thenReturn(files)
@@ -130,41 +128,12 @@ class CodeRiskFacadeTest {
         verify(messageService).pushAnalysisResult(record)
     }
 
-
-    @Test
-    @DisplayName("GitHub URL이면 githubService.getToken()으로 액세스 토큰 조회")
-    fun givenGithubUrl_whenAnalyze_thenResolvesGithubToken() {
-        // given
-        stubSingleCallHappyPath(gitUrl = githubUrl)
-
-        // when
-        facade.analyze("my-app", "main", null)
-
-        // then
-        verify(githubService).getToken()
-        verify(gitlabService, Mockito.never()).getToken()
-    }
-
-    @Test
-    @DisplayName("GitLab URL이면 gitlabService.getToken()으로 액세스 토큰 조회")
-    fun givenGitlabUrl_whenAnalyze_thenResolvesGitlabToken() {
-        // given
-        stubSingleCallHappyPath(gitUrl = gitlabUrl, returnRecord = makeRecord("my-app", gitlabUrl))
-
-        // when
-        facade.analyze("my-app", "main", null)
-
-        // then
-        verify(gitlabService).getToken()
-        verify(githubService, Mockito.never()).getToken()
-    }
-
     @Test
     @DisplayName("prepareRepository에서 예외 발생 시 analyze에서 예외가 전파됨")
     fun givenPrepareRepositoryThrows_whenAnalyze_thenExceptionPropagates() {
         // given — prepareRepository is outside CompletableFuture, so exception propagates directly
         `when`(applicationService.getGitRepoByAppName("my-app")).thenReturn(githubUrl)
-        `when`(githubService.getToken()).thenReturn("gh-token")
+        `when`(gitRemoteResolver.getToken(githubUrl)).thenReturn("gh-token")
         `when`(repositoryService.prepareRepository("my-app", githubUrl, "main", "gh-token"))
             .thenThrow(RuntimeException("Repository preparation failed"))
 
@@ -203,7 +172,7 @@ class CodeRiskFacadeTest {
         val chunk = CodeChunk("pkg", "bundle-chunk")
 
         `when`(applicationService.getGitRepoByAppName("my-app")).thenReturn(githubUrl)
-        `when`(githubService.getToken()).thenReturn("gh-token")
+        `when`(gitRemoteResolver.getToken(githubUrl)).thenReturn("gh-token")
         `when`(repositoryService.prepareRepository("my-app", githubUrl, "main", "gh-token")).thenReturn(sourcePath)
         `when`(repositoryService.collectSourceFiles(sourcePath)).thenReturn(files)
         `when`(repositoryService.buildBundle(sourcePath, files)).thenReturn("bundle")
@@ -229,7 +198,7 @@ class CodeRiskFacadeTest {
         `when`(repositoryService.getCodeRiskRecords("my-app")).thenReturn(emptyList())
 
         // when
-        val result = facade.getRecords("my-app")
+        val result = facade.getCodeRiskRecords("my-app")
 
         // then
         assertThat(result).isEmpty()

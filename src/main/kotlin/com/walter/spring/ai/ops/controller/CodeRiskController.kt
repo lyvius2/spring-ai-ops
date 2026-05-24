@@ -48,6 +48,6 @@ class CodeRiskController(
     @Operation(summary = "List code risk analysis records for an application")
     @GetMapping("/{application}/list")
     fun list(@Parameter(description = "Registered application name", required = true) @PathVariable application: String): CodeRiskListResponse {
-        return CodeRiskListResponse(codeRiskFacade.getRecords(application))
+        return CodeRiskListResponse(codeRiskFacade.getCodeRiskRecords(application))
     }
 }

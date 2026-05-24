@@ -6,11 +6,10 @@ import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.ApplicationService
-import com.walter.spring.ai.ops.service.GithubService
-import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
+import com.walter.spring.ai.ops.util.GitRemoteResolver
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -24,8 +23,7 @@ class CodeRiskFacade(
     private val repositoryService: RepositoryService,
     private val aiModelService: AiModelService,
     private val applicationService: ApplicationService,
-    private val githubService: GithubService,
-    private val gitlabService: GitlabService,
+    private val gitRemoteResolver: GitRemoteResolver,
     private val messageService: MessageService,
     private val codeAnalysisResultHandler: CodeAnalysisResultHandler,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
@@ -42,7 +40,7 @@ class CodeRiskFacade(
 
     fun analyze(appName: String, branch: String, requestedBy: String?) {
         val gitRepoUrl = applicationService.getGitRepoByAppName(appName)
-        val accessToken = resolveAccessToken(gitRepoUrl)
+        val accessToken = gitRemoteResolver.getToken(gitRepoUrl)
         val sourcePath = repositoryService.prepareRepository(appName, gitRepoUrl, branch, accessToken)
         val files = repositoryService.collectSourceFiles(sourcePath)
         val bundle = repositoryService.buildBundle(sourcePath, files)
@@ -79,15 +77,8 @@ class CodeRiskFacade(
         Pair(finalMarkdown, allIssues)
     }
 
-    fun getRecords(appName: String) = repositoryService.getCodeRiskRecords(appName)
-
-    private fun resolveAccessToken(gitUrl: String): String? {
-        val lower = gitUrl.lowercase()
-        return when {
-            lower.contains("github") -> githubService.getToken()
-            lower.contains("gitlab") -> gitlabService.getToken()
-            else -> null
-        }
+    fun getCodeRiskRecords(appName: String): List<CodeRiskRecord> {
+        return repositoryService.getCodeRiskRecords(appName)
     }
 
     private fun parseResponse(raw: String): Pair<String, List<CodeRiskIssue>> {

@@ -3,12 +3,11 @@ package com.walter.spring.ai.ops.facade
 import com.walter.spring.ai.ops.code.AlertMessageType
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.service.ApplicationService
-import com.walter.spring.ai.ops.service.GithubService
-import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.service.RepositoryService
 import com.walter.spring.ai.ops.service.dto.AlertMessage
 import com.walter.spring.ai.ops.service.dto.AppConfig
+import com.walter.spring.ai.ops.util.GitRemoteResolver
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -33,8 +32,7 @@ class ApplicationFacadeTest {
 
     @Mock private lateinit var applicationService: ApplicationService
     @Mock private lateinit var repositoryService: RepositoryService
-    @Mock private lateinit var githubService: GithubService
-    @Mock private lateinit var gitlabService: GitlabService
+    @Mock private lateinit var gitRemoteResolver: GitRemoteResolver
     @Mock private lateinit var messageService: MessageService
 
     private lateinit var applicationFacade: ApplicationFacade
@@ -46,8 +44,7 @@ class ApplicationFacadeTest {
         applicationFacade = ApplicationFacade(
             applicationService = applicationService,
             repositoryService = repositoryService,
-            githubService = githubService,
-            gitlabService = gitlabService,
+            gitRemoteResolver = gitRemoteResolver,
             messageService = messageService,
             executor = inlineExecutor,
         )
@@ -85,7 +82,7 @@ class ApplicationFacadeTest {
     fun givenGitUrlAndBranch_whenAddApp_thenStartsBackgroundCheckout() {
         // given
         val gitUrl = "https://github.com/org/repo.git"
-        `when`(githubService.getToken()).thenReturn("github-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("github-token")
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/repo"))
 
         // when
@@ -115,7 +112,7 @@ class ApplicationFacadeTest {
     fun givenBlankBranch_whenAddApp_thenStartsBackgroundCheckoutWithDefaultBranch() {
         // given
         val gitUrl = "https://github.com/org/repo.git"
-        `when`(githubService.getToken()).thenReturn("github-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("github-token")
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "", "github-token")).thenReturn(Path.of("/tmp/repo"))
 
         // when
@@ -131,7 +128,7 @@ class ApplicationFacadeTest {
     fun givenInvalidDeployBranchAndDefaultCheckoutSucceeds_whenAddApp_thenClearsBranchAndPushesAlertMessage() {
         // given
         val gitUrl = "https://gitlab.com/org/repo.git"
-        `when`(gitlabService.getToken()).thenReturn("gitlab-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("gitlab-token")
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "main", "gitlab-token"))
             .thenThrow(IllegalStateException("branch not found"))
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "", "gitlab-token"))
@@ -158,7 +155,7 @@ class ApplicationFacadeTest {
     fun givenDeployBranchAndDefaultCheckoutFail_whenAddApp_thenPushesGeneralCheckoutFailureAlertMessage() {
         // given
         val gitUrl = "https://gitlab.com/org/repo.git"
-        `when`(gitlabService.getToken()).thenReturn("gitlab-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("gitlab-token")
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "main", "gitlab-token"))
             .thenThrow(IllegalStateException("branch not found"))
         `when`(repositoryService.preparePersistentRepository("my-app", gitUrl, "", "gitlab-token"))
@@ -183,7 +180,7 @@ class ApplicationFacadeTest {
     fun givenGitUrlAndBranch_whenUpdateApp_thenStartsBackgroundCheckout() {
         // given
         val gitUrl = "https://github.com/org/repo.git"
-        `when`(githubService.getToken()).thenReturn("github-token")
+        `when`(gitRemoteResolver.getToken(gitUrl)).thenReturn("github-token")
         `when`(repositoryService.preparePersistentRepository("new-app", gitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/repo"))
 
         // when
@@ -202,7 +199,7 @@ class ApplicationFacadeTest {
         val newGitUrl = "https://github.com/org/new-repo.git"
         `when`(applicationService.getAppConfig("old-app")).thenReturn(AppConfig(oldGitUrl, "main"))
         `when`(repositoryService.deletePersistentRepository("old-app", oldGitUrl)).thenReturn(true)
-        `when`(githubService.getToken()).thenReturn("github-token")
+        `when`(gitRemoteResolver.getToken(newGitUrl)).thenReturn("github-token")
         `when`(repositoryService.preparePersistentRepository("new-app", newGitUrl, "main", "github-token")).thenReturn(Path.of("/tmp/new-repo"))
 
         // when

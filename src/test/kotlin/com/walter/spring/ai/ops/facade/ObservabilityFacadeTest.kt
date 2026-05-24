@@ -9,8 +9,6 @@ import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
 import com.walter.spring.ai.ops.record.SourceCodeSuggestion
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
-import com.walter.spring.ai.ops.service.GithubService
-import com.walter.spring.ai.ops.service.GitlabService
 import com.walter.spring.ai.ops.service.GrafanaService
 import com.walter.spring.ai.ops.service.IncidentSourceContextService
 import com.walter.spring.ai.ops.service.LokiService
@@ -21,6 +19,7 @@ import com.walter.spring.ai.ops.service.dto.AppConfig
 import com.walter.spring.ai.ops.service.dto.IncidentSourceContext
 import com.walter.spring.ai.ops.service.dto.SourceSnippet
 import com.walter.spring.ai.ops.util.CodeAnalysisResultHandler
+import com.walter.spring.ai.ops.util.GitRemoteResolver
 import org.assertj.core.api.Assertions.assertThat
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.task.AsyncTaskExecutor
@@ -48,8 +47,7 @@ class ObservabilityFacadeTest {
     @Mock private lateinit var grafanaService: GrafanaService
     @Mock private lateinit var lokiService: LokiService
     @Mock private lateinit var prometheusService: PrometheusService
-    @Mock private lateinit var githubService: GithubService
-    @Mock private lateinit var gitlabService: GitlabService
+    @Mock private lateinit var gitRemoteResolver: GitRemoteResolver
     @Mock private lateinit var aiModelService: AiModelService
     @Mock private lateinit var repositoryService: RepositoryService
     @Mock private lateinit var incidentSourceContextService: IncidentSourceContextService
@@ -64,7 +62,7 @@ class ObservabilityFacadeTest {
     fun setUp() {
         incidentAnalyzeFacade = ObservabilityFacade(
             applicationService, grafanaService, lokiService, prometheusService,
-            githubService, gitlabService, aiModelService, repositoryService, incidentSourceContextService, messageService,
+            gitRemoteResolver, aiModelService, repositoryService, incidentSourceContextService, messageService,
             codeAnalysisResultHandler,
             eventPublisher,
             taskExecutor,
@@ -212,48 +210,6 @@ class ObservabilityFacadeTest {
         verify(repositoryService).prepareRepository("my-app", "https://example.com/test.git", "main", null)
         verify(incidentSourceContextService).createContext(anyObject(), Mockito.eq(sourcePath))
         verify(aiModelService).executeAnalyzeFiring(anyObject(), anyObject(), anyObject(), Mockito.contains("Related source snippets"))
-    }
-
-    @Test
-    @DisplayName("GitHub 저장소이면 GitHub token을 checkout에 전달함")
-    fun givenGithubGitConfig_whenAnalyzeFiring_thenPassesGithubTokenToCheckout() {
-        // given
-        val request = createRequest()
-        val sourcePath = Files.createTempDirectory("incident-source-context-github-test")
-        stubHappyPath(request)
-        `when`(applicationService.getAppConfig("my-app"))
-            .thenReturn(AppConfig("https://github.com/owner/repo.git", "main"))
-        `when`(githubService.getToken()).thenReturn("github-token")
-        `when`(repositoryService.prepareRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token"))
-            .thenReturn(sourcePath)
-
-        // when
-        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
-
-        // then
-        verify(githubService).getToken()
-        verify(repositoryService).prepareRepository("my-app", "https://github.com/owner/repo.git", "main", "github-token")
-    }
-
-    @Test
-    @DisplayName("GitLab 저장소이면 GitLab token을 checkout에 전달함")
-    fun givenGitlabGitConfig_whenAnalyzeFiring_thenPassesGitlabTokenToCheckout() {
-        // given
-        val request = createRequest()
-        val sourcePath = Files.createTempDirectory("incident-source-context-gitlab-test")
-        stubHappyPath(request)
-        `when`(applicationService.getAppConfig("my-app"))
-            .thenReturn(AppConfig("https://gitlab.com/owner/repo.git", "main"))
-        `when`(gitlabService.getToken()).thenReturn("gitlab-token")
-        `when`(repositoryService.prepareRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token"))
-            .thenReturn(sourcePath)
-
-        // when
-        incidentAnalyzeFacade.analyzeFiring(request, "my-app")
-
-        // then
-        verify(gitlabService).getToken()
-        verify(repositoryService).prepareRepository("my-app", "https://gitlab.com/owner/repo.git", "main", "gitlab-token")
     }
 
     @Test
