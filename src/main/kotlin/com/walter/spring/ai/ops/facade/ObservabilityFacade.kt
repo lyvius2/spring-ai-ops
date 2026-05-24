@@ -81,7 +81,7 @@ class ObservabilityFacade(
                 sourceSection,
             )
             val (analyzeResults, sourceCodeSuggestions) = parseAnalyzeFiringResponse(rawAnalyzeResults)
-            val record = createAnalyzeFiringRecord(request, targetApplication, logResults, metricResults, analyzeResults, sourceCodeSuggestions)
+            val record = AnalyzeFiringRecord.create(request, targetApplication, logResults, metricResults, analyzeResults, sourceCodeSuggestions)
             grafanaService.saveAnalyzeFiringRecord(record)
             messageService.pushFiring(record)
         }.onFailure { log.error("Failed to analyze Firing : {}", it.message, it) }
@@ -112,26 +112,6 @@ class ObservabilityFacade(
         } else {
             null
         }
-    }
-
-    private fun createAnalyzeFiringRecord(
-        request: GrafanaAlertingRequest,
-        targetApplication: String,
-        logResults: LokiQueryResult,
-        metricResults: PrometheusQueryResult?,
-        analyzeResults: String,
-        sourceCodeSuggestions: List<SourceCodeSuggestion>,
-    ): AnalyzeFiringRecord {
-        return AnalyzeFiringRecord(
-            request.alerts.first().startsAt.toISO8601(),
-            targetApplication,
-            request,
-            logResults,
-            metricResults,
-            analyzeResults,
-            sourceCodeSuggestions,
-            LocalDateTime.now(),
-        )
     }
 
     private fun parseAnalyzeFiringResponse(raw: String): Pair<String, List<SourceCodeSuggestion>> {
