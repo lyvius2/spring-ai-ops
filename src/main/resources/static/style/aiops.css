@@ -276,6 +276,13 @@ body {
     box-shadow: 0 0 0 3px rgba(109, 179, 63, 0.15);
 }
 
+.form-input:disabled {
+    background-color: #f0f0f0;
+    border-color: #d0d0d0;
+    color: #999;
+    cursor: not-allowed;
+}
+
 /* ── Form toggle (Slack notification switch) ── */
 .form-toggle {
     display: inline-flex;
