@@ -430,7 +430,13 @@ async function fetchLlmStatus() {
 function updateLlmKeyBadges() {
     LLM_PROVIDERS.forEach(p => {
         const badge = document.getElementById(`llm-key-badge-${p.key}`);
-        if (badge) badge.style.display = _savedLlmProviders.includes(p.key) ? '' : 'none';
+        if (!badge) return;
+        if (_savedLlmProviders.includes(p.key)) {
+            badge.innerHTML = p.key === 'bedrock' ? '&#10003; Configured' : '&#10003; Key saved';
+            badge.style.display = '';
+        } else {
+            badge.style.display = 'none';
+        }
     });
 }
 
