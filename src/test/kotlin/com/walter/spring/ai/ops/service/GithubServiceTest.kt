@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.connector.GithubConnector
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubFile
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
@@ -357,6 +359,56 @@ class GithubServiceTest {
 
         // then
         assertThat(result).isEmpty()
+    }
+
+    // ── postPullRequestComment ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("토큰이 없으면 코멘트 게시를 건너뜀")
+    fun givenNoToken_whenPostPullRequestComment_thenSkipsConnectorCall() {
+        // given
+        val service = buildService()
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
+        val inquiry = GitDifferInquiry("acme", "my-repo", "base", "head")
+
+        // when
+        service.postPullRequestComment(inquiry, 42, "review body")
+
+        // then
+        verifyNoInteractions(githubConnector)
+    }
+
+    @Test
+    @DisplayName("body가 비어있으면 코멘트 게시를 건너뜀")
+    fun givenBlankBody_whenPostPullRequestComment_thenSkipsConnectorCall() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
+        val inquiry = GitDifferInquiry("acme", "my-repo", "base", "head")
+
+        // when
+        service.postPullRequestComment(inquiry, 42, "   ")
+
+        // then
+        verifyNoInteractions(githubConnector)
+    }
+
+    @Test
+    @DisplayName("토큰이 있고 body가 있으면 GitHub createIssueComment 호출")
+    fun givenTokenAndBody_whenPostPullRequestComment_thenCallsCreateIssueComment() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
+        val inquiry = GitDifferInquiry("acme", "my-repo", "base", "head")
+
+        // when
+        service.postPullRequestComment(inquiry, 42, "## Review\nBody")
+
+        // then
+        verify(githubConnector).createIssueComment("acme", "my-repo", 42, GitCommentRequest("## Review\nBody"))
     }
 
     private inline fun <reified T> mock(): T = org.mockito.Mockito.mock(T::class.java)

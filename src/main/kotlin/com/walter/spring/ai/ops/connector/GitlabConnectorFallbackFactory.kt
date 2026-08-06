@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.connector
 
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabApiCommit
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
@@ -24,6 +25,9 @@ class GitlabConnectorFallbackFactory : FallbackFactory<GitlabConnector> {
             override fun getCommitDiff(projectPath: String, sha: String): List<GitlabFile> {
                 log.error("GitLab getCommitDiff failed: projectPath={}, sha={}, error={}", projectPath, sha, cause.message, cause)
                 return emptyList()
+            }
+            override fun createMergeRequestNote(projectPath: String, iid: Int, request: GitCommentRequest) {
+                log.error("GitLab createMergeRequestNote failed: projectPath={}, iid={}, error={}", projectPath, iid, cause.message, cause)
             }
         }
     }

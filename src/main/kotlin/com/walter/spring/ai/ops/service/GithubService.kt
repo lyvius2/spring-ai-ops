@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.connector.GithubConnector
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
@@ -56,6 +57,20 @@ class GithubService(
             commits = commitResults.flatMap { it.commits },
             errorMessage = commitResults.firstOrNull { it.hasError() }?.errorMessage ?: "",
         )
+    }
+
+    override fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String) {
+        if (!isTokenConfigured()) {
+            log.warn("Skip GitHub PR comment — token is not configured (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
+            return
+        }
+        if (body.isBlank()) {
+            log.warn("Skip GitHub PR comment — empty body (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
+            return
+        }
+        runCatching { githubConnector.createIssueComment(inquiry.owner, inquiry.repo, number, GitCommentRequest(body)) }
+            .onSuccess { log.info("Posted GitHub PR comment: owner={}, repo={}, number={}", inquiry.owner, inquiry.repo, number) }
+            .onFailure { log.error("Failed to post GitHub PR comment: owner={}, repo={}, number={}, error={}", inquiry.owner, inquiry.repo, number, it.message, it) }
     }
 
     private fun mergeFiles(files: List<GithubFile>): List<GithubFile> =

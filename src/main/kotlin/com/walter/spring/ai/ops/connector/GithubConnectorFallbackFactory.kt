@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.connector
 
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import org.slf4j.LoggerFactory
 import org.springframework.cloud.openfeign.FallbackFactory
@@ -19,6 +20,10 @@ class GithubConnectorFallbackFactory : FallbackFactory<GithubConnector> {
             override fun getCommit(owner: String, repo: String, sha: String): GithubCompareResult {
                 log.error("GitHub getCommit failed: owner={}, repo={}, sha={}, error={}", owner, repo, sha, cause.message, cause)
                 return GithubCompareResult(errorMessage = cause.message ?: "Failed to connect to GitHub API.")
+            }
+
+            override fun createIssueComment(owner: String, repo: String, number: Int, request: GitCommentRequest) {
+                log.error("GitHub createIssueComment failed: owner={}, repo={}, number={}, error={}", owner, repo, number, cause.message, cause)
             }
         }
     }

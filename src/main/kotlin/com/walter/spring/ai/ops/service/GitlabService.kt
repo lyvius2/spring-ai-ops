@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_URL
 import com.walter.spring.ai.ops.connector.GitlabConnector
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
@@ -59,6 +60,21 @@ class GitlabService(
             diffs = mergeDiffs(diffs),
             errorMessage = commits.firstOrNull { it.errorMessage?.isNotBlank() == true }?.errorMessage ?: "",
         )
+    }
+
+    override fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String) {
+        if (!isTokenConfigured()) {
+            log.warn("Skip GitLab MR note — token is not configured (projectPath={}, iid={})", inquiry.projectPath, number)
+            return
+        }
+        if (body.isBlank()) {
+            log.warn("Skip GitLab MR note — empty body (projectPath={}, iid={})", inquiry.projectPath, number)
+            return
+        }
+        val encodedPath = inquiry.projectPath.replace("/", "%2F")
+        runCatching { gitlabConnector.createMergeRequestNote(encodedPath, number, GitCommentRequest(body)) }
+            .onSuccess { log.info("Posted GitLab MR note: projectPath={}, iid={}", inquiry.projectPath, number) }
+            .onFailure { log.error("Failed to post GitLab MR note: projectPath={}, iid={}, error={}", inquiry.projectPath, number, it.message, it) }
     }
 
     private fun mergeDiffs(diffs: List<GitlabFile>): List<GitlabFile> =

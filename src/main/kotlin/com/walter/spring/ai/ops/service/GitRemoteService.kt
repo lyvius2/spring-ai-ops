@@ -65,4 +65,6 @@ abstract class GitRemoteService(
     }
 
     abstract fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult
+
+    abstract fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String)
 }

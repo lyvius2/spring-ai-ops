@@ -1,7 +1,9 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_TOKEN
 import com.walter.spring.ai.ops.connector.GitlabConnector
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GitlabApiCommit
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
@@ -15,11 +17,13 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -29,6 +33,7 @@ class GitlabServiceTest {
     @Mock private lateinit var objectMapper: ObjectMapper
     @Mock private lateinit var cryptoProvider: CryptoProvider
     @Mock private lateinit var gitlabConnector: GitlabConnector
+    @Mock private lateinit var valueOperations: ValueOperations<String, String>
 
     @BeforeEach
     fun setUp() {
@@ -107,6 +112,56 @@ class GitlabServiceTest {
         assertThat((result as GitlabCompareResult).diffs.map { it.newPath }).containsExactly("src/Main.kt")
     }
 
-    private fun buildService() =
-        GitlabService(redisTemplate, objectMapper, cryptoProvider, gitlabConnector, 120L, 5L, "", "https://gitlab.com/api/v4")
+    // ── postPullRequestComment ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("토큰이 없으면 MR 노트 게시를 건너뜀")
+    fun givenNoToken_whenPostPullRequestComment_thenSkipsConnectorCall() {
+        // given
+        val service = buildService()
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITLAB_TOKEN)).willReturn(null)
+        val inquiry = GitDifferInquiry("group", "repo", "base", "head")
+
+        // when
+        service.postPullRequestComment(inquiry, 42, "note body")
+
+        // then
+        verifyNoInteractions(gitlabConnector)
+    }
+
+    @Test
+    @DisplayName("body가 비어있으면 MR 노트 게시를 건너뜀")
+    fun givenBlankBody_whenPostPullRequestComment_thenSkipsConnectorCall() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITLAB_TOKEN)).willReturn(null)
+        val inquiry = GitDifferInquiry("group", "repo", "base", "head")
+
+        // when
+        service.postPullRequestComment(inquiry, 42, "   ")
+
+        // then
+        verifyNoInteractions(gitlabConnector)
+    }
+
+    @Test
+    @DisplayName("projectPath의 '/'가 %2F로 인코딩되어 MR 노트가 게시됨")
+    fun givenTokenAndBody_whenPostPullRequestComment_thenCallsWithEncodedProjectPath() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.get(REDIS_KEY_GITLAB_TOKEN)).willReturn(null)
+        val inquiry = GitDifferInquiry("my-group", "my-repo", "base", "head")
+
+        // when
+        service.postPullRequestComment(inquiry, 42, "## Review\nBody")
+
+        // then
+        verify(gitlabConnector).createMergeRequestNote("my-group%2Fmy-repo", 42, GitCommentRequest("## Review\nBody"))
+    }
+
+    private fun buildService(configuredToken: String = "") =
+        GitlabService(redisTemplate, objectMapper, cryptoProvider, gitlabConnector, 120L, 5L, configuredToken, "https://gitlab.com/api/v4")
 }
