@@ -5,6 +5,8 @@ import com.walter.spring.ai.ops.config.GitlabConnectorConfig.Companion.PLACEHOLD
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabApiCommit
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
+import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
+import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
 import org.springframework.cloud.openfeign.FeignClient
@@ -27,4 +29,7 @@ interface GitlabConnector {
 
     @PostMapping("/projects/{projectPath}/merge_requests/{iid}/notes")
     fun createMergeRequestNote(@PathVariable projectPath: String, @PathVariable iid: Int, @RequestBody request: GitCommentRequest): GitlabMergeRequestNoteResponse
+
+    @PostMapping("/projects/{projectPath}/merge_requests/{iid}/discussions")
+    fun createMrDiscussion(@PathVariable projectPath: String, @PathVariable iid: Int, @RequestBody request: GitlabDiscussionRequest): GitlabDiscussionResponse
 }

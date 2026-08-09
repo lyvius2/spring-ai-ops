@@ -5,6 +5,7 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMI
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
+import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.CryptoProvider
 import com.walter.spring.ai.ops.util.extension.zSetPushWithTtl
 import com.walter.spring.ai.ops.util.extension.zSetRangeAllDesc
@@ -67,4 +68,6 @@ abstract class GitRemoteService(
     abstract fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult
 
     abstract fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String)
+
+    abstract fun postPullRequestInlineComments(inquiry: GitDifferInquiry, number: Int, review: LlmInlineReviewResult, compareResult: GitCompareResult): Boolean
 }

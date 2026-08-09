@@ -3,6 +3,8 @@ package com.walter.spring.ai.ops.connector.dto
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.walter.spring.ai.ops.record.ChangedFile
 import com.walter.spring.ai.ops.record.CommitSummary
+import com.walter.spring.ai.ops.service.dto.ParsedFileDiff
+import com.walter.spring.ai.ops.util.DiffHunkParser
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GithubCompareResult(
@@ -42,4 +44,7 @@ data class GithubCompareResult(
 
     override fun commitSummaries(): List<CommitSummary> =
         commits.map { CommitSummary(it.sha, it.commit.message, it.htmlUrl, it.commit.author.date) }
+
+    override fun parseDiffs(): Map<String, ParsedFileDiff> =
+        files.associate { it.filename to DiffHunkParser.parse(it.filename, it.filename, it.patch) }
 }

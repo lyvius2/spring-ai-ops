@@ -5,6 +5,8 @@ import com.walter.spring.ai.ops.config.GithubConnectorConfig.Companion.PLACEHOLD
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubIssueCommentResponse
+import com.walter.spring.ai.ops.connector.dto.GithubReviewRequest
+import com.walter.spring.ai.ops.connector.dto.GithubReviewResponse
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -21,4 +23,7 @@ interface GithubConnector {
 
     @PostMapping("/repos/{owner}/{repo}/issues/{number}/comments")
     fun createIssueComment(@PathVariable owner: String, @PathVariable repo: String, @PathVariable number: Int, @RequestBody request: GitCommentRequest): GithubIssueCommentResponse
+
+    @PostMapping("/repos/{owner}/{repo}/pulls/{number}/reviews")
+    fun createReview(@PathVariable owner: String, @PathVariable repo: String, @PathVariable number: Int, @RequestBody request: GithubReviewRequest): GithubReviewResponse
 }

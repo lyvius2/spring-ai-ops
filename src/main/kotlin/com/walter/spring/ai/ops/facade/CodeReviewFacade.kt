@@ -14,8 +14,10 @@ import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.record.CommitSummary
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
+import com.walter.spring.ai.ops.service.GitRemoteService
 import com.walter.spring.ai.ops.service.MessageService
 import com.walter.spring.ai.ops.util.GitRemoteResolver
+import com.walter.spring.ai.ops.util.InlineReviewParser
 import com.walter.spring.ai.ops.util.extension.toISO8601
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -28,6 +30,7 @@ class CodeReviewFacade(
     private val aiModelService: AiModelService,
     private val messageService: MessageService,
     private val eventPublisher: ApplicationEventPublisher,
+    private val inlineReviewParser: InlineReviewParser,
 ) {
     private val log = LoggerFactory.getLogger(CodeReviewFacade::class.java)
 
@@ -109,13 +112,47 @@ class CodeReviewFacade(
                 log.warn("PR diff fetch failed — skipping comment (number={}, error={})", request.number, compareResult.errorMessage)
                 return@runCatching
             }
-            val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
-            if (reviewResult.isBlank()) {
-                log.warn("PR review result is blank — skipping comment (number={})", request.number)
-                return@runCatching
+            when (request.action) {
+                PullRequestAction.SYNCHRONIZE -> postInlineReview(gitService, inquiry, compareResult, request)
+                else -> postSummaryReview(gitService, inquiry, compareResult, request)
             }
-            gitService.postPullRequestComment(inquiry, request.number, formatPullRequestComment(reviewResult))
         }.onFailure { log.error("Failed to analyze pull request: {}", it.message, it) }
+    }
+
+    private fun postSummaryReview(gitService: GitRemoteService, inquiry: GitDifferInquiry, compareResult: GitCompareResult, request: GithubPullRequestRequest) {
+        val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
+        if (reviewResult.isBlank()) {
+            log.warn("PR review result is blank — skipping comment (number={})", request.number)
+            return
+        }
+        gitService.postPullRequestComment(inquiry, request.number, formatPullRequestComment(reviewResult))
+    }
+
+    private fun postInlineReview(gitService: GitRemoteService, inquiry: GitDifferInquiry, compareResult: GitCompareResult, request: GithubPullRequestRequest) {
+        val raw = aiModelService.executeAnalyzeCodeDifferInline(compareResult.createCodeReviewPrompt())
+        if (raw.isBlank()) {
+            log.warn("PR inline review result is blank — skipping (number={})", request.number)
+            return
+        }
+        val review = inlineReviewParser.parse(raw)
+        if (review.comments.isEmpty()) {
+            log.info("PR inline review — LLM returned no inline comments, posting summary only (number={})", request.number)
+            postSummaryFallback(gitService, inquiry, request.number, review.summary)
+            return
+        }
+        val posted = gitService.postPullRequestInlineComments(inquiry, request.number, review, compareResult)
+        if (!posted) {
+            log.warn("PR inline review failed — falling back to summary comment (number={})", request.number)
+            postSummaryFallback(gitService, inquiry, request.number, review.summary)
+        }
+    }
+
+    private fun postSummaryFallback(gitService: GitRemoteService, inquiry: GitDifferInquiry, number: Int, summary: String) {
+        if (summary.isBlank()) {
+            log.warn("PR summary fallback — blank summary, skipping (number={})", number)
+            return
+        }
+        gitService.postPullRequestComment(inquiry, number, formatPullRequestComment(summary))
     }
 
     private fun recordPullRequestAuditLog(request: GithubPullRequestRequest) {
@@ -131,9 +168,6 @@ class CodeReviewFacade(
         }
         if (request.action == PullRequestAction.OPENED && request.draft) {
             throw InvalidPullRequestException("draft PR (title='${request.title}', number=${request.number})")
-        }
-        if (request.action == PullRequestAction.SYNCHRONIZE) {
-            throw InvalidPullRequestException("v2 inline review not implemented yet (title='${request.title}', number=${request.number})")
         }
         if (request.number <= 0 || request.baseSha.isBlank() || request.headSha.isBlank()) {
             throw InvalidPullRequestException("missing number/base/head (number=${request.number})")

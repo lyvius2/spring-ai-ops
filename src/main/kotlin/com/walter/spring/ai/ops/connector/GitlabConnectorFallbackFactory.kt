@@ -3,6 +3,8 @@ package com.walter.spring.ai.ops.connector
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabApiCommit
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
+import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
+import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
 import org.slf4j.LoggerFactory
@@ -30,6 +32,11 @@ class GitlabConnectorFallbackFactory : FallbackFactory<GitlabConnector> {
             override fun createMergeRequestNote(projectPath: String, iid: Int, request: GitCommentRequest): GitlabMergeRequestNoteResponse {
                 log.error("GitLab createMergeRequestNote failed: projectPath={}, iid={}, error={}", projectPath, iid, cause.message, cause)
                 return GitlabMergeRequestNoteResponse(errorMessage = cause.message ?: "Failed to connect to GitLab API.")
+            }
+
+            override fun createMrDiscussion(projectPath: String, iid: Int, request: GitlabDiscussionRequest): GitlabDiscussionResponse {
+                log.error("GitLab createMrDiscussion failed: projectPath={}, iid={}, error={}", projectPath, iid, cause.message, cause)
+                return GitlabDiscussionResponse(errorMessage = cause.message ?: "Failed to connect to GitLab API.")
             }
         }
     }

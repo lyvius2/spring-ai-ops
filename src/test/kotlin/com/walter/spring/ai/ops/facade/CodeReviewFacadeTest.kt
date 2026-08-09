@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.code.PullRequestAction
+import com.walter.spring.ai.ops.config.exception.InvalidPullRequestException
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubFile
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
@@ -10,12 +11,16 @@ import com.walter.spring.ai.ops.controller.dto.GithubPushCommit
 import com.walter.spring.ai.ops.controller.dto.GithubPushOwner
 import com.walter.spring.ai.ops.controller.dto.GithubPushRepository
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
+import com.walter.spring.ai.ops.code.DiffSide
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GithubService
 import com.walter.spring.ai.ops.service.MessageService
+import com.walter.spring.ai.ops.service.dto.LlmInlineComment
+import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.GitRemoteResolver
+import com.walter.spring.ai.ops.util.InlineReviewParser
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -43,13 +48,14 @@ class CodeReviewFacadeTest {
     @Mock private lateinit var messageService: MessageService
     @Mock private lateinit var eventPublisher: ApplicationEventPublisher
     @Mock private lateinit var githubService: GithubService
+    @Mock private lateinit var inlineReviewParser: InlineReviewParser
 
     private lateinit var codeReviewFacade: CodeReviewFacade
 
     @BeforeEach
     fun setUp() {
         codeReviewFacade = CodeReviewFacade(
-            applicationService, gitRemoteResolver, aiModelService, messageService, eventPublisher,
+            applicationService, gitRemoteResolver, aiModelService, messageService, eventPublisher, inlineReviewParser,
         )
     }
 
@@ -329,67 +335,54 @@ class CodeReviewFacadeTest {
     )
 
     @Test
-    @DisplayName("IGNORED action이면 아무 서비스도 호출되지 않음")
+    @DisplayName("IGNORED action이면 InvalidPullRequestException을 던짐")
     fun analyzePullRequest_skips_whenActionIsIgnored() {
         // given
         val request = createPullRequestRequest(action = PullRequestAction.IGNORED)
 
-        // when
-        codeReviewFacade.analyzePullRequest(request, "my-app")
-
-        // then
-        verifyNoInteractions(applicationService, gitRemoteResolver, aiModelService, messageService, eventPublisher)
+        // when / then
+        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
+            codeReviewFacade.analyzePullRequest(request, "my-app")
+        }
+        verifyNoInteractions(gitRemoteResolver, aiModelService, messageService, eventPublisher)
     }
 
     @Test
-    @DisplayName("draft PR이면 리뷰를 건너뜀")
+    @DisplayName("draft PR이면 InvalidPullRequestException을 던짐")
     fun analyzePullRequest_skips_whenDraftIsTrue() {
         // given
         val request = createPullRequestRequest(action = PullRequestAction.OPENED, draft = true)
 
-        // when
-        codeReviewFacade.analyzePullRequest(request, "my-app")
-
-        // then
+        // when / then
+        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
+            codeReviewFacade.analyzePullRequest(request, "my-app")
+        }
         verifyNoInteractions(gitRemoteResolver, aiModelService)
     }
 
     @Test
-    @DisplayName("SYNCHRONIZE action은 v1에서 스킵됨 (v2 미구현)")
-    fun analyzePullRequest_skips_whenActionIsSynchronize() {
-        // given
-        val request = createPullRequestRequest(action = PullRequestAction.SYNCHRONIZE)
-
-        // when
-        codeReviewFacade.analyzePullRequest(request, "my-app")
-
-        // then
-        verifyNoInteractions(gitRemoteResolver, aiModelService)
-    }
-
-    @Test
-    @DisplayName("number가 0이면 리뷰를 건너뜀")
+    @DisplayName("number가 0이면 InvalidPullRequestException을 던짐")
     fun analyzePullRequest_skips_whenNumberIsZero() {
         // given
         val request = createPullRequestRequest(number = 0)
 
-        // when
-        codeReviewFacade.analyzePullRequest(request, "my-app")
-
-        // then
+        // when / then
+        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
+            codeReviewFacade.analyzePullRequest(request, "my-app")
+        }
         verifyNoInteractions(gitRemoteResolver, aiModelService)
     }
 
     @Test
-    @DisplayName("baseSha 또는 headSha가 비어있으면 리뷰를 건너뜀")
+    @DisplayName("baseSha 또는 headSha가 비어있으면 InvalidPullRequestException을 던짐")
     fun analyzePullRequest_skips_whenBaseOrHeadIsBlank() {
         // given
         val request = createPullRequestRequest(baseSha = "")
 
-        // when
-        codeReviewFacade.analyzePullRequest(request, "my-app")
-
-        // then
+        // when / then
+        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
+            codeReviewFacade.analyzePullRequest(request, "my-app")
+        }
         verifyNoInteractions(gitRemoteResolver, aiModelService)
     }
 
@@ -479,6 +472,100 @@ class CodeReviewFacadeTest {
         codeReviewFacade.analyzePullRequest(request, "my-app")
 
         // then
+        verify(githubService, never()).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString())
+    }
+
+    // ── SYNCHRONIZE (v2 inline review) ────────────────────────────────────────
+
+    @Test
+    @DisplayName("SYNCHRONIZE + LLM이 인라인 코멘트를 반환하면 postPullRequestInlineComments 호출")
+    fun analyzePullRequest_postsInline_onSynchronize() {
+        // given
+        val request = createPullRequestRequest(action = PullRequestAction.SYNCHRONIZE)
+        val compareResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@ -0,0 +1,1 @@\n+new")))
+        val review = LlmInlineReviewResult(
+            summary = "Summary text",
+            comments = listOf(LlmInlineComment(file = "src/Main.kt", line = 1, side = DiffSide.RIGHT, body = "Nit")),
+        )
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.executeInquiryDiffer(anyObj())).thenReturn(compareResult)
+        `when`(aiModelService.executeAnalyzeCodeDifferInline(anyObj())).thenReturn("raw llm output")
+        `when`(inlineReviewParser.parse(anyObj())).thenReturn(review)
+        `when`(githubService.postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())).thenReturn(true)
+
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
+        verify(aiModelService).executeAnalyzeCodeDifferInline(anyObj())
+        verify(githubService).postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.eq(42), anyObj(), anyObj())
+        verify(githubService, never()).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString())
+    }
+
+    @Test
+    @DisplayName("SYNCHRONIZE + LLM이 코멘트 0개면 요약만 v1 방식으로 게시")
+    fun analyzePullRequest_fallsBack_whenNoInlineComments() {
+        // given
+        val request = createPullRequestRequest(action = PullRequestAction.SYNCHRONIZE)
+        val compareResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@ -0,0 +1,1 @@\n+x")))
+        val review = LlmInlineReviewResult(summary = "Nothing serious.", comments = emptyList())
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.executeInquiryDiffer(anyObj())).thenReturn(compareResult)
+        `when`(aiModelService.executeAnalyzeCodeDifferInline(anyObj())).thenReturn("raw")
+        `when`(inlineReviewParser.parse(anyObj())).thenReturn(review)
+
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
+        verify(githubService, never()).postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())
+        verify(githubService).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.eq(42), org.mockito.ArgumentMatchers.contains("Nothing serious."))
+    }
+
+    @Test
+    @DisplayName("SYNCHRONIZE + 인라인 게시 실패 시 요약 v1 폴백 게시")
+    fun analyzePullRequest_fallsBack_whenInlineFails() {
+        // given
+        val request = createPullRequestRequest(action = PullRequestAction.SYNCHRONIZE)
+        val compareResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@ -0,0 +1,1 @@\n+x")))
+        val review = LlmInlineReviewResult(
+            summary = "Overall LGTM.",
+            comments = listOf(LlmInlineComment(file = "src/Main.kt", line = 1, side = DiffSide.RIGHT, body = "nit")),
+        )
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.executeInquiryDiffer(anyObj())).thenReturn(compareResult)
+        `when`(aiModelService.executeAnalyzeCodeDifferInline(anyObj())).thenReturn("raw")
+        `when`(inlineReviewParser.parse(anyObj())).thenReturn(review)
+        `when`(githubService.postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())).thenReturn(false)
+
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
+        verify(githubService).postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())
+        verify(githubService).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.eq(42), org.mockito.ArgumentMatchers.contains("Overall LGTM."))
+    }
+
+    @Test
+    @DisplayName("SYNCHRONIZE + LLM raw 출력이 비어있으면 아무것도 게시하지 않음")
+    fun analyzePullRequest_skipsPost_whenInlineRawIsBlank() {
+        // given
+        val request = createPullRequestRequest(action = PullRequestAction.SYNCHRONIZE)
+        val compareResult = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@")))
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.executeInquiryDiffer(anyObj())).thenReturn(compareResult)
+        `when`(aiModelService.executeAnalyzeCodeDifferInline(anyObj())).thenReturn("")
+
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
+        verifyNoInteractions(inlineReviewParser)
+        verify(githubService, never()).postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())
         verify(githubService, never()).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString())
     }
 }

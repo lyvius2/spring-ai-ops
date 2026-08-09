@@ -8,7 +8,12 @@ import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
+import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionPosition
+import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
+import com.walter.spring.ai.ops.service.dto.LlmInlineComment
+import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
+import com.walter.spring.ai.ops.service.dto.ParsedFileDiff
 import com.walter.spring.ai.ops.util.CryptoProvider
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -75,6 +80,55 @@ class GitlabService(
         runCatching { gitlabConnector.createMergeRequestNote(encodedPath, number, GitCommentRequest(body)) }
             .onSuccess { response -> log.info("Posted GitLab MR note: projectPath={}, iid={}, noteId={}", inquiry.projectPath, number, response.id) }
             .onFailure { log.error("Failed to post GitLab MR note: projectPath={}, iid={}, error={}", inquiry.projectPath, number, it.message, it) }
+    }
+
+    override fun postPullRequestInlineComments(inquiry: GitDifferInquiry, number: Int, review: LlmInlineReviewResult, compareResult: GitCompareResult): Boolean {
+        if (!isTokenConfigured()) {
+            log.warn("Skip GitLab inline review — token is not configured (projectPath={}, iid={})", inquiry.projectPath, number)
+            return false
+        }
+        if (inquiry.base.isBlank() || inquiry.head.isBlank()) {
+            log.warn("Skip GitLab inline review — missing base/head SHA (projectPath={}, iid={})", inquiry.projectPath, number)
+            return false
+        }
+        val parsedDiffs = compareResult.parseDiffs()
+        val filtered = review.comments.filter { it.body.isNotBlank() && parsedDiffs[it.file]?.lookup(it.line, it.side) != null }
+        val dropped = review.comments.size - filtered.size
+        if (dropped > 0) {
+            log.info("GitLab inline review — dropped {} of {} LLM comments outside diff (iid={})", dropped, review.comments.size, number)
+        }
+        if (filtered.isEmpty()) {
+            log.warn("GitLab inline review — no valid inline comments after diff filtering (iid={})", number)
+            return false
+        }
+        val encodedPath = inquiry.projectPath.replace("/", "%2F")
+        val successCount = filtered.count { comment -> postSingleDiscussion(inquiry, encodedPath, number, comment, parsedDiffs) }
+        if (successCount == 0) {
+            log.warn("GitLab inline review — all {} discussions failed (projectPath={}, iid={})", filtered.size, inquiry.projectPath, number)
+            return false
+        }
+        log.info("Posted GitLab inline review: projectPath={}, iid={}, succeeded={}/{}", inquiry.projectPath, number, successCount, filtered.size)
+        val summaryBody = review.summary.ifBlank { "AI incremental review" }
+        runCatching { gitlabConnector.createMergeRequestNote(encodedPath, number, GitCommentRequest(summaryBody)) }
+            .onFailure { log.warn("Failed to post GitLab summary note alongside inline review: projectPath={}, iid={}, error={}", inquiry.projectPath, number, it.message) }
+        return true
+    }
+
+    private fun postSingleDiscussion(inquiry: GitDifferInquiry, encodedPath: String, number: Int, comment: LlmInlineComment, parsedDiffs: Map<String, ParsedFileDiff>): Boolean {
+        val parsedDiff = parsedDiffs[comment.file] ?: return false
+        val hunkLine = parsedDiff.lookup(comment.line, comment.side) ?: return false
+        val position = GitlabDiscussionPosition.of(inquiry, parsedDiff, hunkLine)
+        val request = GitlabDiscussionRequest(body = comment.body, position = position)
+        val response = runCatching { gitlabConnector.createMrDiscussion(encodedPath, number, request) }
+            .getOrElse {
+                log.warn("GitLab discussion failed: projectPath={}, iid={}, file={}, line={}, error={}", inquiry.projectPath, number, comment.file, comment.line, it.message)
+                return false
+            }
+        if (!response.errorMessage.isNullOrBlank()) {
+            log.warn("GitLab discussion rejected: projectPath={}, iid={}, file={}, line={}, error={}", inquiry.projectPath, number, comment.file, comment.line, response.errorMessage)
+            return false
+        }
+        return true
     }
 
     private fun mergeDiffs(diffs: List<GitlabFile>): List<GitlabFile> =
