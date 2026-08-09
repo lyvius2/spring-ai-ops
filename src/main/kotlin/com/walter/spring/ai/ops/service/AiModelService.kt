@@ -116,6 +116,10 @@ class AiModelService(
                 .onFailure { log.warn("Failed to initialize Bedrock LLM config from application settings.") }
         }
         if (matchedLlmConfig != null) {
+            if (matchedLlmConfig.provider == LlmProvider.BEDROCK) {
+                chatModel = bedrockChatModel
+                return
+            }
             val apiKey = cryptoProvider.decrypt(matchedLlmConfig.apiKey)
             if (apiKey.isNotBlank()) {
                 runCatching { chatModel = buildChatModel(matchedLlmConfig.provider, apiKey) }
@@ -162,8 +166,11 @@ class AiModelService(
             if (bedrockRegion.isBlank()) {
                 throw IllegalStateException("Bedrock region is not configured in application.yml or environment variables")
             }
+            if (bedrockChatModel == null) {
+                bedrockChatModel = buildBedrockChatModel()
+            }
             redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
-            chatModel = bedrockChatModel ?: throw IllegalStateException("Amazon Bedrock LLM is not configured")
+            chatModel = bedrockChatModel
             return
         }
         val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
