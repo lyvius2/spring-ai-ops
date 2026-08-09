@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.connector.dto
 
+import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 
 data class GitDifferInquiry(
@@ -17,6 +18,13 @@ data class GitDifferInquiry(
             base = request.before,
             head = request.after,
             commitShas = request.commits.mapNotNull { it.id.takeIf(String::isNotBlank) },
+        )
+
+        fun of(request: GithubPullRequestRequest) = GitDifferInquiry(
+            owner = request.repository.owner.login,
+            repo = request.repository.name,
+            base = request.baseSha,
+            head = request.headSha,
         )
     }
 }

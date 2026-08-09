@@ -116,6 +116,10 @@ class AiModelService(
                 .onFailure { log.warn("Failed to initialize Bedrock LLM config from application settings.") }
         }
         if (matchedLlmConfig != null) {
+            if (matchedLlmConfig.provider == LlmProvider.BEDROCK) {
+                chatModel = bedrockChatModel
+                return
+            }
             val apiKey = cryptoProvider.decrypt(matchedLlmConfig.apiKey)
             if (apiKey.isNotBlank()) {
                 runCatching { chatModel = buildChatModel(matchedLlmConfig.provider, apiKey) }
@@ -162,8 +166,11 @@ class AiModelService(
             if (bedrockRegion.isBlank()) {
                 throw IllegalStateException("Bedrock region is not configured in application.yml or environment variables")
             }
+            if (bedrockChatModel == null) {
+                bedrockChatModel = buildBedrockChatModel()
+            }
             redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
-            chatModel = bedrockChatModel ?: throw IllegalStateException("Amazon Bedrock LLM is not configured")
+            chatModel = bedrockChatModel
             return
         }
         val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
@@ -461,6 +468,49 @@ class AiModelService(
                 if (resultLanguage != "en") {
                     appendLine(languageOptions)
                 }
+            }
+        )
+        llmRateLimiter.acquire()
+        return try {
+            callWithRateLimitRetry(model, Prompt(listOf(systemMessage, userMessage)))
+        } finally {
+            llmRateLimiter.release()
+        }
+    }
+
+    fun executeAnalyzeCodeDifferInline(codeReviewSection: String): String {
+        val model = chatModel ?: return ""
+        val systemMessage = SystemMessage(
+            "You are an expert code reviewer performing an incremental review of a pull request. " +
+                    "You will be given a code diff and must produce (1) a short overall summary and " +
+                    "(2) a small number of high-value, line-anchored comments. " +
+                    "Only comment on lines that appear in the diff. " +
+                    "Prefer correctness, potential bugs, security, and concurrency over stylistic nitpicks. " +
+                    "Do not state unverifiable facts as certainties; express them as possibilities."
+        )
+        val userMessage = UserMessage(
+            buildString {
+                append(codeReviewSection)
+                appendLine()
+                appendLine("First, write a short markdown summary of the overall change (a few bullets is fine).")
+                if (resultLanguage != "en") {
+                    appendLine(languageOptions)
+                }
+                appendLine()
+                appendLine("Then, after the markdown summary, append the exact delimiter and a JSON array of inline comments:")
+                appendLine("---INLINE_COMMENTS_JSON_START---")
+                appendLine("""[{"file":"relative/path/to/File.kt","line":42,"side":"RIGHT","body":"**markdown** comment body"}]""")
+                appendLine("---INLINE_COMMENTS_JSON_END---")
+                appendLine()
+                appendLine("Rules for the JSON section:")
+                appendLine("- 'file': MUST exactly match one of the file paths shown in the diff (e.g. GitHub filename or GitLab new_path).")
+                appendLine("- 'line': integer line number that appears in the diff. For added or unchanged lines use the NEW file line; for deleted lines use the OLD file line.")
+                appendLine("- 'side': 'RIGHT' for added or unchanged lines in the new version, 'LEFT' for deleted lines in the previous version.")
+                appendLine("- 'body': markdown-formatted actionable comment. Keep it concise (1–3 sentences).")
+                appendLine("- Only include comments on lines that are actually present in the diff hunks above. Do NOT invent line numbers outside the diff.")
+                appendLine("- Prefer fewer high-signal comments over many low-value ones. If there is nothing meaningful to say, use an empty array [].")
+                appendLine("- Output valid JSON only between the delimiters — no trailing commas, no comments.")
+                appendLine("- CRITICAL: every string value must be valid JSON. Escape backslashes as \\\\, double-quotes as \\\", and newlines as \\n.")
             }
         )
         llmRateLimiter.acquire()

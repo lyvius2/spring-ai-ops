@@ -4,10 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.connector.GithubConnector
+import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubFile
+import com.walter.spring.ai.ops.connector.dto.GithubReviewComment
+import com.walter.spring.ai.ops.connector.dto.GithubReviewRequest
+import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.CryptoProvider
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -56,6 +60,56 @@ class GithubService(
             commits = commitResults.flatMap { it.commits },
             errorMessage = commitResults.firstOrNull { it.hasError() }?.errorMessage ?: "",
         )
+    }
+
+    override fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String) {
+        if (!isTokenConfigured()) {
+            log.warn("Skip GitHub PR comment — token is not configured (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
+            return
+        }
+        if (body.isBlank()) {
+            log.warn("Skip GitHub PR comment — empty body (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
+            return
+        }
+        val commentRequest = GitCommentRequest(formatPullRequestComment(body))
+        runCatching { githubConnector.createIssueComment(inquiry.owner, inquiry.repo, number, commentRequest) }
+            .onSuccess { response -> log.info("Posted GitHub PR comment: owner={}, repo={}, number={}, commentId={}", inquiry.owner, inquiry.repo, number, response.id) }
+            .onFailure { log.error("Failed to post GitHub PR comment: owner={}, repo={}, number={}, error={}", inquiry.owner, inquiry.repo, number, it.message, it) }
+    }
+
+    override fun postPullRequestInlineComments(inquiry: GitDifferInquiry, number: Int, review: LlmInlineReviewResult, compareResult: GitCompareResult): Boolean {
+        if (!isTokenConfigured()) {
+            log.warn("Skip GitHub inline review — token is not configured (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
+            return false
+        }
+        if (inquiry.head.isBlank()) {
+            log.warn("Skip GitHub inline review — missing head commit SHA (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
+            return false
+        }
+        val parsedDiffs = compareResult.parseDiffs()
+        val filtered = review.comments.filter { it.body.isNotBlank() && parsedDiffs[it.file]?.lookup(it.line, it.side) != null }
+        val dropped = review.comments.size - filtered.size
+        if (dropped > 0) {
+            log.info("GitHub inline review — dropped {} of {} LLM comments outside diff (number={})", dropped, review.comments.size, number)
+        }
+        if (filtered.isEmpty()) {
+            log.warn("GitHub inline review — no valid inline comments after diff filtering (number={})", number)
+            return false
+        }
+        val reviewComments = filtered.map { GithubReviewComment(path = it.file, line = it.line, side = it.side.name, body = it.body) }
+        val body = review.summary.ifBlank { "AI incremental review" }
+        val request = GithubReviewRequest(commitId = inquiry.head, body = body, event = "COMMENT", comments = reviewComments)
+        val response = runCatching { githubConnector.createReview(inquiry.owner, inquiry.repo, number, request) }
+            .getOrElse {
+                log.error("Failed to post GitHub review: owner={}, repo={}, number={}, error={}", inquiry.owner, inquiry.repo, number, it.message, it)
+                return false
+            }
+        if (!response.errorMessage.isNullOrBlank()) {
+            log.warn("GitHub inline review rejected — {} (owner={}, repo={}, number={})", response.errorMessage, inquiry.owner, inquiry.repo, number)
+            return false
+        }
+        log.info("Posted GitHub inline review: owner={}, repo={}, number={}, reviewId={}, comments={}", inquiry.owner, inquiry.repo, number, response.id, reviewComments.size)
+        return true
     }
 
     private fun mergeFiles(files: List<GithubFile>): List<GithubFile> =

@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.connector.dto
 
 import com.walter.spring.ai.ops.record.ChangedFile
 import com.walter.spring.ai.ops.record.CommitSummary
+import com.walter.spring.ai.ops.service.dto.ParsedFileDiff
 
 interface GitCompareResult {
     val errorMessage: String
@@ -9,4 +10,5 @@ interface GitCompareResult {
     fun createCodeReviewPrompt(): String
     fun changedFiles(): List<ChangedFile>
     fun commitSummaries(): List<CommitSummary>
+    fun parseDiffs(): Map<String, ParsedFileDiff>
 }

@@ -30,6 +30,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
   - [정적 코드 위험 분석](#정적-코드-위험-분석)
   - [GitHub → LLM (코드 리뷰)](#github--llm-코드-리뷰)
   - [GitLab → LLM (코드 리뷰)](#gitlab--llm-코드-리뷰)
+  - [GitHub PR / GitLab MR → LLM (인라인 리뷰)](#github-pr--gitlab-mr--llm-인라인-리뷰)
   - [Grafana → Loki + Prometheus → LLM (장애 분석)](#grafana--loki--prometheus--llm-장애-분석)
 - [스크린샷](#스크린샷)
 - [기술 스택](#기술-스택)
@@ -54,7 +55,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 
 1. **정적 코드 위험 분석** — 요청 시 등록된 Git 저장소를 클론하고 전체 소스 트리를 스캔하여 LLM에게 보안·품질 종합 리뷰를 요청합니다. 대용량 코드베이스는 청크로 분할하여 병렬 분석(맵-리듀스)한 뒤 단일 최종 보고서로 통합합니다. 결과에는 마크다운 보고서와 구조화된 JSON 이슈 목록(심각도, 파일, 라인, 권고사항)이 포함됩니다.
 
-2. **자동 코드 리뷰** — GitHub 또는 GitLab push webhook이 수신되면 커밋 diff를 가져와 LLM에게 정확성·보안·성능·코드 품질 관점의 자동 코드 리뷰를 수행합니다.
+2. **자동 코드 리뷰** — GitHub 또는 GitLab push webhook이 수신되면 커밋 diff를 가져와 LLM에게 정확성·보안·성능·코드 품질 관점의 자동 코드 리뷰를 수행합니다. 또한 별도의 **Pull Request / Merge Request** 엔드포인트를 통해 PR/MR 이벤트를 리뷰합니다 — `opened` / `reopened` / `ready_for_review` 시에는 요약 코멘트 1개를 게시하고, `synchronize`(PR head에 신규 커밋 push) 시에는 GitHub Reviews API 또는 GitLab Discussions API로 **변경 라인별 인라인 코멘트**를 게시합니다. 인라인 위치 산정이 실패하면 자동으로 요약 코멘트 폴백이 동작합니다.
 
 3. **인시던트 인텔리전스** — Grafana 알림이 발생하면 알림 레이블로 Loki 스트림 셀렉터를 만들고, 같은 레이블과 시간 구간을 사용해 Prometheus 범위 조회도 병렬로 수행할 수 있습니다. 동시에 등록된 소스 저장소를 checkout하고, Loki 로그에서 JVM stack trace를 파싱해 관련 소스 파일과 라인 주변 snippet을 추출합니다. LLM은 알림, 로그, 메트릭, 소스 컨텍스트를 함께 분석하여 근본 원인 보고서와 구조화된 소스 수정 권고안을 반환합니다.
 
@@ -72,6 +73,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 |---|---|
 | **정적 코드 위험 분석** | Git 저장소를 클론하여 AI 기반 전체 코드베이스 리뷰 수행 — 보안 취약점, 코드 품질 이슈, 개선 권고사항. 코드베이스 크기에 따라 단일 호출 또는 맵-리듀스 전략 자동 선택 |
 | **자동 코드 리뷰** | GitHub / GitLab 커밋 diff → 코드 품질, 잠재적 버그, 보안 고려사항. 코드 리뷰 완료 시 Slack 채널로 결과 전송 가능 |
+| **Pull Request / Merge Request 리뷰** | 전용 웹훅(`/webhook/git/{application}/pull-request`)으로 PR/MR 이벤트를 처리. `opened` / `reopened` / `ready_for_review` 이벤트에는 요약 코멘트 1개를 게시하고, `synchronize`(신규 커밋 push) 이벤트에는 **라인별 인라인 코멘트**를 게시. GitHub는 Reviews API(1개 리뷰 안에 N개 코멘트 배치), GitLab은 Discussions API(코멘트별 개별 호출 + 요약 note 별도 게시). Draft PR은 스킵되며, 현재 diff hunk 범위 밖의 코멘트는 자동 필터링되고, 인라인 흐름이 실패하거나 게시할 코멘트가 없으면 요약 코멘트 1개로 폴백 |
 | **Slack 코드 리뷰 알림** | 코드 리뷰가 완료되면 Markdown 리뷰 결과를 Slack mrkdwn으로 변환하여 애플리케이션별로 설정한 Slack Incoming Webhook 채널에 전송합니다. UI의 애플리케이션 설정에서 토글(`Send Slack Notification on Code Review`)과 Webhook path를 앱별로 구성할 수 있습니다 |
 | **LLM 장애 분석** | Grafana 알림 컨텍스트 + Loki 로그 + Prometheus 메트릭 시계열(선택) + stack trace 관련 소스 snippet → 근본 원인, 영향 범위, 관련 파일, 조치 방법 |
 | **소스 수정 권고안** | 장애 분석 결과에 구조화된 소스 수정 권고안(`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) 포함. AI Analysis 하단에서 파일 경로를 클릭하면 원본 코드와 수정 제안을 좌우 비교 popup으로 확인하고 복사 가능 |
@@ -252,6 +254,74 @@ POST /webhook/git[/{application}]
                 └─ POST https://hooks.slack.com/{slackChannel}
                         (Incoming Webhook — Block Kit 메시지)
 ```
+
+---
+
+### GitHub PR / GitLab MR → LLM (인라인 리뷰)
+
+```
+Pull Request / Merge Request 이벤트 발생
+        │
+        ▼  (GitHub `Pull requests` / GitLab `Merge request events`)
+POST /webhook/git/{application}/pull-request
+        │
+        ├─ X-GitHub-Event / X-Gitlab-Event 헤더로 provider 판별
+        │
+        ├─ action 정규화
+        │    OPENED       ← GitHub: opened / reopened / ready_for_review
+        │                    GitLab: open / reopen
+        │    SYNCHRONIZE  ← GitHub: synchronize
+        │                    GitLab: update (oldrev이 있는 경우만)
+        │    IGNORED      ← 그 외 (close / edit / label / WIP 토글 등)
+        │
+        ├─ 검증: IGNORED / draft / number·base·head 누락 시 warn 로그 후 조기 return
+        │        (예외를 던지지 않고 비동기 CompletableFuture는 정상 종료)
+        │
+        ├─ compare API로 전체 PR diff 조회 (baseSha…headSha) — 인라인 코멘트 위치 필터링에 사용
+        │
+        └─ action별 분기
+             │
+             ├─ OPENED / reopened / ready_for_review
+             │     ├─ LLM 코드 리뷰 (executeAnalyzeCodeDiffer)
+             │     └─ 요약 코멘트 1개 게시
+             │          GitHub → POST /repos/{owner}/{repo}/issues/{n}/comments
+             │          GitLab → POST /projects/{path}/merge_requests/{iid}/notes
+             │
+             └─ SYNCHRONIZE (PR head에 신규 커밋 push)
+                   ├─ compare API로 델타 diff 조회 (beforeSha…headSha)
+                   │    — 이번 push에서 수정된 라인만 포함
+                   │    폴백: beforeSha가 없거나 델타 compare 실패 시 전체 PR diff 사용
+                   │
+                   ├─ 델타로 LLM 인라인 리뷰 (executeAnalyzeCodeDifferInline)
+                   │    프롬프트: 요약 markdown + {file, line, side, body} JSON 배열
+                   │    델리미터: ---INLINE_COMMENTS_JSON_START/END---
+                   │
+                   ├─ LlmInlineReviewResult(summary, comments)로 파싱
+                   │
+                   ├─ 전체 PR diff hunk와 대조하여 코멘트 필터링 (baseSha…headSha)
+                   │    (file, line, side)가 PR 실제 hunk 위치에 매핑되지 않으면 제거
+                   │    (Reviews/Discussions API는 PR 단위 좌표계 필요)
+                   │
+                   ├─ 필터링 후 코멘트가 비었으면
+                   │      → 요약만 게시 (v1 폴백 경로)
+                   │
+                   └─ 그 외에는 인라인 코멘트 게시
+                        GitHub → POST /repos/{owner}/{repo}/pulls/{n}/reviews
+                                 (commit_id, body=summary, event=COMMENT, comments[]로 Review 1개)
+                                 응답에 errorMessage가 있으면 요약 코멘트로 폴백
+                        GitLab → POST /projects/{path}/merge_requests/{iid}/discussions
+                                 (코멘트별로 개별 호출, position: base_sha/start_sha/head_sha
+                                  + new_path/new_line + old_path/old_line)
+                                 최소 1건 성공 시 별도 요약 note까지 게시, 전부 실패 시 요약 폴백
+```
+
+> **v1과 v2**: v1(2026-08-06)은 OPENED / reopened / ready_for_review 액션에 대해 요약 코멘트 1개만 게시합니다. v2(2026-08-09)는 SYNCHRONIZE에 대한 라인별 인라인 코멘트를 추가합니다 — `DiffHunkParser`(`@@ -a,b +c,d @@` 헤더를 파싱하여 파일 라인 ↔ diff 위치 매핑)와 `InlineReviewParser`(LLM 출력에서 델리미터로 감싼 JSON 추출) 조합.
+
+> **폴백 조건**: 다음 세 경우에 요약 코멘트 1개로 폴백합니다 — (a) LLM이 인라인 코멘트를 0개 반환, (b) 필터링 후 diff hunk 밖 코멘트만 남음, (c) 인라인 API 호출 실패 또는 4xx 응답.
+
+> **저장하지 않음**: push 웹훅 코드 리뷰와 달리 PR/MR 리뷰는 `CodeReviewRecord`를 Redis에 저장하거나 `/topic/commit`으로 push하지 않습니다. 결과는 PR/MR 자체에만 게시됩니다.
+
+> **Diff scope**: v2는 SYNCHRONIZE 이벤트마다 **두 번의 compare 호출**을 사용합니다 — 델타(`beforeSha…headSha`)는 LLM 프롬프트에만 사용되어 "이번 push에서 수정된 라인만" 리뷰 대상이 되고, 전체 PR diff(`baseSha…headSha`)는 인라인 코멘트 위치 필터링에 사용됩니다 (GitHub Reviews API와 GitLab Discussions API가 PR 단위 좌표계로 동작하기 때문). 델타에는 있지만 현재 전체 PR diff에는 없는 라인(예: 임시 추가 후 삭제된 라인)에 대한 코멘트는 필터에서 제거됩니다. `beforeSha`가 없거나(잘못된 웹훅 페이로드) 델타 compare가 실패하면 LLM 분석도 전체 PR diff로 폴백합니다 — v1과 동일한 동작.
 
 ---
 
@@ -600,23 +670,42 @@ crypto:
 
 ### GitHub Webhook 설정
 
+**Push 이벤트** (push 시 코드 리뷰):
+
 1. **Repository → Settings → Webhooks → Add webhook**
 2. Payload URL: `http://<your-host>:7079/webhook/git/{application}`
 3. Content type: `application/json`
 4. 이벤트: **Just the push event**
 
-GitHub 액세스 토큰(yml 또는 UI에서 설정)은 `repo` read 스코프(클래식 PAT) 또는 `Contents: Read` 권한(세분화된 PAT)이 필요합니다.
+**Pull request 이벤트** (PR 요약/인라인 리뷰 — 선택, 별도 웹훅으로 추가):
+
+1. 같은 저장소에 웹훅을 하나 더 추가합니다.
+2. Payload URL: `http://<your-host>:7079/webhook/git/{application}/pull-request`
+3. Content type: `application/json`
+4. **Which events would you like to trigger this webhook?**에서 **Let me select individual events** 선택 후 **Pull requests**만 체크.
+5. 저장.
+
+GitHub 액세스 토큰(yml 또는 UI에서 설정)은 push 리뷰용으로 `repo` read 스코프(클래식 PAT) 또는 `Contents: Read` 권한(세분화된 PAT)이 필요합니다. PR 리뷰 코멘트 게시까지 지원하려면 세분화된 PAT에는 `Pull requests: Read and write` 권한도 추가해야 합니다.
 
 > **참고**: GitHub Webhook **Secret**은 현재 지원하지 않습니다. Webhook 설정 시 Secret 필드는 비워두세요.
 
 ### GitLab Webhook 설정
+
+**Push 이벤트** (push 시 코드 리뷰):
 
 1. **Project → Settings → Webhooks → Add new webhook**
 2. URL: `http://<your-host>:7079/webhook/git/{application}`
 3. **Trigger** 항목에서 **Push events** 선택
 4. 저장
 
-GitLab 액세스 토큰(yml 또는 UI에서 설정)은 `read_api` 스코프가 필요합니다. 셀프 호스팅 GitLab 인스턴스를 사용하는 경우 `gitlab.url`을 해당 인스턴스의 API 기본 URL(예: `https://gitlab.example.com/api/v4`)로 설정하세요.
+**Merge request 이벤트** (MR 요약/인라인 리뷰 — 선택, 별도 웹훅으로 추가):
+
+1. 같은 프로젝트에 웹훅을 하나 더 추가합니다.
+2. URL: `http://<your-host>:7079/webhook/git/{application}/pull-request`
+3. **Trigger**에서 **Merge request events**만 선택.
+4. 저장.
+
+GitLab 액세스 토큰(yml 또는 UI에서 설정)은 MR 리뷰까지 지원하려면 `api` 스코프가 필요합니다 (push 전용이면 최소 `read_api`). 셀프 호스팅 GitLab 인스턴스를 사용하는 경우 `gitlab.url`을 해당 인스턴스의 API 기본 URL(예: `https://gitlab.example.com/api/v4`)로 설정하세요.
 
 > **참고**: GitLab Webhook **Secret Token**은 현재 지원하지 않습니다. Webhook 설정 시 Secret Token 필드는 비워두세요.
 
@@ -674,6 +763,7 @@ Spring AI Ops는 **Spring Security**를 사용하여 쓰기 작업을 보호합�
 | `GET` | `/api/code-risk/{application}/list` | 정적 분석 레코드 조회 |
 | `POST` | `/webhook/grafana[/{application}]` | Grafana Alerting 웹훅 수신 |
 | `POST` | `/webhook/git[/{application}]` | GitHub / GitLab push 웹훅 수신 |
+| `POST` | `/webhook/git/{application}/pull-request` | GitHub Pull Request / GitLab Merge Request 웹훅 수신 (open 시 요약 코멘트, synchronize 시 인라인 코멘트) |
 
 **WebSocket 토픽** (STOMP over SockJS, `/ws`)
 

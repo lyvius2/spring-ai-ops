@@ -32,6 +32,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
   - [Static Code Risk Analysis](#static-code-risk-analysis)
   - [GitHub → LLM](#github--llm-code-review)
   - [GitLab → LLM](#gitlab--llm-code-review)
+  - [GitHub PR / GitLab MR → LLM (Inline Review)](#github-pr--gitlab-mr--llm-inline-review)
   - [Grafana → Loki + Prometheus → LLM](#grafana--loki--prometheus--llm-error-analysis)
 - [Screenshots](#screenshots)
 - [Technology Stack](#technology-stack)
@@ -58,7 +59,7 @@ Spring AI Ops bridges your monitoring and version-control toolchain with large l
 
 1. **Static Code Risk Analysis** — On demand, Spring AI Ops clones a registered Git repository, scans the entire source tree, and sends the bundled code to an LLM for a full security and quality review. For large codebases the analysis is split into chunks and processed in parallel (map-reduce), then consolidated into a single final report. Results include a markdown report and a structured JSON issue list (severity, file, line, recommendation).
 
-2. **Automated Code Review** — When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review covering correctness, security, performance, and code quality.
+2. **Automated Code Review** — When a GitHub or GitLab push webhook arrives, the application fetches the commit diff and sends it to the LLM for an automated code review covering correctness, security, performance, and code quality. In addition, a dedicated **Pull Request / Merge Request** endpoint reviews PR/MR events — posting a summary comment on `opened` / `reopened` / `ready_for_review` and **inline line-anchored comments** on `synchronize` (new commits pushed to the PR head) via the GitHub Reviews API or GitLab Discussions API, with automatic fallback to a summary comment when inline positioning fails.
 
 3. **Incident Intelligence** — When Grafana fires an alert, the application builds a Loki stream selector from alert labels, queries matching logs, optionally queries Prometheus range data, and checks out the registered source repository in parallel. JVM stack traces are parsed from the logs, resolved to source files, and converted into focused snippets around the failing lines. The LLM receives alert, log, metric, and source context, then returns a root-cause report plus structured source code change suggestions.
 
@@ -76,6 +77,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 |---|---|
 | **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations. Optionally sends the result to a Slack channel via Incoming Webhook |
+| **Pull Request / Merge Request Review** | Dedicated webhook (`/webhook/git/{application}/pull-request`) reviews PR/MR events. On `opened` / `reopened` / `ready_for_review` posts a summary comment; on `synchronize` (new commits pushed) posts **inline line-anchored comments** — GitHub uses the Reviews API (single review with N comments), GitLab uses the Discussions API (one per comment) with an accompanying summary note. Draft PRs are skipped; inline comments outside the current diff hunks are filtered out, and if the inline flow fails or returns nothing, the facade falls back to a single summary comment |
 | **Slack Code Review Notification** | When a code review completes, the result (converted from Markdown to Slack mrkdwn) is posted to a per-application Slack Incoming Webhook channel. Toggle and webhook path are configurable per application in the UI |
 | **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) + stack-trace-related source snippets → root cause, affected components, source file references, and recommended actions |
 | **Source Fix Suggestions** | Incident analysis can return structured source code suggestions (`filePath`, `originalCode`, `suggestionCode`, `description`, `lineNumber`) shown at the bottom of the AI Analysis panel with a side-by-side popup and copy action |
@@ -260,6 +262,73 @@ POST /webhook/git[/{application}]
                 └─ POST https://hooks.slack.com/{slackChannel}
                         (Incoming Webhook — Block Kit message)
 ```
+
+---
+
+### GitHub PR / GitLab MR → LLM (Inline Review)
+
+```
+Pull Request / Merge Request event
+        │
+        ▼  (GitHub `Pull requests` / GitLab `Merge request events`)
+POST /webhook/git/{application}/pull-request
+        │
+        ├─ Detect provider via X-GitHub-Event / X-Gitlab-Event header
+        │
+        ├─ Normalise action
+        │    OPENED       ← GitHub: opened / reopened / ready_for_review
+        │                    GitLab: open / reopen
+        │    SYNCHRONIZE  ← GitHub: synchronize
+        │                    GitLab: update (only when oldrev is present)
+        │    IGNORED      ← everything else (close / edit / label / WIP toggle w/o commits)
+        │
+        ├─ Validate: skip early with a warn log if IGNORED / draft / missing number/base/head
+        │           (facade logs and returns; the async CompletableFuture completes normally)
+        │
+        ├─ Fetch full PR diff via compare API (baseSha…headSha) — used for inline comment positioning
+        │
+        └─ Route by action
+             │
+             ├─ OPENED / reopened / ready_for_review
+             │     ├─ LLM code review (executeAnalyzeCodeDiffer)
+             │     └─ Post ONE summary comment
+             │          GitHub → POST /repos/{owner}/{repo}/issues/{n}/comments
+             │          GitLab → POST /projects/{path}/merge_requests/{iid}/notes
+             │
+             └─ SYNCHRONIZE (new commits pushed to PR head)
+                   ├─ Fetch DELTA diff via compare API (beforeSha…headSha)
+                   │    — only the lines modified since the previous push
+                   │    fallback: if beforeSha is missing or compare fails, use full PR diff
+                   │
+                   ├─ LLM inline review on the delta (executeAnalyzeCodeDifferInline)
+                   │    Prompt asks for markdown summary + JSON array of {file, line, side, body}
+                   │    delimited by ---INLINE_COMMENTS_JSON_START/END---
+                   │
+                   ├─ Parse into LlmInlineReviewResult(summary, comments)
+                   │
+                   ├─ Filter comments through the FULL PR diff hunks (baseSha…headSha)
+                   │    each (file, line, side) must map to a real hunk position in the PR — the rest are dropped
+                   │    (positions must be in PR-level coordinates for the Reviews/Discussions APIs)
+                   │
+                   ├─ If filtered list is empty
+                   │      → post summary only (v1 fallback path)
+                   │
+                   └─ Otherwise post inline comments
+                        GitHub → POST /repos/{owner}/{repo}/pulls/{n}/reviews
+                                 (single Review with commit_id, body=summary, event=COMMENT, comments[])
+                        GitLab → POST /projects/{path}/merge_requests/{iid}/discussions
+                                 (one per comment, position: base_sha/start_sha/head_sha + new_path/new_line + old_path/old_line)
+                                 + separate summary note when at least one discussion succeeds
+                        If the inline call fails or all discussions error → fall back to summary comment
+```
+
+> **v1 vs v2**: v1 (2026-08-06) supports only the OPENED / reopened / ready_for_review actions with a single summary comment. v2 (2026-08-09) adds inline line-anchored comments for SYNCHRONIZE via `DiffHunkParser` (parses `@@ -a,b +c,d @@` headers to map file line ↔ diff position) and `InlineReviewParser` (extracts delimited JSON from LLM output).
+
+> **Fallback conditions**: The pipeline falls back to a single summary comment when (a) the LLM returns zero inline comments, (b) all comments fall outside the current diff hunks after filtering, or (c) the inline API call fails or returns a 4xx response.
+
+> **PR review does not persist**: Unlike the push-webhook code review, the PR/MR review flow does not save `CodeReviewRecord` to Redis or push updates via `/topic/commit`. Results are posted only to the PR/MR itself.
+
+> **Diff scope**: v2 uses **two compare calls per SYNCHRONIZE push** — the delta (`beforeSha…headSha`) is sent to the LLM so it reviews only the lines modified since the previous push, while the full PR diff (`baseSha…headSha`) is used to filter and position inline comments (GitHub Reviews API and GitLab Discussions API operate on the PR-level coordinate system). Comments the LLM produces for lines outside the current full PR diff are dropped by the filter. When `beforeSha` is missing (e.g., malformed webhook) or the delta compare returns an error, the facade falls back to the full PR diff for LLM analysis too — matching v1 behavior.
 
 ---
 
@@ -635,24 +704,43 @@ Open `http://localhost:7079` in your browser. On first launch you will be prompt
 
 ### Setting Up GitHub Webhooks
 
+**Push events** (code review on push):
+
 1. Go to **Repository → Settings → Webhooks → Add webhook**.
 2. Set **Payload URL** to `http://<your-host>:7079/webhook/git/{application}`.
 3. Set **Content type** to `application/json`.
 4. Select event: **Just the push event**.
 5. Save the webhook.
 
-Ensure your GitHub personal access token (configured in yml or via the UI) has `repo` read scope (classic PAT) or `Contents: Read` permission (fine-grained PAT).
+**Pull request events** (PR summary/inline review — optional, add as a separate webhook):
+
+1. Add another webhook on the same repository.
+2. Set **Payload URL** to `http://<your-host>:7079/webhook/git/{application}/pull-request`.
+3. Set **Content type** to `application/json`.
+4. Under **Which events would you like to trigger this webhook?** choose **Let me select individual events** and check **Pull requests** only.
+5. Save the webhook.
+
+Ensure your GitHub personal access token (configured in yml or via the UI) has `repo` read scope (classic PAT). Fine-grained PATs need `Contents: Read` for push-diff review, plus `Pull requests: Read and write` to post PR review comments.
 
 > **Note**: GitHub Webhook **Secret** is not currently supported. Leave the Secret field blank when configuring the webhook. Secret-based HMAC-SHA256 signature verification is planned for a future release.
 
 ### Setting Up GitLab Webhooks
+
+**Push events** (code review on push):
 
 1. Go to **Project → Settings → Webhooks → Add new webhook**.
 2. Set **URL** to `http://<your-host>:7079/webhook/git/{application}`.
 3. Under **Trigger**, check **Push events**.
 4. Save the webhook.
 
-Ensure your GitLab personal access token (configured in yml or via the UI) has `read_api` scope. For self-hosted GitLab instances, set `gitlab.url` to your instance's API base URL (e.g. `https://gitlab.example.com/api/v4`).
+**Merge request events** (MR summary/inline review — optional, add as a separate webhook):
+
+1. Add another webhook on the same project.
+2. Set **URL** to `http://<your-host>:7079/webhook/git/{application}/pull-request`.
+3. Under **Trigger**, check **Merge request events** only.
+4. Save the webhook.
+
+Ensure your GitLab personal access token (configured in yml or via the UI) has `api` scope for MR review (or at minimum `read_api` for push-only review). For self-hosted GitLab instances, set `gitlab.url` to your instance's API base URL (e.g. `https://gitlab.example.com/api/v4`).
 
 > **Note**: GitLab Webhook **Secret Token** is not currently supported. Leave the Secret Token field blank when configuring the webhook.
 
@@ -710,6 +798,7 @@ Administrator accounts are managed from the **Account Management** panel in the 
 | `GET` | `/api/code-risk/{application}/list` | Get static analysis records for an application |
 | `POST` | `/webhook/grafana[/{application}]` | Grafana Alerting webhook receiver |
 | `POST` | `/webhook/git[/{application}]` | GitHub / GitLab push webhook receiver |
+| `POST` | `/webhook/git/{application}/pull-request` | GitHub Pull Request / GitLab Merge Request webhook receiver (summary comment on open, inline comments on synchronize) |
 
 **WebSocket topics** (STOMP over SockJS at `/ws`)
 
@@ -742,79 +831,141 @@ The Swagger UI is useful for testing webhook payloads and configuration endpoint
 ```
 com.walter.spring.ai.ops
 ├── SpringAiOpsApplication.kt
-├── code/
+├── code/                          # Enums and constants
+│   ├── AlertMessageType.kt        # Typed frontend alert payload categories
 │   ├── AlertingStatus.kt          # FIRING / RESOLVED / ACCEPTED
 │   ├── ConnectionStatus.kt        # SUCCESS / READY / FAILURE
-│   ├── GitRemoteProvider.kt       # GITHUB / GITLAB enum
-│   ├── LlmProvider.kt             # OPEN_AI / ANTHROPIC enum with product name & key
-│   ├── AlertMessageType.kt        # Typed frontend alert payload categories
-│   └── RedisKeyConstants.kt       # Centralised Redis key constants
+│   ├── DiffSide.kt                # LEFT / RIGHT — side of a diff a PR/MR inline comment refers to (v2)
+│   ├── GitRemoteProvider.kt       # GITHUB / GITLAB
+│   ├── LlmProvider.kt             # OPEN_AI / ANTHROPIC / DEEP_SEEK / EXAONE / BEDROCK
+│   ├── ObservabilityProvider.kt   # LOKI / PROMETHEUS
+│   ├── PullRequestAction.kt       # OPENED / SYNCHRONIZE / IGNORED — normalised PR/MR action (v1/v2)
+│   ├── RedisKeyConstants.kt       # Centralised Redis key constants
+│   └── RepositoryCloneStatus.kt   # RUNNING / SUCCESS / FAILED — background checkout state
 ├── config/
-│   ├── RepositoryProperties.kt    # Persistent repository storage settings and path safety
-│   ├── CsrfTokenProvider.kt       # Generates a startup-time CSRF token for same-origin protection
-│   ├── CsrfTokenInterceptor.kt    # Validates X-CSRF-Token header on /api/code-risk/**
-│   ├── EmbeddedRedisConfig.kt     # Auto-start embedded Redis (local profile)
-│   ├── GithubConnectorConfig.kt   # Feign client configuration for GitHub API
-│   ├── GitlabConnectorConfig.kt   # Feign client configuration for GitLab API
-│   ├── LokiConnectorConfig.kt     # Feign client configuration for Loki API
-│   ├── PrometheusConnectorConfig.kt  # Feign client configuration for Prometheus API
-│   ├── SwaggerConfig.kt           # springdoc-openapi OpenAPI info & server config
-│   ├── VirtualThreadConfig.kt     # Virtual thread task executor
-│   ├── WebMvcConfig.kt            # Registers CsrfTokenInterceptor on /api/code-risk/**
-│   ├── WebSocketConfig.kt         # STOMP WebSocket endpoint & broker
-│   ├── annotation/Facade.kt       # Custom @Facade stereotype annotation
-│   └── base/DynamicConnectorConfig.kt  # Abstract base for dynamic URL resolution (GitHub / Loki)
+│   ├── AuthenticationInterceptor.kt        # Enforces login on PROTECTED_ROUTES
+│   ├── CsrfTokenInterceptor.kt             # Validates X-CSRF-Token on /api/code-risk/**
+│   ├── CsrfTokenProvider.kt                # Generates startup-time CSRF token
+│   ├── EmbeddedRedisConfig.kt              # Auto-start embedded Redis (local profile)
+│   ├── GithubConnectorConfig.kt            # Feign client configuration for GitHub API
+│   ├── GitlabConnectorConfig.kt            # Feign client configuration for GitLab API
+│   ├── GlobalExceptionHandler.kt           # Maps custom exceptions (e.g. InvalidPullRequestException) → JSON error
+│   ├── LokiConnectorConfig.kt              # Feign client configuration for Loki API
+│   ├── MapperConfig.kt                     # Primary ObjectMapper bean
+│   ├── PasswordChangeRequiredInterceptor.kt # Blocks /api/** when password change is pending
+│   ├── PrometheusConnectorConfig.kt        # Feign client configuration for Prometheus API
+│   ├── RepositoryProperties.kt             # Persistent repository storage settings and path safety
+│   ├── SecurityConfig.kt                   # Spring Security session config
+│   ├── SwaggerConfig.kt                    # springdoc-openapi OpenAPI info & server config
+│   ├── VirtualThreadConfig.kt              # Virtual thread executor + LLM rate-limit Semaphore
+│   ├── WebMvcConfig.kt                     # Registers interceptors
+│   ├── WebSocketConfig.kt                  # STOMP WebSocket endpoint & broker
+│   ├── annotation/
+│   │   ├── AdminOnly.kt                    # Method-level admin-only marker (enforced by aspect)
+│   │   └── Facade.kt                       # @Facade stereotype meta-annotation
+│   ├── aspect/AdminOnlyAspect.kt           # Enforces @AdminOnly via SecurityContextHolder
+│   ├── base/
+│   │   ├── DynamicConnectorConfig.kt       # Base for runtime-URL Feign configs
+│   │   └── LenientMapper.kt                # ObjectMapper variant tolerating unknown fields
+│   └── exception/
+│       ├── ForbiddenException.kt           # 403
+│       └── UnauthorizedException.kt        # 401
 ├── connector/
-│   ├── GithubConnector.kt         # Feign: GitHub Commits / Compare API
-│   ├── GitlabConnector.kt         # Feign: GitLab Compare / Commit Diff API
-│   ├── LokiConnector.kt           # Feign: Loki query_range API
-│   ├── PrometheusConnector.kt     # Feign: Prometheus query_range API
-│   └── dto/                       # Response DTOs (GithubCompareResult, LokiQueryResult, ...)
+│   ├── GithubConnector.kt                  # Feign: GitHub Commits / Compare / Issue Comments / Reviews
+│   ├── GithubConnectorFallbackFactory.kt   # Resilience4j fallback for GitHub
+│   ├── GitlabConnector.kt                  # Feign: GitLab Compare / Commit Diff / MR Notes / Discussions
+│   ├── GitlabConnectorFallbackFactory.kt   # Resilience4j fallback for GitLab
+│   ├── LokiConnector.kt                    # Feign: Loki query_range
+│   ├── LokiConnectorFallbackFactory.kt     # Resilience4j fallback for Loki
+│   ├── PrometheusConnector.kt              # Feign: Prometheus query_range
+│   ├── PrometheusConnectorFallbackFactory.kt # Resilience4j fallback for Prometheus
+│   ├── SlackChannelConnector.kt            # Feign: Slack Incoming Webhook
+│   └── dto/                                # Connector DTOs (see below)
+│       ├── GitCommentRequest.kt            # Body payload for issue/MR-note comments (v1)
+│       ├── GitCompareResult.kt             # Interface — errorMessage / prompt / changedFiles / parseDiffs
+│       ├── GitDifferInquiry.kt             # owner/repo/base/head/commitShas passed to compare
+│       ├── Github*.kt                      # GitHub compare/commit/file DTOs
+│       ├── GithubIssueCommentResponse.kt   # GitHub issue-comment response (v1)
+│       ├── GithubReview{Comment,Request,Response}.kt  # GitHub PR Review API (v2)
+│       ├── Gitlab*.kt                      # GitLab compare/commit/file DTOs
+│       ├── GitlabMergeRequestNoteResponse.kt          # GitLab MR-note response (v1)
+│       ├── GitlabDiscussion{Position,Request,Response,Note}.kt  # GitLab MR discussion API (v2)
+│       ├── Loki*.kt / Prometheus*.kt / Slack*.kt      # Observability & Slack DTOs
+│       └── ...
 ├── controller/
-│   ├── IndexController.kt         # GET /
-│   ├── WebhookController.kt       # POST /webhook/grafana, /webhook/git
-│   ├── AiConfigController.kt      # POST /api/llm/*
-│   ├── LokiConfigController.kt    # GET /api/loki/status, POST /api/loki/config, GET /api/prometheus/status, POST /api/prometheus/config
-│   ├── GitRemoteConfigController.kt  # POST /api/github/config, GET /api/github/config/status
-│   ├── ApplicationController.kt   # GET|POST|DELETE /api/app/*
-│   ├── FiringController.kt        # GET /api/firing/{app}/list
-│   ├── CommitController.kt        # GET /api/commit/{app}/list
-│   ├── CodeRiskController.kt      # POST /api/code-risk, GET /api/code-risk/{app}/list
-│   └── dto/                       # Request/Response DTOs
+│   ├── AiConfigController.kt               # POST /api/llm/*
+│   ├── ApplicationController.kt            # GET|POST|PUT|DELETE /api/apps/**
+│   ├── AuthController.kt                   # POST /api/auth/{login,logout,password,admin,admins}
+│   ├── CodeRiskController.kt               # POST /api/code-risk, GET /api/code-risk/{app}/list
+│   ├── CommitController.kt                 # GET /api/commit/{app}/list
+│   ├── DashboardController.kt              # GET /
+│   ├── FiringController.kt                 # GET /api/firing/{app}/list
+│   ├── GitRemoteConfigController.kt        # POST /api/github/config, GET /api/github/config/status
+│   ├── LokiConfigController.kt             # GET|POST /api/loki/*
+│   ├── PrometheusConfigController.kt       # GET|POST /api/prometheus/*
+│   ├── WebhookGitRemote.kt                 # POST /webhook/git[/{application}] + /webhook/git/{application}/pull-request (v1/v2)
+│   ├── WebhookGrafana.kt                   # POST /webhook/grafana[/{application}]
+│   └── dto/                                # Request/Response DTOs
+│       ├── GithubPullRequestRequest.kt     # Normalised PR/MR payload (v1) — action, number, baseSha, headSha, beforeSha, draft, ...
+│       ├── GithubPullRequestResponse.kt    # ACCEPTED / SKIPPED (v1)
+│       └── ...                             # AiConfig, App*, Auth, CodeRisk, Commit, Firing, Github push, Grafana alert, Loki, Prometheus, Slack, ...
 ├── event/
-│   ├── RateLimitHitEvent.kt       # Published by AiModelService on 429 response
-│   └── RateLimitHitEventListener.kt  # Forwards rate-limit event to MessageService
+│   ├── CodeReviewCompletedEvent.kt         # Published after push-webhook code review
+│   ├── CodeReviewCompletedEventListener.kt # Fans out to Slack when enabled
+│   ├── RateLimitHitEvent.kt                # Published by AiModelService on 429 response
+│   └── RateLimitHitEventListener.kt        # Pushes rate-limit notice via WebSocket
 ├── facade/
-│   ├── ApplicationFacade.kt       # Orchestrates app registry changes and background repository checkout
-│   ├── ObservabilityFacade.kt     # Orchestrates firing analysis & code review
-│   └── CodeRiskFacade.kt          # Orchestrates static code risk analysis (prepare repository → analyze → save)
-├── record/
-│   ├── AnalyzeFiringRecord.java   # Grafana analysis result (Java record)
-│   ├── CodeReviewRecord.java      # Code review result (Java record)
-│   ├── ChangedFile.java           # Per-file diff info (Java record)
-│   ├── CodeRiskRecord.java        # Static analysis result (Java record)
-│   ├── CodeRiskIssue.java         # Per-issue entry: file, line, severity, description, codeSnippet
-│   └── CommitSummary.java         # Commit metadata: id, message, url, timestamp
+│   ├── ApplicationFacade.kt                # App registry + background repository checkout
+│   ├── CodeReviewFacade.kt                 # Push-webhook AND PR/MR webhook — v1 summary + v2 inline routing (SYNCHRONIZE → postInlineReview)
+│   ├── CodeRiskFacade.kt                   # Static analysis (prepare → analyze → save)
+│   ├── DashboardFacade.kt                  # Dashboard aggregation
+│   ├── GitRemoteFacade.kt                  # GitHub/GitLab configuration orchestration
+│   └── IncidentAnalyzeFacade.kt            # Grafana firing analysis flow
+├── record/                                 # Java records (immutable Redis-persisted results)
+│   ├── Administrator.java                  # Admin account
+│   ├── AnalyzeFiringRecord.java            # Grafana firing analysis result
+│   ├── ChangedFile.java                    # Per-file diff info
+│   ├── CodeReviewRecord.java               # Push-webhook code review result
+│   ├── CodeRiskIssue.java                  # Per-issue entry: file, line, severity, description, codeSnippet
+│   ├── CodeRiskRecord.java                 # Static analysis result
+│   ├── CommitSummary.java                  # Commit metadata
+│   └── SourceCodeSuggestion.java           # LLM-suggested source code change
 ├── service/
-│   ├── AiModelService.kt          # ChatModel lifecycle & LLM calls
-│   ├── ApplicationService.kt      # Application registry (Redis)
-│   ├── GrafanaService.kt          # Alert → Loki inquiry, firing record persistence
-│   ├── GitRemoteService.kt        # Abstract base for GitHub / GitLab services (token, URL, diff)
-│   ├── GithubService.kt           # GitHub differ inquiry, code review persistence
-│   ├── GitlabService.kt           # GitLab differ inquiry, code review persistence
-│   ├── LokiService.kt             # Loki log query execution
-│   ├── PrometheusService.kt       # Prometheus metric query execution
-│   ├── MessageService.kt          # WebSocket push for all topics (firing, commit, analysis)
-│   ├── RepositoryService.kt       # Git clone/cache, source file collection, record persistence for code-risk
-│   └── dto/CodeChunk.kt           # Bundle chunk for map-reduce analysis
+│   ├── AdminService.kt                     # Admin account management
+│   ├── AiModelService.kt                   # ChatModel lifecycle + LLM calls (includes executeAnalyzeCodeDifferInline for v2)
+│   ├── ApplicationService.kt               # Application registry (Redis)
+│   ├── GitRemoteService.kt                 # Abstract base — abstract postPullRequestComment + postPullRequestInlineComments (v2)
+│   ├── GithubService.kt                    # GitHub differ inquiry + v1 issue comment + v2 Review API batch inline post
+│   ├── GitlabService.kt                    # GitLab differ inquiry + v1 MR note + v2 Discussions per-comment + summary note
+│   ├── GrafanaService.kt                   # Firing record persistence
+│   ├── IncidentSourceContextService.kt     # Stack-trace parsing + source snippet extraction
+│   ├── LokiService.kt                      # Loki log query execution
+│   ├── MessageService.kt                   # WebSocket push for all topics
+│   ├── PrometheusService.kt                # Prometheus metric query execution
+│   ├── RepositoryService.kt                # JGit clone/sync + code-risk record persistence
+│   ├── SlackChannelService.kt              # Slack Incoming Webhook client
+│   └── dto/                                # Service DTOs
+│       ├── AlertMessage.kt / AppConfig.kt / CodeChunk.kt / IncidentSourceContext.kt / LlmConfig.kt / RepositoryStatus.kt / SourceSnippet.kt / StackTraceFrame.kt
+│       ├── HunkLine.kt                     # (v2) One (line, side) entry from parsed diff — side + line + newLine + oldLine
+│       ├── LlmInlineComment.kt             # (v2) LLM output element — file, line, side, body
+│       ├── LlmInlineReviewResult.kt        # (v2) Parsed LLM output — summary + comments list
+│       └── ParsedFileDiff.kt               # (v2) Per-file parser output — newPath / oldPath / (line, side) → HunkLine map
 └── util/
-    ├── CodeAnalysisResultHandler.kt  # JSON parsing, sanitisation, and recovery for LLM issue output
-    ├── CryptoProvider.kt          # AES encryption/decryption for stored API keys
-    ├── MetricHandler.kt           # Prometheus metric series builder (memory, CPU, latency, HTTP status per app)
-    ├── RedisLockManager.kt        # Token-based Redis locks for repository working tree mutations
-    ├── RedisExtensions.kt         # zSetPushWithTtl / zSetRangeAllDesc helpers
-    ├── StringExtentions.kt        # toISO8601 helper
-    └── URIExtentions.kt           # URI builder helpers
+    ├── CodeAnalysisResultHandler.kt        # JSON parsing, sanitisation, and recovery for LLM issue output
+    ├── CryptoProvider.kt                   # AES-256-GCM encryption/decryption
+    ├── DiffHunkParser.kt                   # (v2) Parses `@@ -a,b +c,d @@` headers → ParsedFileDiff for PR inline positioning
+    ├── GitRemoteResolver.kt                # Resolves GitRemoteProvider → concrete Git service
+    ├── InlineReviewParser.kt               # (v2) Extracts delimited JSON from LLM output → LlmInlineReviewResult
+    ├── MarkdownConverter.kt                # Markdown → Slack mrkdwn conversion
+    ├── MetricHandler.kt                    # Prometheus metric series builder
+    ├── RedisLockManager.kt                 # Token-based Redis locks
+    ├── StackTraceParser.kt                 # Extracts stack frames from raw log text
+    ├── dto/RedisLock.kt                    # Redis lock handle
+    └── extension/
+        ├── DoubleExtensions.kt / MatchResultExtensions.kt / PathExtensions.kt
+        ├── RedisExtensions.kt              # zSetPushWithTtl / zSetRangeAllDesc / getArrayList
+        ├── StringExtentions.kt             # toISO8601, extractSourceSnippet helpers
+        └── URIExtentions.kt                # URI builder helpers
 ```
 
 ---
@@ -823,6 +974,9 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
+| 2026-08-09 | Fixed **Amazon Bedrock provider initialization / configure flow** — `initialize()` now bypasses the API-key decrypt step when the persisted `LlmConfig` provider is BEDROCK (BEDROCK has no API key) and directly assigns the pre-built `bedrockChatModel` to `chatModel`; `configure(BEDROCK, "")` lazily builds `bedrockChatModel` on first use instead of requiring `initialize()` to have run first |
+| 2026-08-09 | Added **Pull Request / Merge Request inline review (v2)** for the `synchronize` action — when new commits are pushed to a PR/MR head, the facade fetches the delta diff (`beforeSha…headSha`) so the LLM reviews only the lines modified since the previous push, then filters and positions inline comments against the full PR diff (`baseSha…headSha`) via `DiffHunkParser` before posting through the GitHub Reviews API (single review with N comments) or GitLab Discussions API (per-comment + summary note). Falls back to a single summary comment when the inline flow returns nothing or fails |
+| 2026-08-06 | Added **Pull Request / Merge Request summary review (v1)** — dedicated `/webhook/git/{application}/pull-request` endpoint reviews `opened` / `reopened` / `ready_for_review` events (GitHub) and `open` / `reopen` events (GitLab), posting a single summary comment via the Issue Comment / MR Notes API. Invalid webhook payloads (IGNORED action / draft PR / missing SHA) are logged and skipped early. Draft PRs are skipped |
 | 2026-05-24 | Added Amazon Bedrock as a supported LLM provider — uses `BedrockProxyChatModel` via `spring-ai-bedrock-converse`; AWS credentials are configured via `ai.bedrock.*` in `application.yml` or env vars `AI_BEDROCK_ACCESS_KEY` / `AI_BEDROCK_SECRET_KEY` (falls back to `DefaultCredentialsProvider` when blank); credentials are never stored in Redis; the API key input field is disabled in the UI when BEDROCK is selected |
 | 2026-05-16 | Added Slack Incoming Webhook notification for code reviews — when a code review completes, the result is converted from Markdown to Slack mrkdwn and posted to a per-application Slack channel. Toggle (`Send Slack Notification on Code Review`) and webhook path are configurable per application in the UI |
 | 2026-05-12 | Added EXAONE (LG AI Research) as a supported LLM provider — served via FriendliAI's serverless API (OpenAI-compatible); configurable via `ai.exaone.*` in application.yml or env vars `AI_EXAONE_API_KEY` / `AI_EXAONE_BASE_URL`. API key must be obtained from [friendli.ai](https://friendli.ai). Placeholder message in the LLM configuration UI guides users to FriendliAI when no key is saved |

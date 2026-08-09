@@ -3,6 +3,8 @@ package com.walter.spring.ai.ops.connector.dto
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.walter.spring.ai.ops.record.ChangedFile
 import com.walter.spring.ai.ops.record.CommitSummary
+import com.walter.spring.ai.ops.service.dto.ParsedFileDiff
+import com.walter.spring.ai.ops.util.DiffHunkParser
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GitlabCompareResult(
@@ -42,6 +44,9 @@ data class GitlabCompareResult(
 
     override fun commitSummaries(): List<CommitSummary> =
         commits.map { CommitSummary(it.id, it.message, it.webUrl, it.authoredDate) }
+
+    override fun parseDiffs(): Map<String, ParsedFileDiff> =
+        diffs.associate { it.newPath to DiffHunkParser.parse(it.newPath, it.oldPath, it.diff) }
 
     private fun diffStatus(diff: GitlabFile): String = when {
         diff.newFile -> "added"
