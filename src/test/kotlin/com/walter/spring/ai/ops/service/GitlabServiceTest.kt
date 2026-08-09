@@ -175,8 +175,9 @@ class GitlabServiceTest {
         // when
         service.postPullRequestComment(inquiry, 42, "## Review\nBody")
 
-        // then
-        verify(gitlabConnector).createMergeRequestNote("my-group%2Fmy-repo", 42, GitCommentRequest("## Review\nBody"))
+        // then — service wraps the body via GitRemoteService.formatPullRequestComment
+        val expectedBody = service.formatPullRequestComment("## Review\nBody")
+        verify(gitlabConnector).createMergeRequestNote("my-group%2Fmy-repo", 42, GitCommentRequest(expectedBody))
     }
 
     // ── postPullRequestInlineComments ─────────────────────────────────────────

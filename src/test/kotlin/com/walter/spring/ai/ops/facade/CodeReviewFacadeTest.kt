@@ -2,7 +2,6 @@ package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.code.GitRemoteProvider
 import com.walter.spring.ai.ops.code.PullRequestAction
-import com.walter.spring.ai.ops.config.exception.InvalidPullRequestException
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubFile
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
@@ -339,54 +338,54 @@ class CodeReviewFacadeTest {
     )
 
     @Test
-    @DisplayName("IGNORED action이면 InvalidPullRequestException을 던짐")
+    @DisplayName("IGNORED action이면 다운스트림 호출 없이 조기 return")
     fun analyzePullRequest_skips_whenActionIsIgnored() {
         // given
         val request = createPullRequestRequest(action = PullRequestAction.IGNORED)
 
-        // when / then
-        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
-            codeReviewFacade.analyzePullRequest(request, "my-app")
-        }
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
         verifyNoInteractions(gitRemoteResolver, aiModelService, messageService, eventPublisher)
     }
 
     @Test
-    @DisplayName("draft PR이면 InvalidPullRequestException을 던짐")
+    @DisplayName("draft PR이면 다운스트림 호출 없이 조기 return")
     fun analyzePullRequest_skips_whenDraftIsTrue() {
         // given
         val request = createPullRequestRequest(action = PullRequestAction.OPENED, draft = true)
 
-        // when / then
-        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
-            codeReviewFacade.analyzePullRequest(request, "my-app")
-        }
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
         verifyNoInteractions(gitRemoteResolver, aiModelService)
     }
 
     @Test
-    @DisplayName("number가 0이면 InvalidPullRequestException을 던짐")
+    @DisplayName("number가 0이면 다운스트림 호출 없이 조기 return")
     fun analyzePullRequest_skips_whenNumberIsZero() {
         // given
         val request = createPullRequestRequest(number = 0)
 
-        // when / then
-        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
-            codeReviewFacade.analyzePullRequest(request, "my-app")
-        }
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
         verifyNoInteractions(gitRemoteResolver, aiModelService)
     }
 
     @Test
-    @DisplayName("baseSha 또는 headSha가 비어있으면 InvalidPullRequestException을 던짐")
+    @DisplayName("baseSha 또는 headSha가 비어있으면 다운스트림 호출 없이 조기 return")
     fun analyzePullRequest_skips_whenBaseOrHeadIsBlank() {
         // given
         val request = createPullRequestRequest(baseSha = "")
 
-        // when / then
-        org.junit.jupiter.api.Assertions.assertThrows(InvalidPullRequestException::class.java) {
-            codeReviewFacade.analyzePullRequest(request, "my-app")
-        }
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then
         verifyNoInteractions(gitRemoteResolver, aiModelService)
     }
 

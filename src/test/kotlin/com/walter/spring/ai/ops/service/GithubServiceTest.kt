@@ -404,7 +404,7 @@ class GithubServiceTest {
     }
 
     @Test
-    @DisplayName("토큰이 있고 body가 있으면 GitHub createIssueComment 호출")
+    @DisplayName("토큰이 있고 body가 있으면 formatPullRequestComment로 래핑 후 createIssueComment 호출")
     fun givenTokenAndBody_whenPostComment_thenCallsCreateIssueComment() {
         // given
         val service = buildService(configuredToken = "config-token")
@@ -417,8 +417,9 @@ class GithubServiceTest {
         // when
         service.postPullRequestComment(inquiry, 42, "## Review\nBody")
 
-        // then
-        verify(githubConnector).createIssueComment("acme", "my-repo", 42, GitCommentRequest("## Review\nBody"))
+        // then — service wraps the body via GitRemoteService.formatPullRequestComment
+        val expectedBody = service.formatPullRequestComment("## Review\nBody")
+        verify(githubConnector).createIssueComment("acme", "my-repo", 42, GitCommentRequest(expectedBody))
     }
 
     // ── postPullRequestInlineComments ─────────────────────────────────────────

@@ -282,8 +282,8 @@ POST /webhook/git/{application}/pull-request
         │                    GitLab: update (only when oldrev is present)
         │    IGNORED      ← everything else (close / edit / label / WIP toggle w/o commits)
         │
-        ├─ Validate: skip if IGNORED / draft / missing number/base/head
-        │           (throws InvalidPullRequestException, handled by GlobalExceptionHandler)
+        ├─ Validate: skip early with a warn log if IGNORED / draft / missing number/base/head
+        │           (facade logs and returns; the async CompletableFuture completes normally)
         │
         ├─ Fetch full PR diff via compare API (baseSha…headSha) — used for inline comment positioning
         │
@@ -869,7 +869,6 @@ com.walter.spring.ai.ops
 │   │   └── LenientMapper.kt                # ObjectMapper variant tolerating unknown fields
 │   └── exception/
 │       ├── ForbiddenException.kt           # 403
-│       ├── InvalidPullRequestException.kt  # PR/MR webhook validation failure — mapped by GlobalExceptionHandler (v1)
 │       └── UnauthorizedException.kt        # 401
 ├── connector/
 │   ├── GithubConnector.kt                  # Feign: GitHub Commits / Compare / Issue Comments / Reviews
@@ -975,8 +974,9 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
+| 2026-08-09 | Fixed **Amazon Bedrock provider initialization / configure flow** — `initialize()` now bypasses the API-key decrypt step when the persisted `LlmConfig` provider is BEDROCK (BEDROCK has no API key) and directly assigns the pre-built `bedrockChatModel` to `chatModel`; `configure(BEDROCK, "")` lazily builds `bedrockChatModel` on first use instead of requiring `initialize()` to have run first |
 | 2026-08-09 | Added **Pull Request / Merge Request inline review (v2)** for the `synchronize` action — when new commits are pushed to a PR/MR head, the facade fetches the delta diff (`beforeSha…headSha`) so the LLM reviews only the lines modified since the previous push, then filters and positions inline comments against the full PR diff (`baseSha…headSha`) via `DiffHunkParser` before posting through the GitHub Reviews API (single review with N comments) or GitLab Discussions API (per-comment + summary note). Falls back to a single summary comment when the inline flow returns nothing or fails |
-| 2026-08-06 | Added **Pull Request / Merge Request summary review (v1)** — dedicated `/webhook/git/{application}/pull-request` endpoint reviews `opened` / `reopened` / `ready_for_review` events (GitHub) and `open` / `reopen` events (GitLab), posting a single summary comment via the Issue Comment / MR Notes API. Draft PRs are skipped. `InvalidPullRequestException` is handled by `GlobalExceptionHandler` and returned as a structured 4xx response |
+| 2026-08-06 | Added **Pull Request / Merge Request summary review (v1)** — dedicated `/webhook/git/{application}/pull-request` endpoint reviews `opened` / `reopened` / `ready_for_review` events (GitHub) and `open` / `reopen` events (GitLab), posting a single summary comment via the Issue Comment / MR Notes API. Invalid webhook payloads (IGNORED action / draft PR / missing SHA) are logged and skipped early. Draft PRs are skipped |
 | 2026-05-24 | Added Amazon Bedrock as a supported LLM provider — uses `BedrockProxyChatModel` via `spring-ai-bedrock-converse`; AWS credentials are configured via `ai.bedrock.*` in `application.yml` or env vars `AI_BEDROCK_ACCESS_KEY` / `AI_BEDROCK_SECRET_KEY` (falls back to `DefaultCredentialsProvider` when blank); credentials are never stored in Redis; the API key input field is disabled in the UI when BEDROCK is selected |
 | 2026-05-16 | Added Slack Incoming Webhook notification for code reviews — when a code review completes, the result is converted from Markdown to Slack mrkdwn and posted to a per-application Slack channel. Toggle (`Send Slack Notification on Code Review`) and webhook path are configurable per application in the UI |
 | 2026-05-12 | Added EXAONE (LG AI Research) as a supported LLM provider — served via FriendliAI's serverless API (OpenAI-compatible); configurable via `ai.exaone.*` in application.yml or env vars `AI_EXAONE_API_KEY` / `AI_EXAONE_BASE_URL`. API key must be obtained from [friendli.ai](https://friendli.ai). Placeholder message in the LLM configuration UI guides users to FriendliAI when no key is saved |

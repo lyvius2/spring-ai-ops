@@ -274,8 +274,8 @@ POST /webhook/git/{application}/pull-request
         │                    GitLab: update (oldrev이 있는 경우만)
         │    IGNORED      ← 그 외 (close / edit / label / WIP 토글 등)
         │
-        ├─ 검증: IGNORED / draft / number·base·head 누락 시 스킵
-        │        (InvalidPullRequestException → GlobalExceptionHandler가 처리)
+        ├─ 검증: IGNORED / draft / number·base·head 누락 시 warn 로그 후 조기 return
+        │        (예외를 던지지 않고 비동기 CompletableFuture는 정상 종료)
         │
         ├─ compare API로 전체 PR diff 조회 (baseSha…headSha) — 인라인 코멘트 위치 필터링에 사용
         │
