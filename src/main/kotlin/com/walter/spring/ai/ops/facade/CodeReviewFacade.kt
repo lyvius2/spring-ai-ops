@@ -2,6 +2,7 @@ package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.code.PullRequestAction
 import com.walter.spring.ai.ops.config.annotation.Facade
+import com.walter.spring.ai.ops.config.exception.InvalidPullRequestException
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
@@ -91,9 +92,7 @@ class CodeReviewFacade(
 
     fun analyzePullRequest(request: GithubPullRequestRequest, application: String?) {
         recordPullRequestAuditLog(request)
-        if (isInvalidRequestAction(request)) {
-            return
-        }
+        validateRequestAction(request)
         runCatching {
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(AppUpdateRequest(targetApplication))
@@ -126,24 +125,19 @@ class CodeReviewFacade(
         )
     }
 
-    private fun isInvalidRequestAction(request: GithubPullRequestRequest): Boolean {
+    private fun validateRequestAction(request: GithubPullRequestRequest) {
         if (request.action == PullRequestAction.IGNORED) {
-            log.info("PR webhook skipped — action is not a review trigger (title='{}', number={})", request.title, request.number)
-            return true
+            throw InvalidPullRequestException("action is not a review trigger (title='${request.title}', number=${request.number})")
         }
         if (request.action == PullRequestAction.OPENED && request.draft) {
-            log.info("PR webhook skipped — draft PR (title='{}', number={})", request.title, request.number)
-            return true
+            throw InvalidPullRequestException("draft PR (title='${request.title}', number=${request.number})")
         }
         if (request.action == PullRequestAction.SYNCHRONIZE) {
-            log.info("PR webhook skipped — v2 inline review not implemented yet (title='{}', number={})", request.title, request.number)
-            return true
+            throw InvalidPullRequestException("v2 inline review not implemented yet (title='${request.title}', number=${request.number})")
         }
         if (request.number <= 0 || request.baseSha.isBlank() || request.headSha.isBlank()) {
-            log.warn("PR webhook skipped — missing number/base/head (number={}, baseSha={}, headSha={})", request.number, request.baseSha, request.headSha)
-            return true
+            throw InvalidPullRequestException("missing number/base/head (number=${request.number}, baseSha='${request.baseSha}', headSha='${request.headSha}')")
         }
-        return false
     }
 
     private fun formatPullRequestComment(reviewMarkdown: String): String = buildString {

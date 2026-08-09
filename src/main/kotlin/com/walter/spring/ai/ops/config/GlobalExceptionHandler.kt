@@ -1,9 +1,12 @@
 package com.walter.spring.ai.ops.config
 
 import com.walter.spring.ai.ops.config.exception.ForbiddenException
+import com.walter.spring.ai.ops.config.exception.InvalidPullRequestException
 import com.walter.spring.ai.ops.config.exception.UnauthorizedException
 import com.walter.spring.ai.ops.controller.dto.ErrorResponse
+import com.walter.spring.ai.ops.controller.dto.GithubPullRequestResponse
 import jakarta.servlet.http.HttpServletRequest
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -14,6 +17,17 @@ import org.springframework.web.servlet.resource.NoResourceFoundException
 
 @ControllerAdvice
 class GlobalExceptionHandler {
+    private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
+
+    @ExceptionHandler(InvalidPullRequestException::class)
+    fun handleInvalidPullRequest(ex: InvalidPullRequestException, request: HttpServletRequest): ResponseEntity<Any> {
+        log.error(ex.message)
+        return ResponseEntity
+            .status(HttpStatus.NO_CONTENT)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(GithubPullRequestResponse.invalid())
+    }
+
     @ExceptionHandler(UnauthorizedException::class)
     fun handleUnauthorized(ex: UnauthorizedException, request: HttpServletRequest): ResponseEntity<Any> {
         return ResponseEntity
