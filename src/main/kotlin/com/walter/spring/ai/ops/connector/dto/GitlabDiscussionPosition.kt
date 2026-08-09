@@ -18,9 +18,9 @@ data class GitlabDiscussionPosition(
 ) {
     companion object {
         @JvmStatic
-        fun of(inquiry: GitDifferInquiry, parsedDiff: ParsedFileDiff, hunkLine: HunkLine): GitlabDiscussionPosition {
+        fun of(inquiry: GitDifferInquiry, parsedDiff: ParsedFileDiff, hunkLine: HunkLine, startSha: String): GitlabDiscussionPosition {
             return GitlabDiscussionPosition(
-                baseSha = inquiry.base, startSha = inquiry.base, headSha = inquiry.head,
+                baseSha = inquiry.base, startSha = startSha, headSha = inquiry.head,
                 newPath = parsedDiff.newPath, newLine = hunkLine.newLine,
                 oldPath = parsedDiff.oldPath, oldLine = hunkLine.oldLine
             )

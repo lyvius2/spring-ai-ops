@@ -15,6 +15,8 @@ data class GithubPullRequestRequest(
     val number: Int = 0,
     @Schema(description = "PR title", example = "Add pull request review feature")
     val title: String = "",
+    @Schema(description = "Start branch SHA — the commit where the PR/MR was created from (GitLab start_sha / GitHub `base`)", example = "abc1234")
+    val startSha: String = "",
     @Schema(description = "Base branch SHA — the target of the PR/MR", example = "abc1234")
     val baseSha: String = "",
     @Schema(description = "Head branch SHA — the tip of the PR/MR source branch", example = "def5678")

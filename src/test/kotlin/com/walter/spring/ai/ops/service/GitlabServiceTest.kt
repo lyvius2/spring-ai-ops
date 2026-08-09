@@ -37,9 +37,12 @@ import org.springframework.data.redis.core.ValueOperations
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class GitlabServiceTest {
-    private var DEFAULT_DISCUSSION_REQ = GitlabDiscussionRequest(
-        "", GitlabDiscussionPosition(baseSha = "", startSha = "", headSha = "")
-    )
+
+    companion object {
+        private val DEFAULT_DISCUSSION_REQ = GitlabDiscussionRequest(
+            "", GitlabDiscussionPosition(baseSha = "", startSha = "", headSha = "")
+        )
+    }
 
     @Mock private lateinit var redisTemplate: StringRedisTemplate
     @Mock private lateinit var objectMapper: ObjectMapper

@@ -117,7 +117,7 @@ class GitlabService(
     private fun postSingleDiscussion(inquiry: GitDifferInquiry, encodedPath: String, number: Int, comment: LlmInlineComment, parsedDiffs: Map<String, ParsedFileDiff>): Boolean {
         val parsedDiff = parsedDiffs[comment.file] ?: return false
         val hunkLine = parsedDiff.lookup(comment.line, comment.side) ?: return false
-        val position = GitlabDiscussionPosition.of(inquiry, parsedDiff, hunkLine)
+        val position = GitlabDiscussionPosition.of(inquiry, parsedDiff, hunkLine, inquiry.base)
         val request = GitlabDiscussionRequest(body = comment.body, position = position)
         val response = runCatching { gitlabConnector.createMrDiscussion(encodedPath, number, request) }
             .getOrElse {
