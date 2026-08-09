@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GitlabApiCommit
 import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
+import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
 import com.walter.spring.ai.ops.util.CryptoProvider
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -153,6 +154,8 @@ class GitlabServiceTest {
         val service = buildService(configuredToken = "config-token")
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
         given(valueOperations.get(REDIS_KEY_GITLAB_TOKEN)).willReturn(null)
+        given(gitlabConnector.createMergeRequestNote(anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(GitCommentRequest::class.java) ?: GitCommentRequest("")))
+            .willReturn(GitlabMergeRequestNoteResponse(id = 999L))
         val inquiry = GitDifferInquiry("my-group", "my-repo", "base", "head")
 
         // when

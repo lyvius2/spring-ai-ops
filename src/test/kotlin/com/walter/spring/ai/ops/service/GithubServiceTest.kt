@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.connector.dto.GithubFile
+import com.walter.spring.ai.ops.connector.dto.GithubIssueCommentResponse
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.util.CryptoProvider
 import org.assertj.core.api.Assertions.assertThat
@@ -402,6 +403,8 @@ class GithubServiceTest {
         val service = buildService(configuredToken = "config-token")
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
         given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
+        given(githubConnector.createIssueComment(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(GitCommentRequest::class.java) ?: GitCommentRequest("")))
+            .willReturn(GithubIssueCommentResponse(id = 999L))
         val inquiry = GitDifferInquiry("acme", "my-repo", "base", "head")
 
         // when

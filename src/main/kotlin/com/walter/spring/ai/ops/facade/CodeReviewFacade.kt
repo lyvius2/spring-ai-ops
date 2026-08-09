@@ -91,7 +91,7 @@ class CodeReviewFacade(
 
     fun analyzePullRequest(request: GithubPullRequestRequest, application: String?) {
         recordPullRequestAuditLog(request)
-        if (isValidRequestAction(request)) {
+        if (isInvalidRequestAction(request)) {
             return
         }
         runCatching {
@@ -126,7 +126,7 @@ class CodeReviewFacade(
         )
     }
 
-    private fun isValidRequestAction(request: GithubPullRequestRequest): Boolean {
+    private fun isInvalidRequestAction(request: GithubPullRequestRequest): Boolean {
         if (request.action == PullRequestAction.IGNORED) {
             log.info("PR webhook skipped — action is not a review trigger (title='{}', number={})", request.title, request.number)
             return true

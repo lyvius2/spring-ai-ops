@@ -4,6 +4,7 @@ import com.walter.spring.ai.ops.config.GithubConnectorConfig
 import com.walter.spring.ai.ops.config.GithubConnectorConfig.Companion.PLACEHOLDER_URL
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
+import com.walter.spring.ai.ops.connector.dto.GithubIssueCommentResponse
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -19,5 +20,5 @@ interface GithubConnector {
     fun getCommit(@PathVariable owner: String, @PathVariable repo: String, @PathVariable sha: String): GithubCompareResult
 
     @PostMapping("/repos/{owner}/{repo}/issues/{number}/comments")
-    fun createIssueComment(@PathVariable owner: String, @PathVariable repo: String, @PathVariable number: Int, @RequestBody request: GitCommentRequest)
+    fun createIssueComment(@PathVariable owner: String, @PathVariable repo: String, @PathVariable number: Int, @RequestBody request: GitCommentRequest): GithubIssueCommentResponse
 }

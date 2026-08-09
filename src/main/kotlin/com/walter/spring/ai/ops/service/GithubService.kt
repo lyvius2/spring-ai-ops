@@ -69,7 +69,7 @@ class GithubService(
             return
         }
         runCatching { githubConnector.createIssueComment(inquiry.owner, inquiry.repo, number, GitCommentRequest(body)) }
-            .onSuccess { log.info("Posted GitHub PR comment: owner={}, repo={}, number={}", inquiry.owner, inquiry.repo, number) }
+            .onSuccess { response -> log.info("Posted GitHub PR comment: owner={}, repo={}, number={}, commentId={}", inquiry.owner, inquiry.repo, number, response.id) }
             .onFailure { log.error("Failed to post GitHub PR comment: owner={}, repo={}, number={}, error={}", inquiry.owner, inquiry.repo, number, it.message, it) }
     }
 
