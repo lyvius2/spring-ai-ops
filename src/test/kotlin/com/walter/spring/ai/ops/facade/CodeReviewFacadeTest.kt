@@ -12,6 +12,8 @@ import com.walter.spring.ai.ops.controller.dto.GithubPushOwner
 import com.walter.spring.ai.ops.controller.dto.GithubPushRepository
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
 import com.walter.spring.ai.ops.code.DiffSide
+import com.walter.spring.ai.ops.connector.dto.GitCompareResult
+import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
@@ -317,6 +319,7 @@ class CodeReviewFacadeTest {
         number: Int = 42,
         baseSha: String = "base-sha",
         headSha: String = "head-sha",
+        beforeSha: String = "",
         source: GitRemoteProvider = GitRemoteProvider.GITHUB,
     ) = GithubPullRequestRequest(
         action = action,
@@ -324,6 +327,7 @@ class CodeReviewFacadeTest {
         title = "Add PR review feature",
         baseSha = baseSha,
         headSha = headSha,
+        beforeSha = beforeSha,
         draft = draft,
         repository = GithubPushRepository(
             name = "my-repo",
@@ -547,6 +551,38 @@ class CodeReviewFacadeTest {
         // then
         verify(githubService).postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())
         verify(githubService).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.eq(42), org.mockito.ArgumentMatchers.contains("Overall LGTM."))
+    }
+
+    @Test
+    @DisplayName("SYNCHRONIZE + beforeSha 존재 시 델타 diff로 LLM 프롬프트를 구성 (executeInquiryDiffer 두 번 호출)")
+    fun analyzePullRequest_usesDeltaForLlm_whenSynchronizeHasBeforeSha() {
+        // given — full PR compare 후 delta compare 순으로 두 번 호출됨
+        val request = createPullRequestRequest(action = PullRequestAction.SYNCHRONIZE, beforeSha = "prev-head")
+        val fullCompare = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@ -0,0 +1,3 @@\n+a\n+b\n+c")))
+        val deltaCompare = GithubCompareResult(files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@ -2,1 +2,1 @@\n-b\n+B")))
+        val review = LlmInlineReviewResult(
+            summary = "Delta review",
+            comments = listOf(LlmInlineComment(file = "src/Main.kt", line = 2, side = DiffSide.RIGHT, body = "changed")),
+        )
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.executeInquiryDiffer(anyObj())).thenReturn(fullCompare, deltaCompare)
+        `when`(aiModelService.executeAnalyzeCodeDifferInline(anyObj())).thenReturn("raw")
+        `when`(inlineReviewParser.parse(anyObj())).thenReturn(review)
+        `when`(githubService.postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.anyInt(), anyObj(), anyObj())).thenReturn(true)
+
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then — executeInquiryDiffer는 full + delta로 두 번 호출됨
+        val inquiryCaptor = org.mockito.ArgumentCaptor.forClass(GitDifferInquiry::class.java)
+        verify(githubService, Mockito.times(2)).executeInquiryDiffer(inquiryCaptor.capture() ?: GitDifferInquiry("", "", "", ""))
+        val bases = inquiryCaptor.allValues.map { it.base }
+        assertThat(bases).containsExactly("base-sha", "prev-head")
+        // position 필터는 full PR compare(fullCompare) 사용
+        val compareCaptor = org.mockito.ArgumentCaptor.forClass(GitCompareResult::class.java)
+        verify(githubService).postPullRequestInlineComments(anyObj(), org.mockito.ArgumentMatchers.eq(42), anyObj(), compareCaptor.capture() ?: fullCompare)
+        assertThat(compareCaptor.value).isSameAs(fullCompare)
     }
 
     @Test

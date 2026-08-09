@@ -129,7 +129,8 @@ class CodeReviewFacade(
     }
 
     private fun postInlineReview(gitService: GitRemoteService, inquiry: GitDifferInquiry, compareResult: GitCompareResult, request: GithubPullRequestRequest) {
-        val raw = aiModelService.executeAnalyzeCodeDifferInline(compareResult.createCodeReviewPrompt())
+        val deltaCompareResult = fetchDeltaCompare(gitService, inquiry, request, compareResult)
+        val raw = aiModelService.executeAnalyzeCodeDifferInline(deltaCompareResult.createCodeReviewPrompt())
         if (raw.isBlank()) {
             log.warn("PR inline review result is blank — skipping (number={})", request.number)
             return
@@ -145,6 +146,20 @@ class CodeReviewFacade(
             log.warn("PR inline review failed — falling back to summary comment (number={})", request.number)
             postSummaryFallback(gitService, inquiry, request.number, review.summary)
         }
+    }
+
+    private fun fetchDeltaCompare(gitService: GitRemoteService, inquiry: GitDifferInquiry, request: GithubPullRequestRequest, fullCompareResult: GitCompareResult): GitCompareResult {
+        if (request.beforeSha.isBlank()) {
+            log.info("PR inline review — beforeSha missing, reviewing full PR diff (number={})", request.number)
+            return fullCompareResult
+        }
+        val deltaInquiry = inquiry.copy(base = request.beforeSha)
+        val delta = gitService.executeInquiryDiffer(deltaInquiry)
+        if (delta.hasError()) {
+            log.warn("PR delta diff fetch failed — falling back to full PR diff (number={}, error={})", request.number, delta.errorMessage)
+            return fullCompareResult
+        }
+        return delta
     }
 
     private fun postSummaryFallback(gitService: GitRemoteService, inquiry: GitDifferInquiry, number: Int, summary: String) {

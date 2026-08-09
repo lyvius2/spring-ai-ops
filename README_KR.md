@@ -277,7 +277,7 @@ POST /webhook/git/{application}/pull-request
         ├─ 검증: IGNORED / draft / number·base·head 누락 시 스킵
         │        (InvalidPullRequestException → GlobalExceptionHandler가 처리)
         │
-        ├─ compare API로 전체 PR diff 조회 (baseSha…headSha)
+        ├─ compare API로 전체 PR diff 조회 (baseSha…headSha) — 인라인 코멘트 위치 필터링에 사용
         │
         └─ action별 분기
              │
@@ -288,14 +288,19 @@ POST /webhook/git/{application}/pull-request
              │          GitLab → POST /projects/{path}/merge_requests/{iid}/notes
              │
              └─ SYNCHRONIZE (PR head에 신규 커밋 push)
-                   ├─ LLM 인라인 리뷰 (executeAnalyzeCodeDifferInline)
+                   ├─ compare API로 델타 diff 조회 (beforeSha…headSha)
+                   │    — 이번 push에서 수정된 라인만 포함
+                   │    폴백: beforeSha가 없거나 델타 compare 실패 시 전체 PR diff 사용
+                   │
+                   ├─ 델타로 LLM 인라인 리뷰 (executeAnalyzeCodeDifferInline)
                    │    프롬프트: 요약 markdown + {file, line, side, body} JSON 배열
                    │    델리미터: ---INLINE_COMMENTS_JSON_START/END---
                    │
                    ├─ LlmInlineReviewResult(summary, comments)로 파싱
                    │
-                   ├─ diff hunk와 대조하여 코멘트 필터링
-                   │    (file, line, side)가 실제 hunk 위치에 매핑되지 않으면 제거
+                   ├─ 전체 PR diff hunk와 대조하여 코멘트 필터링 (baseSha…headSha)
+                   │    (file, line, side)가 PR 실제 hunk 위치에 매핑되지 않으면 제거
+                   │    (Reviews/Discussions API는 PR 단위 좌표계 필요)
                    │
                    ├─ 필터링 후 코멘트가 비었으면
                    │      → 요약만 게시 (v1 폴백 경로)
@@ -316,7 +321,7 @@ POST /webhook/git/{application}/pull-request
 
 > **저장하지 않음**: push 웹훅 코드 리뷰와 달리 PR/MR 리뷰는 `CodeReviewRecord`를 Redis에 저장하거나 `/topic/commit`으로 push하지 않습니다. 결과는 PR/MR 자체에만 게시됩니다.
 
-> **Diff scope**: v2는 LLM 분석과 코멘트 위치 산정 모두 전체 PR diff(`baseSha…headSha`)를 사용합니다. Delta-only 분석(`beforeSha…headSha`)은 의도적으로 사용하지 않습니다 — delta 기반 라인 번호를 전체 PR API 좌표계로 다시 매핑하는 복잡도가 이 규모에서는 명확한 이점이 없기 때문입니다.
+> **Diff scope**: v2는 SYNCHRONIZE 이벤트마다 **두 번의 compare 호출**을 사용합니다 — 델타(`beforeSha…headSha`)는 LLM 프롬프트에만 사용되어 "이번 push에서 수정된 라인만" 리뷰 대상이 되고, 전체 PR diff(`baseSha…headSha`)는 인라인 코멘트 위치 필터링에 사용됩니다 (GitHub Reviews API와 GitLab Discussions API가 PR 단위 좌표계로 동작하기 때문). 델타에는 있지만 현재 전체 PR diff에는 없는 라인(예: 임시 추가 후 삭제된 라인)에 대한 코멘트는 필터에서 제거됩니다. `beforeSha`가 없거나(잘못된 웹훅 페이로드) 델타 compare가 실패하면 LLM 분석도 전체 PR diff로 폴백합니다 — v1과 동일한 동작.
 
 ---
 

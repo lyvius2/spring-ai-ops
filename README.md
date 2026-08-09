@@ -285,7 +285,7 @@ POST /webhook/git/{application}/pull-request
         ├─ Validate: skip if IGNORED / draft / missing number/base/head
         │           (throws InvalidPullRequestException, handled by GlobalExceptionHandler)
         │
-        ├─ Fetch full PR diff via compare API (baseSha…headSha)
+        ├─ Fetch full PR diff via compare API (baseSha…headSha) — used for inline comment positioning
         │
         └─ Route by action
              │
@@ -296,14 +296,19 @@ POST /webhook/git/{application}/pull-request
              │          GitLab → POST /projects/{path}/merge_requests/{iid}/notes
              │
              └─ SYNCHRONIZE (new commits pushed to PR head)
-                   ├─ LLM inline review (executeAnalyzeCodeDifferInline)
+                   ├─ Fetch DELTA diff via compare API (beforeSha…headSha)
+                   │    — only the lines modified since the previous push
+                   │    fallback: if beforeSha is missing or compare fails, use full PR diff
+                   │
+                   ├─ LLM inline review on the delta (executeAnalyzeCodeDifferInline)
                    │    Prompt asks for markdown summary + JSON array of {file, line, side, body}
                    │    delimited by ---INLINE_COMMENTS_JSON_START/END---
                    │
                    ├─ Parse into LlmInlineReviewResult(summary, comments)
                    │
-                   ├─ Filter comments through parsed diff hunks
-                   │    each (file, line, side) must map to a real hunk position — the rest are dropped
+                   ├─ Filter comments through the FULL PR diff hunks (baseSha…headSha)
+                   │    each (file, line, side) must map to a real hunk position in the PR — the rest are dropped
+                   │    (positions must be in PR-level coordinates for the Reviews/Discussions APIs)
                    │
                    ├─ If filtered list is empty
                    │      → post summary only (v1 fallback path)
@@ -323,7 +328,7 @@ POST /webhook/git/{application}/pull-request
 
 > **PR review does not persist**: Unlike the push-webhook code review, the PR/MR review flow does not save `CodeReviewRecord` to Redis or push updates via `/topic/commit`. Results are posted only to the PR/MR itself.
 
-> **Diff scope**: v2 uses the full PR diff (`baseSha…headSha`) for both LLM analysis and comment positioning. Delta-only analysis (`beforeSha…headSha`) is intentionally not used — mapping delta-derived line numbers back to full-PR API coordinates adds complexity without a clear benefit at this scale.
+> **Diff scope**: v2 uses **two compare calls per SYNCHRONIZE push** — the delta (`beforeSha…headSha`) is sent to the LLM so it reviews only the lines modified since the previous push, while the full PR diff (`baseSha…headSha`) is used to filter and position inline comments (GitHub Reviews API and GitLab Discussions API operate on the PR-level coordinate system). Comments the LLM produces for lines outside the current full PR diff are dropped by the filter. When `beforeSha` is missing (e.g., malformed webhook) or the delta compare returns an error, the facade falls back to the full PR diff for LLM analysis too — matching v1 behavior.
 
 ---
 
@@ -970,7 +975,7 @@ com.walter.spring.ai.ops
 
 | Date       | Description |
 |------------|---|
-| 2026-08-09 | Added **Pull Request / Merge Request inline review (v2)** for the `synchronize` action — when new commits are pushed to a PR/MR head, the LLM produces line-anchored comments delimited as JSON, `DiffHunkParser` maps every comment to a real diff position, `InlineReviewParser` filters out comments outside the diff, and results are posted via GitHub Reviews API (single review with N comments) or GitLab Discussions API (per-comment + summary note). Falls back to a single summary comment when the inline flow returns nothing or fails |
+| 2026-08-09 | Added **Pull Request / Merge Request inline review (v2)** for the `synchronize` action — when new commits are pushed to a PR/MR head, the facade fetches the delta diff (`beforeSha…headSha`) so the LLM reviews only the lines modified since the previous push, then filters and positions inline comments against the full PR diff (`baseSha…headSha`) via `DiffHunkParser` before posting through the GitHub Reviews API (single review with N comments) or GitLab Discussions API (per-comment + summary note). Falls back to a single summary comment when the inline flow returns nothing or fails |
 | 2026-08-06 | Added **Pull Request / Merge Request summary review (v1)** — dedicated `/webhook/git/{application}/pull-request` endpoint reviews `opened` / `reopened` / `ready_for_review` events (GitHub) and `open` / `reopen` events (GitLab), posting a single summary comment via the Issue Comment / MR Notes API. Draft PRs are skipped. `InvalidPullRequestException` is handled by `GlobalExceptionHandler` and returned as a structured 4xx response |
 | 2026-05-24 | Added Amazon Bedrock as a supported LLM provider — uses `BedrockProxyChatModel` via `spring-ai-bedrock-converse`; AWS credentials are configured via `ai.bedrock.*` in `application.yml` or env vars `AI_BEDROCK_ACCESS_KEY` / `AI_BEDROCK_SECRET_KEY` (falls back to `DefaultCredentialsProvider` when blank); credentials are never stored in Redis; the API key input field is disabled in the UI when BEDROCK is selected |
 | 2026-05-16 | Added Slack Incoming Webhook notification for code reviews — when a code review completes, the result is converted from Markdown to Slack mrkdwn and posted to a per-application Slack channel. Toggle (`Send Slack Notification on Code Review`) and webhook path are configurable per application in the UI |
