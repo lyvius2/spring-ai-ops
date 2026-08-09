@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.controller
 
 import com.walter.spring.ai.ops.code.GitRemoteProvider
+import com.walter.spring.ai.ops.config.exception.InvalidPullRequestException
 import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
 import com.walter.spring.ai.ops.controller.dto.GithubPullRequestResponse
 import com.walter.spring.ai.ops.controller.dto.GithubPushRequest
@@ -9,6 +10,8 @@ import com.walter.spring.ai.ops.facade.CodeReviewFacade
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -26,6 +29,8 @@ class WebhookGitRemote(
     private val codeReviewFacade: CodeReviewFacade,
     @Qualifier("applicationTaskExecutor") private val executor: Executor,
 ) {
+    private val log: Logger = LoggerFactory.getLogger(WebhookGitRemote::class.java)
+
     @Operation(
         summary = "Receive Git Remote push webhook (GitHub / GitLab)",
         description = """
@@ -100,11 +105,19 @@ class WebhookGitRemote(
         @PathVariable application: String
     ): GithubPullRequestResponse {
         CompletableFuture.runAsync({
-            val request = when {
-                githubEvent != null -> GithubPullRequestRequest.fromGithubBody(body).copy(source = GitRemoteProvider.GITHUB)
-                gitlabEvent != null -> GithubPullRequestRequest.fromGitlabBody(body).copy(source = GitRemoteProvider.GITLAB)
-                else -> throw IllegalArgumentException("Unsupported event type: missing X-GitHub-Event or X-Gitlab-Event header") }
-            codeReviewFacade.analyzePullRequest(request, application) }, executor)
+            try {
+                val request = when {
+                    githubEvent != null -> GithubPullRequestRequest.fromGithubBody(body).copy(source = GitRemoteProvider.GITHUB)
+                    gitlabEvent != null -> GithubPullRequestRequest.fromGitlabBody(body).copy(source = GitRemoteProvider.GITLAB)
+                    else -> throw IllegalArgumentException("Unsupported event type: missing X-GitHub-Event or X-Gitlab-Event header")
+                }
+                codeReviewFacade.analyzePullRequest(request, application)
+            } catch (e: InvalidPullRequestException) {
+                log.info("PR webhook skipped: {}", e.message)
+            } catch (e: Exception) {
+                log.error("PR webhook processing failed", e)
+            }
+        }, executor)
         return GithubPullRequestResponse.accepted()
     }
 }
