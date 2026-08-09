@@ -65,6 +65,15 @@ abstract class GitRemoteService(
             .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 
+    fun formatPullRequestComment(reviewMarkdown: String): String = buildString {
+        appendLine("## AI Code Review")
+        appendLine()
+        appendLine(reviewMarkdown.trim())
+        appendLine()
+        appendLine("---")
+        appendLine("_Automated review by Spring AI Ops._")
+    }
+
     abstract fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult
 
     abstract fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String)

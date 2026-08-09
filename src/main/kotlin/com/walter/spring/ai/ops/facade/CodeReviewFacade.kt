@@ -2,7 +2,6 @@ package com.walter.spring.ai.ops.facade
 
 import com.walter.spring.ai.ops.code.PullRequestAction
 import com.walter.spring.ai.ops.config.annotation.Facade
-import com.walter.spring.ai.ops.config.exception.InvalidPullRequestException
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
@@ -95,7 +94,9 @@ class CodeReviewFacade(
 
     fun analyzePullRequest(request: GithubPullRequestRequest, application: String?) {
         recordPullRequestAuditLog(request)
-        validateRequestAction(request)
+        if (isInvalidRequestAction(request)) {
+            return
+        }
         runCatching {
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(AppUpdateRequest(targetApplication))
@@ -125,7 +126,7 @@ class CodeReviewFacade(
             log.warn("PR review result is blank — skipping comment (number={})", request.number)
             return
         }
-        gitService.postPullRequestComment(inquiry, request.number, formatPullRequestComment(reviewResult))
+        gitService.postPullRequestComment(inquiry, request.number, reviewResult)
     }
 
     private fun postInlineReview(gitService: GitRemoteService, inquiry: GitDifferInquiry, compareResult: GitCompareResult, request: GithubPullRequestRequest) {
@@ -167,7 +168,7 @@ class CodeReviewFacade(
             log.warn("PR summary fallback — blank summary, skipping (number={})", number)
             return
         }
-        gitService.postPullRequestComment(inquiry, number, formatPullRequestComment(summary))
+        gitService.postPullRequestComment(inquiry, number, summary)
     }
 
     private fun recordPullRequestAuditLog(request: GithubPullRequestRequest) {
@@ -177,25 +178,20 @@ class CodeReviewFacade(
         )
     }
 
-    private fun validateRequestAction(request: GithubPullRequestRequest) {
+    private fun isInvalidRequestAction(request: GithubPullRequestRequest): Boolean {
         if (request.action == PullRequestAction.IGNORED) {
-            throw InvalidPullRequestException("action is not a review trigger (title='${request.title}', number=${request.number})")
+            log.warn("PR webhook skipped — action is not a review trigger (title='{}', number={})", request.title, request.number)
+            return true
         }
         if (request.action == PullRequestAction.OPENED && request.draft) {
-            throw InvalidPullRequestException("draft PR (title='${request.title}', number=${request.number})")
+            log.warn("PR webhook skipped — draft PR (title='{}', number={})", request.title, request.number)
+            return true
         }
         if (request.number <= 0 || request.baseSha.isBlank() || request.headSha.isBlank()) {
-            throw InvalidPullRequestException("missing number/base/head (number=${request.number})")
+            log.warn("PR webhook skipped — missing number/base/head (number={})", request.number)
+            return true
         }
-    }
-
-    private fun formatPullRequestComment(reviewMarkdown: String): String = buildString {
-        appendLine("## AI Code Review")
-        appendLine()
-        appendLine(reviewMarkdown.trim())
-        appendLine()
-        appendLine("---")
-        appendLine("_Automated review by Spring AIOps._")
+        return false
     }
 }
 

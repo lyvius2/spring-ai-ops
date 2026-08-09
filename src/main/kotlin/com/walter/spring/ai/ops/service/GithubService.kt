@@ -71,7 +71,8 @@ class GithubService(
             log.warn("Skip GitHub PR comment — empty body (owner={}, repo={}, number={})", inquiry.owner, inquiry.repo, number)
             return
         }
-        runCatching { githubConnector.createIssueComment(inquiry.owner, inquiry.repo, number, GitCommentRequest(body)) }
+        val commentRequest = GitCommentRequest(formatPullRequestComment(body))
+        runCatching { githubConnector.createIssueComment(inquiry.owner, inquiry.repo, number, commentRequest) }
             .onSuccess { response -> log.info("Posted GitHub PR comment: owner={}, repo={}, number={}, commentId={}", inquiry.owner, inquiry.repo, number, response.id) }
             .onFailure { log.error("Failed to post GitHub PR comment: owner={}, repo={}, number={}, error={}", inquiry.owner, inquiry.repo, number, it.message, it) }
     }

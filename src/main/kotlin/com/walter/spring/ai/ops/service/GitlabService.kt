@@ -77,7 +77,8 @@ class GitlabService(
             return
         }
         val encodedPath = inquiry.projectPath.replace("/", "%2F")
-        runCatching { gitlabConnector.createMergeRequestNote(encodedPath, number, GitCommentRequest(body)) }
+        val commentRequest = GitCommentRequest(formatPullRequestComment(body))
+        runCatching { gitlabConnector.createMergeRequestNote(encodedPath, number, commentRequest) }
             .onSuccess { response -> log.info("Posted GitLab MR note: projectPath={}, iid={}, noteId={}", inquiry.projectPath, number, response.id) }
             .onFailure { log.error("Failed to post GitLab MR note: projectPath={}, iid={}, error={}", inquiry.projectPath, number, it.message, it) }
     }
