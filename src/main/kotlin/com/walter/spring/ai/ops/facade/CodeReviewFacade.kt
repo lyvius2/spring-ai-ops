@@ -136,7 +136,7 @@ class CodeReviewFacade(
             throw InvalidPullRequestException("v2 inline review not implemented yet (title='${request.title}', number=${request.number})")
         }
         if (request.number <= 0 || request.baseSha.isBlank() || request.headSha.isBlank()) {
-            throw InvalidPullRequestException("missing number/base/head (number=${request.number}, baseSha='${request.baseSha}', headSha='${request.headSha}')")
+            throw InvalidPullRequestException("missing number/base/head (number=${request.number})")
         }
     }
 

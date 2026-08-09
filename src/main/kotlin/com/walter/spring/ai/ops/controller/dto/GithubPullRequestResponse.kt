@@ -9,6 +9,6 @@ data class GithubPullRequestResponse(
 ) {
     companion object {
         fun accepted(): GithubPullRequestResponse = GithubPullRequestResponse("ACCEPTED")
-        fun invalid(): GithubPullRequestResponse = GithubPullRequestResponse("INVALID")
+        fun skipped(): GithubPullRequestResponse = GithubPullRequestResponse("SKIPPED")
     }
 }

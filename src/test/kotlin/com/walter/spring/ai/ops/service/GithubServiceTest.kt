@@ -403,7 +403,7 @@ class GithubServiceTest {
         val service = buildService(configuredToken = "config-token")
         given(redisTemplate.opsForValue()).willReturn(valueOperations)
         given(valueOperations.get(REDIS_KEY_GITHUB_TOKEN)).willReturn(null)
-        given(githubConnector.createIssueComment(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(GitCommentRequest::class.java) ?: GitCommentRequest("")))
+        given(githubConnector.createIssueComment(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(GitCommentRequest::class.java)))
             .willReturn(GithubIssueCommentResponse(id = 999L))
         val inquiry = GitDifferInquiry("acme", "my-repo", "base", "head")
 

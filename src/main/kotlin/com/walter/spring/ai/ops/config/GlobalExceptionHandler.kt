@@ -21,11 +21,11 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidPullRequestException::class)
     fun handleInvalidPullRequest(ex: InvalidPullRequestException, request: HttpServletRequest): ResponseEntity<Any> {
-        log.error(ex.message)
+        log.warn(ex.message)
         return ResponseEntity
-            .status(HttpStatus.NO_CONTENT)
+            .status(HttpStatus.OK)
             .contentType(MediaType.APPLICATION_JSON)
-            .body(GithubPullRequestResponse.invalid())
+            .body(GithubPullRequestResponse.skipped())
     }
 
     @ExceptionHandler(UnauthorizedException::class)
