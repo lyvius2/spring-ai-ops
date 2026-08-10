@@ -94,7 +94,7 @@ class CodeReviewFacade(
 
     fun analyzePullRequest(request: GithubPullRequestRequest, application: String?) {
         recordPullRequestAuditLog(request)
-        if (isInvalidRequestAction(request)) {
+        if (isSkippableAction(request)) {
             return
         }
         runCatching {
@@ -107,15 +107,20 @@ class CodeReviewFacade(
                 return@runCatching
             }
 
-            val inquiry = GitDifferInquiry.of(request)
-            val compareResult = gitService.executeInquiryDiffer(inquiry)
-            if (compareResult.hasError()) {
-                log.warn("PR diff fetch failed — skipping comment (number={}, error={})", request.number, compareResult.errorMessage)
+            val resolvedRequest = gitService.resolveMissingPullRequestRefs(request)
+            if (hasInvalidRefs(resolvedRequest)) {
                 return@runCatching
             }
-            when (request.action) {
-                PullRequestAction.SYNCHRONIZE -> postInlineReview(gitService, inquiry, compareResult, request)
-                else -> postSummaryReview(gitService, inquiry, compareResult, request)
+
+            val inquiry = GitDifferInquiry.of(resolvedRequest)
+            val compareResult = gitService.executeInquiryDiffer(inquiry)
+            if (compareResult.hasError()) {
+                log.warn("PR diff fetch failed — skipping comment (number={}, error={})", resolvedRequest.number, compareResult.errorMessage)
+                return@runCatching
+            }
+            when (resolvedRequest.action) {
+                PullRequestAction.SYNCHRONIZE -> postInlineReview(gitService, inquiry, compareResult, resolvedRequest)
+                else -> postSummaryReview(gitService, inquiry, compareResult, resolvedRequest)
             }
         }.onFailure { log.error("Failed to analyze pull request: {}", it.message, it) }
     }
@@ -178,7 +183,7 @@ class CodeReviewFacade(
         )
     }
 
-    private fun isInvalidRequestAction(request: GithubPullRequestRequest): Boolean {
+    private fun isSkippableAction(request: GithubPullRequestRequest): Boolean {
         if (request.action == PullRequestAction.IGNORED) {
             log.warn("PR webhook skipped — action is not a review trigger (title='{}', number={})", request.title, request.number)
             return true
@@ -187,8 +192,16 @@ class CodeReviewFacade(
             log.warn("PR webhook skipped — draft PR (title='{}', number={})", request.title, request.number)
             return true
         }
-        if (request.number <= 0 || request.baseSha.isBlank() || request.headSha.isBlank()) {
-            log.warn("PR webhook skipped — missing number/base/head (number={})", request.number)
+        if (request.number <= 0) {
+            log.warn("PR webhook skipped — missing MR number (number={})", request.number)
+            return true
+        }
+        return false
+    }
+
+    private fun hasInvalidRefs(request: GithubPullRequestRequest): Boolean {
+        if (request.baseSha.isBlank() || request.headSha.isBlank()) {
+            log.warn("PR webhook skipped — missing base/head SHA after fallback (number={}, base={}, head={})", request.number, request.baseSha, request.headSha)
             return true
         }
         return false

@@ -12,7 +12,14 @@ import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionPosition
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
+import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDetail
+import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDiffRefs
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
+import com.walter.spring.ai.ops.code.GitRemoteProvider
+import com.walter.spring.ai.ops.code.PullRequestAction
+import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
+import com.walter.spring.ai.ops.controller.dto.GithubPushOwner
+import com.walter.spring.ai.ops.controller.dto.GithubPushRepository
 import com.walter.spring.ai.ops.service.dto.LlmInlineComment
 import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.CryptoProvider
@@ -284,6 +291,115 @@ class GitlabServiceTest {
         // then
         assertThat(result).isFalse()
     }
+
+    // ── resolveMissingPullRequestRefs ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("baseSha와 headSha가 모두 채워져 있으면 API를 호출하지 않고 그대로 반환")
+    fun givenBothShaPresent_whenResolveRefs_thenReturnsSameRequest() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        val request = pullRequestRequest(baseSha = "base-sha", headSha = "head-sha")
+
+        // when
+        val result = service.resolveMissingPullRequestRefs(request)
+
+        // then
+        assertThat(result).isSameAs(request)
+        verifyNoInteractions(gitlabConnector)
+    }
+
+    @Test
+    @DisplayName("MR number가 0 이하이면 API를 호출하지 않음")
+    fun givenNonPositiveNumber_whenResolveRefs_thenReturnsSameRequest() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        val request = pullRequestRequest(number = 0, baseSha = "", headSha = "head-sha")
+
+        // when
+        val result = service.resolveMissingPullRequestRefs(request)
+
+        // then
+        assertThat(result).isSameAs(request)
+        verifyNoInteractions(gitlabConnector)
+    }
+
+    @Test
+    @DisplayName("baseSha가 비어있으면 GitLab MR API로 diff_refs를 조회해 채워넣음")
+    fun givenBlankBaseSha_whenResolveRefs_thenFetchesFromGitlabApi() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        val request = pullRequestRequest(number = 2, baseSha = "", headSha = "45143ac4")
+        given(gitlabConnector.getMergeRequest("group%2Fnext", 2)).willReturn(
+            GitlabMergeRequestDetail(
+                iid = 2,
+                diffRefs = GitlabMergeRequestDiffRefs(baseSha = "resolved-base", headSha = "45143ac4", startSha = "resolved-start"),
+            )
+        )
+
+        // when
+        val result = service.resolveMissingPullRequestRefs(request)
+
+        // then
+        assertThat(result.baseSha).isEqualTo("resolved-base")
+        assertThat(result.headSha).isEqualTo("45143ac4")
+        assertThat(result.startSha).isEqualTo("resolved-start")
+        verify(gitlabConnector).getMergeRequest("group%2Fnext", 2)
+    }
+
+    @Test
+    @DisplayName("API가 errorMessage를 반환하면 원본 요청을 그대로 반환")
+    fun givenApiError_whenResolveRefs_thenReturnsOriginalRequest() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        val request = pullRequestRequest(number = 2, baseSha = "", headSha = "45143ac4")
+        given(gitlabConnector.getMergeRequest("group%2Fnext", 2)).willReturn(
+            GitlabMergeRequestDetail(iid = 2, errorMessage = "401 unauthorized")
+        )
+
+        // when
+        val result = service.resolveMissingPullRequestRefs(request)
+
+        // then
+        assertThat(result.baseSha).isEmpty()
+        assertThat(result.headSha).isEqualTo("45143ac4")
+    }
+
+    @Test
+    @DisplayName("API 호출이 예외를 던지면 원본 요청을 그대로 반환")
+    fun givenApiThrows_whenResolveRefs_thenReturnsOriginalRequest() {
+        // given
+        val service = buildService(configuredToken = "config-token")
+        val request = pullRequestRequest(number = 2, baseSha = "", headSha = "45143ac4")
+        given(gitlabConnector.getMergeRequest("group%2Fnext", 2)).willThrow(RuntimeException("boom"))
+
+        // when
+        val result = service.resolveMissingPullRequestRefs(request)
+
+        // then
+        assertThat(result.baseSha).isEmpty()
+        assertThat(result.headSha).isEqualTo("45143ac4")
+    }
+
+    private fun pullRequestRequest(
+        number: Int = 2,
+        baseSha: String = "",
+        headSha: String = "",
+        owner: String = "group",
+        repo: String = "next",
+    ) = GithubPullRequestRequest(
+        action = PullRequestAction.OPENED,
+        number = number,
+        title = "test MR",
+        baseSha = baseSha,
+        headSha = headSha,
+        repository = GithubPushRepository(
+            name = repo,
+            owner = GithubPushOwner(login = owner),
+            htmlUrl = "https://gitlab.com/$owner/$repo",
+        ),
+        source = GitRemoteProvider.GITLAB,
+    )
 
     private fun buildService(configuredToken: String = "") =
         GitlabService(redisTemplate, objectMapper, cryptoProvider, gitlabConnector, 120L, 5L, configuredToken, "https://gitlab.com/api/v4")

@@ -58,6 +58,9 @@ class CodeReviewFacadeTest {
         codeReviewFacade = CodeReviewFacade(
             applicationService, gitRemoteResolver, aiModelService, messageService, eventPublisher, inlineReviewParser,
         )
+        Mockito.lenient()
+            .`when`(githubService.resolveMissingPullRequestRefs(anyObj()))
+            .thenAnswer { it.arguments[0] }
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -377,16 +380,45 @@ class CodeReviewFacadeTest {
     }
 
     @Test
-    @DisplayName("baseSha 또는 headSha가 비어있으면 다운스트림 호출 없이 조기 return")
+    @DisplayName("baseSha 또는 headSha가 fallback 이후에도 비어있으면 diff 조회 없이 조기 return")
     fun analyzePullRequest_skips_whenBaseOrHeadIsBlank() {
         // given
         val request = createPullRequestRequest(baseSha = "")
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.resolveMissingPullRequestRefs(anyObj())).thenReturn(request)
 
         // when
         codeReviewFacade.analyzePullRequest(request, "my-app")
 
         // then
-        verifyNoInteractions(gitRemoteResolver, aiModelService)
+        verify(githubService, never()).executeInquiryDiffer(anyObj())
+        verify(aiModelService, never()).executeAnalyzeCodeDiffer(anyObj())
+    }
+
+    @Test
+    @DisplayName("baseSha가 비어있어도 resolveMissingPullRequestRefs가 채워주면 리뷰가 진행됨")
+    fun analyzePullRequest_proceeds_whenResolverFillsBaseSha() {
+        // given
+        val request = createPullRequestRequest(source = GitRemoteProvider.GITLAB, baseSha = "")
+        val resolved = request.copy(baseSha = "resolved-base")
+        val compareResult = GithubCompareResult(
+            files = listOf(GithubFile(filename = "src/Main.kt", status = "modified", patch = "@@")),
+        )
+        `when`(gitRemoteResolver.detectProviderService(anyObj())).thenReturn(githubService)
+        `when`(githubService.isTokenConfigured()).thenReturn(true)
+        `when`(githubService.resolveMissingPullRequestRefs(anyObj())).thenReturn(resolved)
+        `when`(githubService.executeInquiryDiffer(anyObj())).thenReturn(compareResult)
+        `when`(aiModelService.executeAnalyzeCodeDiffer(anyObj())).thenReturn("## Review\nOK.")
+
+        // when
+        codeReviewFacade.analyzePullRequest(request, "my-app")
+
+        // then — inquiry is built from the resolved request (base = "resolved-base")
+        val inquiryCaptor = org.mockito.ArgumentCaptor.forClass(GitDifferInquiry::class.java)
+        verify(githubService).executeInquiryDiffer(inquiryCaptor.capture() ?: GitDifferInquiry("", "", "", ""))
+        assertThat(inquiryCaptor.value.base).isEqualTo("resolved-base")
+        verify(githubService).postPullRequestComment(anyObj(), org.mockito.ArgumentMatchers.eq(42), anyObj())
     }
 
     @Test

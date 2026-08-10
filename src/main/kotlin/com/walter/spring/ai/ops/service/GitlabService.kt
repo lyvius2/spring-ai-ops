@@ -11,6 +11,8 @@ import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionPosition
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
+import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDiffRefs
+import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
 import com.walter.spring.ai.ops.service.dto.LlmInlineComment
 import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.service.dto.ParsedFileDiff
@@ -130,6 +132,47 @@ class GitlabService(
             return false
         }
         return true
+    }
+
+    override fun resolveMissingPullRequestRefs(request: GithubPullRequestRequest): GithubPullRequestRequest {
+        if (request.baseSha.isNotBlank() && request.headSha.isNotBlank()) {
+            return request
+        }
+        if (request.number <= 0) {
+            return request
+        }
+        val owner = request.repository.owner.login
+        val repo = request.repository.name
+        if (owner.isBlank() || repo.isBlank()) {
+            return request
+        }
+        val diffRefs = fetchMergeRequestDiffRefs("$owner/$repo", request.number) ?: return request
+        val resolved = request.copy(
+            baseSha = request.baseSha.ifBlank { diffRefs.baseSha },
+            headSha = request.headSha.ifBlank { diffRefs.headSha },
+            startSha = request.startSha.ifBlank { diffRefs.startSha },
+        )
+        if (resolved.baseSha != request.baseSha || resolved.headSha != request.headSha) {
+            log.info(
+                "GitLab MR refs resolved via API: projectPath={}, iid={}, base={}, head={}",
+                "$owner/$repo", request.number, resolved.baseSha, resolved.headSha,
+            )
+        }
+        return resolved
+    }
+
+    private fun fetchMergeRequestDiffRefs(projectPath: String, iid: Int): GitlabMergeRequestDiffRefs? {
+        val encodedPath = projectPath.replace("/", "%2F")
+        val detail = runCatching { gitlabConnector.getMergeRequest(encodedPath, iid) }
+            .getOrElse {
+                log.warn("Failed to fetch GitLab MR detail: projectPath={}, iid={}, error={}", projectPath, iid, it.message)
+                return null
+            }
+        if (!detail.errorMessage.isNullOrBlank()) {
+            log.warn("GitLab MR detail returned error: projectPath={}, iid={}, error={}", projectPath, iid, detail.errorMessage)
+            return null
+        }
+        return detail.diffRefs
     }
 
     private fun mergeDiffs(diffs: List<GitlabFile>): List<GitlabFile> =

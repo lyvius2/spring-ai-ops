@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_PREFIX
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
+import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.CryptoProvider
@@ -79,4 +80,6 @@ abstract class GitRemoteService(
     abstract fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String)
 
     abstract fun postPullRequestInlineComments(inquiry: GitDifferInquiry, number: Int, review: LlmInlineReviewResult, compareResult: GitCompareResult): Boolean
+
+    open fun resolveMissingPullRequestRefs(request: GithubPullRequestRequest): GithubPullRequestRequest = request
 }

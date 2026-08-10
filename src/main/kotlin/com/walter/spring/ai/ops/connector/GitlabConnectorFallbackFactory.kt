@@ -6,6 +6,7 @@ import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
+import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDetail
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
 import org.slf4j.LoggerFactory
 import org.springframework.cloud.openfeign.FallbackFactory
@@ -28,6 +29,10 @@ class GitlabConnectorFallbackFactory : FallbackFactory<GitlabConnector> {
             override fun getCommitDiff(projectPath: String, sha: String): List<GitlabFile> {
                 log.error("GitLab getCommitDiff failed: projectPath={}, sha={}, error={}", projectPath, sha, cause.message, cause)
                 return emptyList()
+            }
+            override fun getMergeRequest(projectPath: String, iid: Int): GitlabMergeRequestDetail {
+                log.error("GitLab getMergeRequest failed: projectPath={}, iid={}, error={}", projectPath, iid, cause.message, cause)
+                return GitlabMergeRequestDetail(errorMessage = cause.message ?: "Failed to connect to GitLab API.")
             }
             override fun createMergeRequestNote(projectPath: String, iid: Int, request: GitCommentRequest): GitlabMergeRequestNoteResponse {
                 log.error("GitLab createMergeRequestNote failed: projectPath={}, iid={}, error={}", projectPath, iid, cause.message, cause)

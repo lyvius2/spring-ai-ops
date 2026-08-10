@@ -21,7 +21,7 @@ class GitlabConnectorConfig(
 
     companion object {
         const val PLACEHOLDER_URL = "https://gitlab.com/api/v4"
-        private val PROJECT_PATH_REGEX = Regex("""/projects/([^?#]+)/repository/""")
+        private val PROJECT_PATH_REGEX = Regex("""/projects/([^?#]+?)/(repository|merge_requests)/""")
     }
 
     override val placeholderUrl: String = PLACEHOLDER_URL
@@ -46,7 +46,7 @@ class GitlabConnectorConfig(
      * expanding @PathVariable values into the URL template, causing GitLab to
      * interpret 'namespace/project' as two separate path segments and return 404.
      *
-     * This interceptor detects paths of the form /projects/{anything}/repository/
+     * Detects paths of the form /projects/{anything}/(repository|merge_requests)/
      * and re-encodes any literal '/' inside the project path portion.
      */
     @Bean
@@ -55,8 +55,9 @@ class GitlabConnectorConfig(
         val match = PROJECT_PATH_REGEX.find(url) ?: return@RequestInterceptor
         val rawProjectPath = match.groupValues[1]           // e.g. "walter-project/next"
         if (!rawProjectPath.contains('/')) return@RequestInterceptor  // already single segment
+        val resource = match.groupValues[2]                 // "repository" or "merge_requests"
         val encodedProjectPath = rawProjectPath.replace("/", "%2F")
-        val fixedUrl = url.replace(match.value, "/projects/$encodedProjectPath/repository/")
+        val fixedUrl = url.replace(match.value, "/projects/$encodedProjectPath/$resource/")
         template.uri(fixedUrl)
     }
 }

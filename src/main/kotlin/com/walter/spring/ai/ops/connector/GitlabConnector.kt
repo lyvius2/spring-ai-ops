@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.connector.dto.GitlabCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
+import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDetail
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.GetMapping
@@ -26,6 +27,9 @@ interface GitlabConnector {
 
     @GetMapping("/projects/{projectPath}/repository/commits/{sha}/diff")
     fun getCommitDiff(@PathVariable projectPath: String, @PathVariable sha: String): List<GitlabFile>
+
+    @GetMapping("/projects/{projectPath}/merge_requests/{iid}")
+    fun getMergeRequest(@PathVariable projectPath: String, @PathVariable iid: Int): GitlabMergeRequestDetail
 
     @PostMapping("/projects/{projectPath}/merge_requests/{iid}/notes")
     fun createMergeRequestNote(@PathVariable projectPath: String, @PathVariable iid: Int, @RequestBody request: GitCommentRequest): GitlabMergeRequestNoteResponse
