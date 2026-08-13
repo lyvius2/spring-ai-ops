@@ -1316,6 +1316,18 @@ body {
     font-weight: 600;
 }
 
+/* ── Analysis Skipped Message ── */
+.analysis-skipped-message {
+    background: #fff8e1;
+    border-left: 4px solid #f0ad4e;
+    padding: 14px 16px;
+    margin: 12px;
+    color: #6b5a1f;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    border-radius: 3px;
+}
+
 /* ── Analysis Layers ── */
 .analysis-layer {
     border: 1px solid #e4e4e4;

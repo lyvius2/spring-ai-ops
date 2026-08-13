@@ -704,7 +704,19 @@ function renderObservabilityStatus() {
         badges.push(`<img src="/images/prometheus.svg" class="provider-logo provider-logo-badge" alt="Prometheus" onerror="this.style.display='none'">
                      <span class="badge badge-up">PROMETHEUS</span>`);
     }
-    if (badges.length === 0) return;
+
+    if (badges.length === 0) {
+        cell.innerHTML = `
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div>
+                    <span style="color:#aaa;">&mdash;</span>
+                    <span class="badge badge-down">NOT CONFIGURED</span>
+                </div>
+                <button class="btn-secondary" style="margin-top:0;" onclick="openObservabilityModalForReconfigure()">Configure</button>
+            </div>
+        `;
+        return;
+    }
 
     cell.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between;">
@@ -739,16 +751,22 @@ async function checkObservabilityAndProceed() {
         // If check fails, proceed anyway
     }
 
-    if (lokiConfigured) renderLokiStatus(lokiUrl);
-    if (prometheusConfigured) renderPrometheusStatus(prometheusUrl);
+    renderLokiStatus(lokiUrl);
+    renderPrometheusStatus(prometheusUrl);
 
-    if (lokiConfigured) {
-        // Loki is required; Prometheus is optional — proceed once Loki is configured
+    if (lokiConfigured || prometheusConfigured) {
+        // At least one provider configured — proceed to next step
         await checkGitRemoteAndProceed();
         return;
     }
 
-    // Loki not configured — open modal defaulting to LOKI
+    if (localStorage.getItem('observabilitySetupSkipped') === '1') {
+        // User previously skipped this step — proceed without opening the modal
+        await checkGitRemoteAndProceed();
+        return;
+    }
+
+    // Nothing configured and not skipped — open modal defaulting to LOKI
     openObservabilityModal(_observabilityStatusCache, false, 'LOKI');
 }
 
@@ -761,7 +779,7 @@ function openObservabilityModal(statusData, closeable, defaultProvider) {
     const desc = document.getElementById('observability-modal-desc');
     desc.textContent = closeable
         ? 'Reconfigure an observability provider.'
-        : 'Enter the base URL for each observability provider to enable analysis.';
+        : 'Enter the base URL for each observability provider to enable analysis. Both providers are optional — you can skip this step.';
 
     // Build provider radio buttons from OBSERVABILITY_PROVIDERS enum
     const group = document.getElementById('observability-provider-group');
@@ -792,10 +810,33 @@ function openObservabilityModal(statusData, closeable, defaultProvider) {
     updateObservabilityUrlPlaceholder();
 
     document.getElementById('observability-alert-error').style.display = 'none';
-    document.getElementById('observability-save-btn').disabled = false;
-    document.getElementById('observability-save-btn').textContent = 'Save';
+
+    const saveBtn = document.getElementById('observability-save-btn');
+    saveBtn.textContent = 'Save';
+    refreshObservabilitySaveButtonState();
+
+    const urlInput = document.getElementById('observability-url-input');
+    urlInput.oninput = refreshObservabilitySaveButtonState;
+
+    // Skip button is only shown during initial setup, not on Reconfigure
+    const skipBtn = document.getElementById('observability-skip-btn');
+    skipBtn.style.display = closeable ? 'none' : 'block';
 
     document.getElementById('observability-modal').style.display = 'flex';
+}
+
+function refreshObservabilitySaveButtonState() {
+    const saveBtn = document.getElementById('observability-save-btn');
+    if (!saveBtn) return;
+    const url = document.getElementById('observability-url-input').value.trim();
+    saveBtn.disabled = url.length === 0;
+}
+
+function skipObservabilitySetup() {
+    localStorage.setItem('observabilitySetupSkipped', '1');
+    closeObservabilityModal();
+    renderObservabilityStatus();
+    checkGitRemoteAndProceed();
 }
 
 function updateObservabilityUrlPlaceholder() {
@@ -814,6 +855,7 @@ function updateObservabilityUrlPlaceholder() {
     } else {
         urlInput.value = '';
     }
+    refreshObservabilitySaveButtonState();
 }
 
 function closeObservabilityModal() {
@@ -850,9 +892,8 @@ async function saveObservabilityConfig() {
         errEl.style.display = 'block';
         return;
     }
-    // Loki URL is required; Prometheus URL is optional (allow blank to skip)
-    if (!url && providerEl.value === 'LOKI') {
-        errEl.textContent = 'Please enter a Loki URL.';
+    if (!url) {
+        errEl.textContent = 'Please enter a URL or click "Skip for now".';
         errEl.style.display = 'block';
         return;
     }
@@ -880,41 +921,26 @@ async function saveObservabilityConfig() {
                 renderPrometheusStatus(url);
                 if (_observabilityStatusCache) { _observabilityStatusCache.prometheusUrl = url; _observabilityStatusCache.prometheusConfigured = true; }
             }
-
-            if (isReconfigure) {
-                closeObservabilityModal();
-                return;
-            }
-
-            // Loki is required; Prometheus is optional.
-            // After saving, if Loki is now configured, proceed to Git Remote.
-            const lokiOk = _observabilityStatusCache ? _observabilityStatusCache.lokiConfigured : isLoki;
-
-            if (!lokiOk) {
-                // Prometheus was just saved but Loki is still missing — switch to LOKI
-                btn.disabled = false;
-                btn.textContent = 'Save';
-                const nextRadio = document.querySelector('input[value="LOKI"]');
-                if (nextRadio) {
-                    nextRadio.checked = true;
-                    updateObservabilityUrlPlaceholder();
-                }
-                return;
-            }
+            // A saved provider overrides any prior "skipped" preference.
+            localStorage.removeItem('observabilitySetupSkipped');
 
             closeObservabilityModal();
+
+            if (isReconfigure) {
+                return;
+            }
             await checkGitRemoteAndProceed();
         } else {
             errEl.textContent = data.message || 'Failed to save. Please try again.';
             errEl.style.display = 'block';
-            btn.disabled = false;
             btn.textContent = 'Save';
+            refreshObservabilitySaveButtonState();
         }
     } catch (e) {
         errEl.textContent = 'A network error occurred.';
         errEl.style.display = 'block';
-        btn.disabled = false;
         btn.textContent = 'Save';
+        refreshObservabilitySaveButtonState();
     }
 }
 
@@ -2228,9 +2254,18 @@ function renderAnalysisLayers(appName, record) {
         </div>
         <div class="analysis-layer">
             <div class="layer-header">AI Analysis<span class="layer-header-disclaimer">* AI-generated results may not always be accurate.</span></div>
-            <div class="analysis-text markdown-body">${renderMarkdown(record.analyzeResults)}</div>
+            ${renderAnalysisBody(record)}
             ${renderSourceCodeSuggestions(record.sourceCodeSuggestions)}
         </div>`;
+}
+
+function renderAnalysisBody(record) {
+    const status = record.analysisStatus || 'ANALYZED';
+    if (status !== 'ANALYZED') {
+        const message = record.analysisMessage || 'LLM analysis was skipped for this alert.';
+        return `<div class="analysis-skipped-message">${escHtml(message)}</div>`;
+    }
+    return `<div class="analysis-text markdown-body">${renderMarkdown(record.analyzeResults)}</div>`;
 }
 
 function renderSourceCodeSuggestions(suggestions) {

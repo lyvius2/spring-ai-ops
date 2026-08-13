@@ -360,6 +360,7 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
                 <input type="text" id="observability-url-input" class="form-input" autocomplete="off" />
             </div>
             <button class="btn-primary" id="observability-save-btn" onclick="saveObservabilityConfig()">Save</button>
+            <button class="btn-secondary" id="observability-skip-btn" onclick="skipObservabilitySetup()" style="display:none; margin-top:8px; width:100%; padding:8px 14px;">Skip for now</button>
             <div class="alert alert-error" id="observability-alert-error"></div>
         </div>
     </div>

@@ -1,5 +1,6 @@
 package com.walter.spring.ai.ops.facade
 
+import com.walter.spring.ai.ops.code.AnalysisStatus
 import com.walter.spring.ai.ops.config.annotation.Facade
 import com.walter.spring.ai.ops.controller.dto.AppUpdateRequest
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
@@ -53,40 +54,105 @@ class IncidentAnalyzeFacade(
             val targetApplication = application ?: "Unknown Application"
             applicationService.addApp(AppUpdateRequest(targetApplication))
 
-            val logFuture = CompletableFuture.supplyAsync({ executeFindLog(request) }, executor)
-            val metricFuture = CompletableFuture.supplyAsync({ executeFindMetric(request) }, executor)
+            val lokiConfigured = lokiService.isConfigured()
+            val prometheusConfigured = prometheusService.isConfigured()
+
+            if (!lokiConfigured && !prometheusConfigured) {
+                persistAndPush(
+                    AnalyzeFiringRecord.createSkipped(
+                        request,
+                        targetApplication,
+                        AnalysisStatus.SKIPPED_NO_OBSERVABILITY,
+                        "Loki and Prometheus are not configured. The alert was recorded, but no logs or metrics were collected and LLM analysis was skipped.",
+                        null,
+                        null,
+                    )
+                )
+                return@runCatching
+            }
+
+            val logFuture = if (lokiConfigured) {
+                CompletableFuture.supplyAsync({ executeFindLog(request) }, executor)
+            } else null
+            val metricFuture = if (prometheusConfigured) {
+                CompletableFuture.supplyAsync({ executeFindMetric(request) }, executor)
+            } else null
             val checkoutFuture = CompletableFuture.supplyAsync({ getSourcePath(targetApplication) }, executor)
 
-            val logResults: LokiQueryResult = logFuture.get()
-            val metricResults: PrometheusQueryResult? = metricFuture.get()
+            val logResults: LokiQueryResult? = logFuture?.get()
+            val metricResults: PrometheusQueryResult? = metricFuture?.get()
             val sourcePath: Path? = checkoutFuture.get()
-            val sourceContext = incidentSourceContextService.createContext(logResults, sourcePath)
+
+            val lokiFailed = lokiConfigured && !isLokiSuccessful(logResults)
+            val prometheusFailed = prometheusConfigured && !isPrometheusSuccessful(metricResults)
+            val everythingFailed = (!lokiConfigured || lokiFailed) && (!prometheusConfigured || prometheusFailed)
+
+            if (everythingFailed) {
+                val message = buildConnectionErrorMessage(lokiConfigured, prometheusConfigured, logResults, metricResults)
+                persistAndPush(
+                    AnalyzeFiringRecord.createSkipped(
+                        request,
+                        targetApplication,
+                        AnalysisStatus.SKIPPED_OBSERVABILITY_ERROR,
+                        message,
+                        logResults,
+                        metricResults,
+                    )
+                )
+                return@runCatching
+            }
+
+            val logSection = if (!lokiFailed) logResults?.createLogSectionPrompt() ?: "" else ""
+            val metricSection = if (!prometheusFailed) metricResults?.createMetricSectionPrompt() ?: "" else ""
+            val sourceContext = incidentSourceContextService.createContext(logResults ?: LokiQueryResult(), sourcePath)
             val sourceSection = sourceContext.createSourceSectionPrompt()
 
             val rawAnalyzeResults = aiModelService.executeAnalyzeFiring(
                 request.createAlertSectionPrompt(),
-                logResults.createLogSectionPrompt(),
-                metricResults?.createMetricSectionPrompt() ?: "",
+                logSection,
+                metricSection,
                 sourceSection,
             )
             val (analyzeResults, sourceCodeSuggestions) = parseAnalyzeFiringResponse(rawAnalyzeResults)
             val record = AnalyzeFiringRecord.create(request, targetApplication, logResults, metricResults, analyzeResults, sourceCodeSuggestions)
-            grafanaService.saveAnalyzeFiringRecord(record)
-            messageService.pushFiring(record)
+            persistAndPush(record)
         }.onFailure { log.error("Failed to analyze Firing : {}", it.message, it) }
     }
 
-    private fun executeFindLog(request: GrafanaAlertingRequest): LokiQueryResult {
-        val lokiQueryRequest = grafanaService.convertLogInquiry(request)
-        return lokiService.executeLogQuery(lokiQueryRequest)
+    private fun executeFindLog(request: GrafanaAlertingRequest): LokiQueryResult =
+        runCatching { lokiService.executeLogQuery(grafanaService.convertLogInquiry(request)) }
+            .getOrElse { LokiQueryResult(errorMessage = it.message ?: "Failed to query Loki.") }
+
+    private fun executeFindMetric(request: GrafanaAlertingRequest): PrometheusQueryResult =
+        runCatching { prometheusService.executeMetricQuery(grafanaService.convertMetricInquiry(request)) }
+            .getOrElse { PrometheusQueryResult(errorMessage = it.message ?: "Failed to query Prometheus.") }
+
+    private fun isLokiSuccessful(result: LokiQueryResult?): Boolean =
+        result != null && result.errorMessage.isBlank()
+
+    private fun isPrometheusSuccessful(result: PrometheusQueryResult?): Boolean =
+        result != null && result.errorMessage.isBlank() && result.error.isBlank()
+
+    private fun buildConnectionErrorMessage(lokiConfigured: Boolean, prometheusConfigured: Boolean, logResults: LokiQueryResult?, metricResults: PrometheusQueryResult?, ): String {
+        val parts = mutableListOf<String>()
+        if (lokiConfigured) {
+            val detail = logResults?.errorMessage?.takeIf { it.isNotBlank() } ?: "connection error"
+            parts.add("Loki: $detail")
+        }
+        if (prometheusConfigured) {
+            val detail = metricResults?.errorMessage?.takeIf { it.isNotBlank() }
+                ?: metricResults?.error?.takeIf { it.isNotBlank() }
+                ?: "connection error"
+            parts.add("Prometheus: $detail")
+        }
+        val detail = parts.joinToString(separator = "; ")
+        return "Failed to fetch logs and metrics due to a connection error ($detail). The alert was recorded, but LLM analysis was skipped."
     }
 
-    private fun executeFindMetric(request: GrafanaAlertingRequest): PrometheusQueryResult? =
-        if (prometheusService.isConfigured()) {
-            prometheusService.executeMetricQuery(grafanaService.convertMetricInquiry(request))
-        } else {
-            null
-        }
+    private fun persistAndPush(record: AnalyzeFiringRecord) {
+        grafanaService.saveAnalyzeFiringRecord(record)
+        messageService.pushFiring(record)
+    }
 
     private fun getSourcePath(targetApplication: String): Path? {
         val appConfig = applicationService.getAppConfig(targetApplication)
