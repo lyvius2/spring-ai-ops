@@ -516,13 +516,21 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 
 ### Prerequisites
 
+**Required to complete initial setup and access the dashboard**
+
+- **An API key for at least one LLM provider** (OpenAI, Anthropic, DeepSeek, FriendliAI for EXAONE, or AWS credentials for Amazon Bedrock). The application cannot proceed past the initial setup modal without an active LLM configuration.
+- **A GitHub or GitLab personal access token — at least one of the two is required.** The dashboard forces Git Remote Configuration on first launch and remains blocked until either a GitHub or GitLab token is saved. The token is used for code review on push, PR/MR inline review, and cloning registered application repositories for Static Code Risk Analysis and Grafana source-snippet extraction.
+
+**Also required by the runtime**
+
 - JDK 21+
 - A non-empty `CRYPTO_SECRET_KEY` value for encrypting Redis-stored credentials
-- An API key for at least one LLM provider (OpenAI, Anthropic, DeepSeek, FriendliAI for EXAONE, or AWS credentials for Amazon Bedrock)
-- A running Loki instance for Grafana error analysis
-- (Optional) A running Prometheus instance for metric queries
-- (Optional) An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
-- A GitHub or GitLab personal access token if you want code review
+
+**Optional**
+
+- A running Loki instance — required only for Grafana alert analysis. The initial Observability setup modal offers a **Skip for now** option; if you skip it, you can still use Code Review and Static Code Risk Analysis, but Grafana webhook analysis will be unavailable until Loki is configured.
+- A running Prometheus instance for metric queries and per-application dashboard charts
+- An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
 
 ### Configuration
 

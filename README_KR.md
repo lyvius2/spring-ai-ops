@@ -495,13 +495,21 @@ Amazon Bedrock은 `spring-ai-bedrock-converse`의 `BedrockProxyChatModel`을 사
 
 ### 사전 요구사항
 
+**초기 셋업을 마치고 대시보드에 진입하기 위해 반드시 필요합니다**
+
+- **LLM 제공자 API 키 최소 1개** — OpenAI, Anthropic, DeepSeek, FriendliAI(EXAONE), Amazon Bedrock 중 하나 이상의 API 키(또는 AWS 자격증명). LLM 설정이 없으면 초기 설정 모달을 통과할 수 없습니다.
+- **GitHub 또는 GitLab Personal Access Token — 둘 중 최소 하나는 필수입니다.** 첫 실행 시 Git Remote Configuration 모달이 강제로 열리며, GitHub 또는 GitLab 토큰이 저장되기 전까지 대시보드 진입이 차단됩니다. 이 토큰은 push 코드 리뷰, PR/MR 인라인 리뷰, 그리고 Static Code Risk Analysis 및 Grafana 장애 분석 시 등록된 애플리케이션 저장소 클론에 사용됩니다.
+
+**런타임에도 필요합니다**
+
 - JDK 21 이상
 - Redis에 저장되는 인증 정보를 암호화하기 위한 비어 있지 않은 `CRYPTO_SECRET_KEY`
-- OpenAI, Anthropic, DeepSeek, FriendliAI(EXAONE) 또는 Amazon Bedrock 중 하나 이상의 API 키 혹은 AWS 자격증명
-- Grafana 장애 분석용 접근 가능한 Loki 서버
-- (선택) Prometheus 메트릭 조회용 Prometheus 서버 URL
-- (선택) Trace 전송을 받을 OTLP 호환 백엔드 또는 OpenTelemetry Collector
-- 코드 리뷰 기능 사용 시 GitHub 또는 GitLab Personal Access Token
+
+**선택 사항**
+
+- 접근 가능한 Loki 서버 — Grafana 장애 분석 시에만 필요합니다. 초기 Observability 설정 모달에서 **Skip for now** 로 건너뛸 수 있으며, 건너뛴 경우에도 Code Review 및 Static Code Risk Analysis는 정상 사용 가능하지만 Grafana 웹훅 분석은 Loki를 설정하기 전까지 사용할 수 없습니다.
+- Prometheus 서버 URL — 메트릭 조회 및 애플리케이션별 대시보드 차트에 사용됩니다.
+- Trace 전송을 받을 OTLP 호환 백엔드 또는 OpenTelemetry Collector
 
 ### 설정
 

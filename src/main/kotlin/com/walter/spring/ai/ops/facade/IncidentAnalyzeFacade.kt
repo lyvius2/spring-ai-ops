@@ -83,11 +83,13 @@ class IncidentAnalyzeFacade(
             val metricResults: PrometheusQueryResult? = metricFuture?.get()
             val sourcePath: Path? = checkoutFuture.get()
 
-            val lokiFailed = lokiConfigured && !isLokiSuccessful(logResults)
-            val prometheusFailed = prometheusConfigured && !isPrometheusSuccessful(metricResults)
-            val everythingFailed = (!lokiConfigured || lokiFailed) && (!prometheusConfigured || prometheusFailed)
+            val lokiUsable = lokiConfigured && isLokiSuccessful(logResults)
+            val prometheusUsable = prometheusConfigured && isPrometheusSuccessful(metricResults)
 
-            if (everythingFailed) {
+            // Policy: skip LLM analysis only when every configured source failed.
+            // Reaching here means at least one source is configured (the no-observability
+            // case returned early above), so "no usable source" == "all configured sources failed".
+            if (!lokiUsable && !prometheusUsable) {
                 val message = buildConnectionErrorMessage(lokiConfigured, prometheusConfigured, logResults, metricResults)
                 persistAndPush(
                     AnalyzeFiringRecord.createSkipped(
@@ -102,8 +104,8 @@ class IncidentAnalyzeFacade(
                 return@runCatching
             }
 
-            val logSection = if (!lokiFailed) logResults?.createLogSectionPrompt() ?: "" else ""
-            val metricSection = if (!prometheusFailed) metricResults?.createMetricSectionPrompt() ?: "" else ""
+            val logSection = if (lokiUsable) logResults?.createLogSectionPrompt() ?: "" else ""
+            val metricSection = if (prometheusUsable) metricResults?.createMetricSectionPrompt() ?: "" else ""
             val sourceContext = incidentSourceContextService.createContext(logResults ?: LokiQueryResult(), sourcePath)
             val sourceSection = sourceContext.createSourceSectionPrompt()
 

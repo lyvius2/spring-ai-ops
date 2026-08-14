@@ -15,12 +15,14 @@ const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribu
 let _loggedIn = !!IS_LOGGED_IN;
 let _forcePasswordChange = false;
 
-function openLoginModal() {
+function openLoginModal(setupRequired) {
     document.getElementById('login-username').value = '';
     document.getElementById('login-password').value = '';
     document.getElementById('login-alert-error').style.display = 'none';
     document.getElementById('login-submit-btn').disabled = false;
     document.getElementById('login-submit-btn').textContent = 'Login';
+    document.getElementById('login-modal-desc').style.display = setupRequired ? 'block' : 'none';
+    document.getElementById('login-modal-close').style.display = setupRequired ? 'none' : 'block';
     document.getElementById('login-modal').style.display = 'flex';
 }
 
@@ -767,6 +769,10 @@ async function checkObservabilityAndProceed() {
     }
 
     // Nothing configured and not skipped — open modal defaulting to LOKI
+    if (!_loggedIn) {
+        openLoginModal(true);
+        return;
+    }
     openObservabilityModal(_observabilityStatusCache, false, 'LOKI');
 }
 
@@ -3312,6 +3318,10 @@ async function checkGitRemoteAndProceed() {
         }
 
         // Nothing configured → must setup
+        if (!_loggedIn) {
+            openLoginModal(true);
+            return;
+        }
         openGitRemoteModal(data, false);
     } catch (_) {
         showMainSection();
@@ -3737,6 +3747,10 @@ async function init() {
 
     // Step 1: LLM not configured → branch by state
     if (!_llmConfigured) {
+        if (!_loggedIn) {
+            openLoginModal(true);
+            return;
+        }
         if (LLM_SELECT_PROVIDER) {
             openLlmSelectProviderModal();
         } else {
