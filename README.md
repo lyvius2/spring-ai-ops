@@ -788,6 +788,12 @@ Administrator accounts are managed from the **Account Management** panel in the 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Dashboard UI |
+| `POST` | `/api/auth/login` | Log in → creates session |
+| `POST` | `/api/auth/logout` | Log out → invalidates session |
+| `POST` | `/api/auth/password` | Change own password |
+| `POST` | `/api/auth/admin` | Create additional admin account (admin only) |
+| `GET` | `/api/auth/admins` | List admin accounts (admin only) |
+| `DELETE` | `/api/auth/admins` | Remove admin accounts (admin only) |
 | `POST` | `/api/llm/config` | Save LLM provider + API key |
 | `POST` | `/api/llm/select-provider` | Select provider when both yml keys are present |
 | `GET` | `/api/loki/status` | Get Loki configuration status |
@@ -797,9 +803,11 @@ Administrator accounts are managed from the **Account Management** panel in the 
 | `GET` | `/api/prometheus/application-metrics` | Get per-application Prometheus metrics (memory, CPU, latency, HTTP status) |
 | `POST` | `/api/github/config` | Save GitHub / GitLab access token and base URL |
 | `GET` | `/api/github/config/status` | Get Git provider configuration status |
-| `GET` | `/api/app/list` | List registered applications |
-| `POST` | `/api/app/add` | Register a new application |
-| `DELETE` | `/api/app/remove/{application}` | Remove an application |
+| `GET` | `/api/apps` | List registered applications |
+| `GET` | `/api/apps/{name}` | Get application Git config |
+| `POST` | `/api/apps` | Register a new application |
+| `PUT` | `/api/apps/{name}` | Update application Git config |
+| `DELETE` | `/api/apps/{name}` | Remove an application |
 | `GET` | `/api/firing/{application}/list` | Get alert analysis records for an application |
 | `GET` | `/api/commit/{application}/list` | Get code review records for an application |
 | `POST` | `/api/code-risk` | Run static code risk analysis for an application |
@@ -842,6 +850,7 @@ com.walter.spring.ai.ops
 ├── code/                          # Enums and constants
 │   ├── AlertMessageType.kt        # Typed frontend alert payload categories
 │   ├── AlertingStatus.kt          # FIRING / RESOLVED / ACCEPTED
+│   ├── AnalysisStatus.kt          # ANALYZED / SKIPPED_NO_OBSERVABILITY / SKIPPED_OBSERVABILITY_ERROR
 │   ├── ConnectionStatus.kt        # SUCCESS / READY / FAILURE
 │   ├── DiffSide.kt                # LEFT / RIGHT — side of a diff a PR/MR inline comment refers to (v2)
 │   ├── GitRemoteProvider.kt       # GITHUB / GITLAB
