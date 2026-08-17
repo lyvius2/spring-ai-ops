@@ -26,3 +26,6 @@ Thumbs.db
 !.env.example
 opencode.json
 sonar-scanner
+**/*Test.java
+**/*Spec.groovy
+docker-compose*.yml

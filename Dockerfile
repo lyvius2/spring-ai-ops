@@ -7,10 +7,13 @@ COPY gradle ./gradle
 COPY settings.gradle.kts build.gradle.kts ./
 COPY src ./src
 RUN chmod +x ./gradlew \
-    && ./gradlew --no-daemon clean bootJar
+    && ./gradlew --no-daemon dependencies --configuration runtimeClasspath
+
+COPY src ./src
+RUN ./gradlew --no-daemon clean bootJar
 
 FROM amazoncorretto:21-al2023
-RUN dnf install -y redis6 \
+RUN dnf install -y redis6-6.2.* \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
