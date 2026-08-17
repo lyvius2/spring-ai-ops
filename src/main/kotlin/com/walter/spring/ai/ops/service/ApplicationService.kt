@@ -18,7 +18,7 @@ class ApplicationService(
 
     fun getApps(): List<String> {
         return runCatching {
-            cacheStorePort.getSet(REDIS_KEY_APPLICATIONS).toList()
+            cacheStorePort.getDataSet(REDIS_KEY_APPLICATIONS).toList()
         }.getOrElse { e ->
             log.warn("Failed to read '{}' as Set type — key may hold a wrong type. Deleting and returning empty list. cause: {}", REDIS_KEY_APPLICATIONS, e.message)
             cacheStorePort.delete(REDIS_KEY_APPLICATIONS)

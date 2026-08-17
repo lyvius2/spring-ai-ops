@@ -18,7 +18,7 @@ class InMemoryCacheStoreConnectorTest {
 
         // when
         val value = connector.get("value-key")
-        val values = connector.getSet("set-key")
+        val values = connector.getDataSet("set-key")
 
         // then
         assertThat(value).isEqualTo("value")

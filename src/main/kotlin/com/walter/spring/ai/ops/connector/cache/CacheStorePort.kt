@@ -9,7 +9,7 @@ interface CacheStorePort {
 
     fun delete(key: String): Boolean
 
-    fun getSet(key: String): Set<String>
+    fun getDataSet(key: String): Set<String>
 
     fun addToSet(key: String, value: String)
 

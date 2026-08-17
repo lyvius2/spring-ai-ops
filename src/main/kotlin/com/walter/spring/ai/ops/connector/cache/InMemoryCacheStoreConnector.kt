@@ -29,7 +29,7 @@ class InMemoryCacheStoreConnector : CacheStorePort {
         return valueRemoved || setRemoved || timeOrderedSetRemoved
     }
 
-    override fun getSet(key: String): Set<String> = sets[key]?.toSet() ?: emptySet()
+    override fun getDataSet(key: String): Set<String> = sets[key]?.toSet() ?: emptySet()
 
     override fun addToSet(key: String, value: String) {
         sets.computeIfAbsent(key) { ConcurrentHashMap.newKeySet() }.add(value)
