@@ -41,6 +41,7 @@ An AI-powered operations automation tool that receives webhooks from **Grafana A
   - [Configuration](#configuration)
   - [Sensitive Value Encryption](#sensitive-value-encryption)
   - [Running](#running)
+  - [Running with Docker](#running-with-docker)
   - [Setting Up Grafana](#setting-up-grafana)
   - [Setting Up GitHub Webhooks](#setting-up-github-webhooks)
   - [Setting Up GitLab Webhooks](#setting-up-gitlab-webhooks)
@@ -688,6 +689,51 @@ crypto:
 ```
 
 Open `http://localhost:7079` in your browser. On first launch you will be prompted to enter your LLM API key (unless pre-configured in yml).
+
+### Running with Docker
+
+The repository ships a `Dockerfile` and `docker/entrypoint.sh` that build a **single self-contained image** with Amazon Corretto 21 (Amazon Linux 2023 base) and an embedded Redis (`redis6`). Redis is bound to `127.0.0.1:6379` inside the container and is **not exposed** — the Spring Boot app connects to it over localhost.
+
+The image sets `SPRING_PROFILES_ACTIVE=docker` by default, so the `!local` profile activates `RedisCacheStoreConnector` and uses the embedded Redis instead of the in-memory cache store.
+
+**Build**
+
+```bash
+docker build -t spring-ai-ops:local .
+```
+
+**Run**
+
+```bash
+docker run --rm \
+  -p 7079:7079 -p 7081:7081 \
+  -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  spring-ai-ops:local
+```
+
+- `7079` — application HTTP port
+- `7081` — management (actuator/prometheus) port
+- Redis (`6379`) is intentionally not exposed
+
+**Passing additional configuration**
+
+Any `application.yml` setting can be overridden via environment variables:
+
+```bash
+docker run --rm \
+  -p 7079:7079 -p 7081:7081 \
+  -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  -e AI_OPEN_AI_API_KEY='sk-...' \
+  -e LOKI_URL='http://loki.example.com:3100' \
+  -e PROMETHEUS_URL='http://prometheus.example.com:9090' \
+  -e GITHUB_ACCESS_TOKEN='ghp_...' \
+  -e JAVA_OPTS='-Xms512m -Xmx1g' \
+  spring-ai-ops:local
+```
+
+- `CRYPTO_SECRET_KEY` is **required** — the container exits at startup if it is blank.
+- `JAVA_OPTS` is forwarded to the JVM.
+- The embedded Redis is stateless (`--save "" --appendonly no`); analysis records and settings are lost when the container is removed. Use an external Redis if persistence matters.
 
 ### Setting Up Grafana
 

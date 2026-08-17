@@ -39,6 +39,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
   - [설정](#설정)
   - [민감 정보 암호화](#민감-정보-암호화)
   - [실행](#실행)
+  - [Docker 로 실행](#docker-로-실행)
   - [Grafana 설정](#grafana-설정)
   - [GitHub Webhook 설정](#github-webhook-설정)
   - [GitLab Webhook 설정](#gitlab-webhook-설정)
@@ -654,6 +655,51 @@ crypto:
 ```
 
 브라우저에서 `http://localhost:7079`에 접속합니다. yml에 API 키가 설정되어 있으면 자동으로 LLM이 구성됩니다.
+
+### Docker 로 실행
+
+프로젝트 루트에 `Dockerfile`과 `docker/entrypoint.sh`가 포함되어 있어, Amazon Corretto 21 (Amazon Linux 2023 기반) 위에 Redis (`redis6`)까지 내장된 **단일 자체 완결형 이미지**를 빌드할 수 있습니다. Redis는 컨테이너 내부에서 `127.0.0.1:6379`에 바인딩되며 **외부로 노출되지 않습니다** — Spring Boot 앱이 localhost 로 접속합니다.
+
+이미지 기본값으로 `SPRING_PROFILES_ACTIVE=docker`가 설정되어 있어 `!local` 프로파일이 활성화되고, 인메모리 캐시 대신 내장 Redis 기반의 `RedisCacheStoreConnector`가 사용됩니다.
+
+**빌드**
+
+```bash
+docker build -t spring-ai-ops:local .
+```
+
+**실행**
+
+```bash
+docker run --rm \
+  -p 7079:7079 -p 7081:7081 \
+  -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  spring-ai-ops:local
+```
+
+- `7079` — 애플리케이션 HTTP 포트
+- `7081` — management (actuator/prometheus) 포트
+- Redis (`6379`) 는 의도적으로 노출하지 않습니다
+
+**추가 설정 전달**
+
+`application.yml`의 모든 값은 환경 변수로 오버라이드할 수 있습니다:
+
+```bash
+docker run --rm \
+  -p 7079:7079 -p 7081:7081 \
+  -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  -e AI_OPEN_AI_API_KEY='sk-...' \
+  -e LOKI_URL='http://loki.example.com:3100' \
+  -e PROMETHEUS_URL='http://prometheus.example.com:9090' \
+  -e GITHUB_ACCESS_TOKEN='ghp_...' \
+  -e JAVA_OPTS='-Xms512m -Xmx1g' \
+  spring-ai-ops:local
+```
+
+- `CRYPTO_SECRET_KEY`는 **필수**입니다. 값이 비어 있으면 컨테이너가 기동 중 종료됩니다.
+- `JAVA_OPTS`는 JVM 에 그대로 전달됩니다.
+- 내장 Redis 는 영속성이 꺼져 있으므로(`--save "" --appendonly no`), 컨테이너를 제거하면 분석 기록과 설정이 사라집니다. 영속성이 필요하면 외부 Redis 를 사용하세요.
 
 ### Grafana 설정
 
