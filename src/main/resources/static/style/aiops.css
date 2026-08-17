@@ -379,6 +379,20 @@ body {
 .btn-primary:hover    { background: #5a9632; }
 .btn-primary:disabled { background: #b5d98a; border-color: #b5d98a; cursor: not-allowed; }
 
+/* ── Warning (yellow) button ── */
+.btn-warning {
+    padding: 7px 20px;
+    background: #f0ad4e;
+    color: #fff;
+    border: 1px solid #eea236;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.btn-warning:hover { background: #ec971f; }
+
 /* ── Danger button (static analysis) ── */
 .btn-danger {
     padding: 7px 20px;
@@ -1314,6 +1328,18 @@ body {
     font-family: "SFMono-Regular", Consolas, monospace;
     font-size: 0.9em;
     font-weight: 600;
+}
+
+/* ── Analysis Skipped Message ── */
+.analysis-skipped-message {
+    background: #fff8e1;
+    border-left: 4px solid #f0ad4e;
+    padding: 14px 16px;
+    margin: 12px;
+    color: #6b5a1f;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    border-radius: 3px;
 }
 
 /* ── Analysis Layers ── */

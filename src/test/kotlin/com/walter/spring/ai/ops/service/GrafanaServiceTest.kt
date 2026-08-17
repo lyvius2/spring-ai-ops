@@ -1,6 +1,7 @@
 package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.walter.spring.ai.ops.code.AnalysisStatus
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_FIRING_PREFIX
 import com.walter.spring.ai.ops.connector.dto.LokiQueryResult
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlert
@@ -93,6 +94,8 @@ class GrafanaServiceTest {
         "analysis result",
         emptyList(),
         LocalDateTime.of(2026, 4, 12, 10, 1, 0),
+        AnalysisStatus.ANALYZED,
+        "",
     )
 
     // ── convertLogInquiry ─────────────────────────────────────────────────────

@@ -517,13 +517,21 @@ To avoid this, `resilience4j.timelimiter.configs.default.cancel-running-future` 
 
 ### Prerequisites
 
+**Required to complete initial setup and access the dashboard**
+
+- **An API key for at least one LLM provider** (OpenAI, Anthropic, DeepSeek, FriendliAI for EXAONE, or AWS credentials for Amazon Bedrock). The application cannot proceed past the initial setup modal without an active LLM configuration.
+- **A GitHub or GitLab personal access token — at least one of the two is required.** The dashboard forces Git Remote Configuration on first launch and remains blocked until either a GitHub or GitLab token is saved. The token is used for code review on push, PR/MR inline review, and cloning registered application repositories for Static Code Risk Analysis and Grafana source-snippet extraction.
+
+**Also required by the runtime**
+
 - JDK 21+
 - A non-empty `CRYPTO_SECRET_KEY` value for encrypting Redis-stored credentials
-- An API key for at least one LLM provider (OpenAI, Anthropic, DeepSeek, FriendliAI for EXAONE, or AWS credentials for Amazon Bedrock)
-- A running Loki instance for Grafana error analysis
-- (Optional) A running Prometheus instance for metric queries
-- (Optional) An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
-- A GitHub or GitLab personal access token if you want code review
+
+**Optional**
+
+- A running Loki instance — required only for Grafana alert analysis. The initial Observability setup modal offers a **Skip for now** option; if you skip it, you can still use Code Review and Static Code Risk Analysis, but Grafana webhook analysis will be unavailable until Loki is configured.
+- A running Prometheus instance for metric queries and per-application dashboard charts
+- An OTLP-compatible tracing backend or OpenTelemetry Collector for trace export
 
 ### Configuration
 
@@ -826,6 +834,12 @@ Administrator accounts are managed from the **Account Management** panel in the 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Dashboard UI |
+| `POST` | `/api/auth/login` | Log in → creates session |
+| `POST` | `/api/auth/logout` | Log out → invalidates session |
+| `POST` | `/api/auth/password` | Change own password |
+| `POST` | `/api/auth/admin` | Create additional admin account (admin only) |
+| `GET` | `/api/auth/admins` | List admin accounts (admin only) |
+| `DELETE` | `/api/auth/admins` | Remove admin accounts (admin only) |
 | `POST` | `/api/llm/config` | Save LLM provider + API key |
 | `POST` | `/api/llm/select-provider` | Select provider when both yml keys are present |
 | `GET` | `/api/loki/status` | Get Loki configuration status |
@@ -835,9 +849,11 @@ Administrator accounts are managed from the **Account Management** panel in the 
 | `GET` | `/api/prometheus/application-metrics` | Get per-application Prometheus metrics (memory, CPU, latency, HTTP status) |
 | `POST` | `/api/github/config` | Save GitHub / GitLab access token and base URL |
 | `GET` | `/api/github/config/status` | Get Git provider configuration status |
-| `GET` | `/api/app/list` | List registered applications |
-| `POST` | `/api/app/add` | Register a new application |
-| `DELETE` | `/api/app/remove/{application}` | Remove an application |
+| `GET` | `/api/apps` | List registered applications |
+| `GET` | `/api/apps/{name}` | Get application Git config |
+| `POST` | `/api/apps` | Register a new application |
+| `PUT` | `/api/apps/{name}` | Update application Git config |
+| `DELETE` | `/api/apps/{name}` | Remove an application |
 | `GET` | `/api/firing/{application}/list` | Get alert analysis records for an application |
 | `GET` | `/api/commit/{application}/list` | Get code review records for an application |
 | `POST` | `/api/code-risk` | Run static code risk analysis for an application |
@@ -880,6 +896,7 @@ com.walter.spring.ai.ops
 ├── code/                          # Enums and constants
 │   ├── AlertMessageType.kt        # Typed frontend alert payload categories
 │   ├── AlertingStatus.kt          # FIRING / RESOLVED / ACCEPTED
+│   ├── AnalysisStatus.kt          # ANALYZED / SKIPPED_NO_OBSERVABILITY / SKIPPED_OBSERVABILITY_ERROR
 │   ├── ConnectionStatus.kt        # SUCCESS / READY / FAILURE
 │   ├── DiffSide.kt                # LEFT / RIGHT — side of a diff a PR/MR inline comment refers to (v2)
 │   ├── GitRemoteProvider.kt       # GITHUB / GITLAB

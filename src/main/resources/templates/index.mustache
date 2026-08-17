@@ -359,7 +359,10 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
                 <label class="form-label" for="observability-url-input">Base URL</label>
                 <input type="text" id="observability-url-input" class="form-input" autocomplete="off" />
             </div>
-            <button class="btn-primary" id="observability-save-btn" onclick="saveObservabilityConfig()">Save</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-primary" id="observability-save-btn" onclick="saveObservabilityConfig()">Save</button>
+                <button class="btn-warning" id="observability-skip-btn" onclick="skipObservabilitySetup()" style="display:none;">Skip for now</button>
+            </div>
             <div class="alert alert-error" id="observability-alert-error"></div>
         </div>
     </div>
@@ -438,9 +441,12 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
     <div class="modal-box">
         <div class="modal-header">
             Login
-            <button class="modal-close-btn" onclick="closeLoginModal()">&#10005;</button>
+            <button id="login-modal-close" class="modal-close-btn" onclick="closeLoginModal()">&#10005;</button>
         </div>
         <div class="modal-body">
+            <p class="modal-desc" id="login-modal-desc" style="display:none;">
+                Initial configuration requires an admin login. Please sign in to continue.
+            </p>
             <div class="form-group">
                 <label class="form-label" for="login-username">Username</label>
                 <input type="text" id="login-username" class="form-input"

@@ -496,13 +496,21 @@ Amazon Bedrock은 `spring-ai-bedrock-converse`의 `BedrockProxyChatModel`을 사
 
 ### 사전 요구사항
 
+**초기 셋업을 마치고 대시보드에 진입하기 위해 반드시 필요합니다**
+
+- **LLM 제공자 API 키 최소 1개** — OpenAI, Anthropic, DeepSeek, FriendliAI(EXAONE), Amazon Bedrock 중 하나 이상의 API 키(또는 AWS 자격증명). LLM 설정이 없으면 초기 설정 모달을 통과할 수 없습니다.
+- **GitHub 또는 GitLab Personal Access Token — 둘 중 최소 하나는 필수입니다.** 첫 실행 시 Git Remote Configuration 모달이 강제로 열리며, GitHub 또는 GitLab 토큰이 저장되기 전까지 대시보드 진입이 차단됩니다. 이 토큰은 push 코드 리뷰, PR/MR 인라인 리뷰, 그리고 Static Code Risk Analysis 및 Grafana 장애 분석 시 등록된 애플리케이션 저장소 클론에 사용됩니다.
+
+**런타임에도 필요합니다**
+
 - JDK 21 이상
 - Redis에 저장되는 인증 정보를 암호화하기 위한 비어 있지 않은 `CRYPTO_SECRET_KEY`
-- OpenAI, Anthropic, DeepSeek, FriendliAI(EXAONE) 또는 Amazon Bedrock 중 하나 이상의 API 키 혹은 AWS 자격증명
-- Grafana 장애 분석용 접근 가능한 Loki 서버
-- (선택) Prometheus 메트릭 조회용 Prometheus 서버 URL
-- (선택) Trace 전송을 받을 OTLP 호환 백엔드 또는 OpenTelemetry Collector
-- 코드 리뷰 기능 사용 시 GitHub 또는 GitLab Personal Access Token
+
+**선택 사항**
+
+- 접근 가능한 Loki 서버 — Grafana 장애 분석 시에만 필요합니다. 초기 Observability 설정 모달에서 **Skip for now** 로 건너뛸 수 있으며, 건너뛴 경우에도 Code Review 및 Static Code Risk Analysis는 정상 사용 가능하지만 Grafana 웹훅 분석은 Loki를 설정하기 전까지 사용할 수 없습니다.
+- Prometheus 서버 URL — 메트릭 조회 및 애플리케이션별 대시보드 차트에 사용됩니다.
+- Trace 전송을 받을 OTLP 호환 백엔드 또는 OpenTelemetry Collector
 
 ### 설정
 
@@ -791,6 +799,12 @@ Spring AI Ops는 **Spring Security**를 사용하여 쓰기 작업을 보호합�
 | Method | Path | 설명 |
 |---|---|---|
 | `GET` | `/` | 대시보드 UI |
+| `POST` | `/api/auth/login` | 로그인 → 세션 생성 |
+| `POST` | `/api/auth/logout` | 로그아웃 → 세션 무효화 |
+| `POST` | `/api/auth/password` | 비밀번호 변경 |
+| `POST` | `/api/auth/admin` | 관리자 계정 추가 생성 (admin 전용) |
+| `GET` | `/api/auth/admins` | 관리자 계정 목록 조회 (admin 전용) |
+| `DELETE` | `/api/auth/admins` | 관리자 계정 삭제 (admin 전용) |
 | `POST` | `/api/llm/config` | LLM 제공자 + API 키 저장 |
 | `POST` | `/api/llm/select-provider` | yml에 두 개의 키가 있을 때 제공자 선택 |
 | `GET` | `/api/loki/status` | Loki 설정 상태 조회 |
@@ -800,9 +814,11 @@ Spring AI Ops는 **Spring Security**를 사용하여 쓰기 작업을 보호합�
 | `GET` | `/api/prometheus/application-metrics` | 등록된 애플리케이션별 Prometheus 메트릭 조회 (메모리, CPU, 레이턴시, HTTP 상태) |
 | `POST` | `/api/github/config` | GitHub / GitLab 액세스 토큰 및 기본 URL 저장 |
 | `GET` | `/api/github/config/status` | Git 제공자 설정 상태 조회 |
-| `GET` | `/api/app/list` | 등록된 애플리케이션 목록 조회 |
-| `POST` | `/api/app/add` | 새 애플리케이션 등록 |
-| `DELETE` | `/api/app/remove/{application}` | 애플리케이션 삭제 |
+| `GET` | `/api/apps` | 등록된 애플리케이션 목록 조회 |
+| `GET` | `/api/apps/{name}` | 애플리케이션 Git 설정 조회 |
+| `POST` | `/api/apps` | 새 애플리케이션 등록 |
+| `PUT` | `/api/apps/{name}` | 애플리케이션 Git 설정 수정 |
+| `DELETE` | `/api/apps/{name}` | 애플리케이션 삭제 |
 | `GET` | `/api/firing/{application}/list` | 애플리케이션의 알림 분석 레코드 조회 |
 | `GET` | `/api/commit/{application}/list` | 애플리케이션의 코드 리뷰 레코드 조회 |
 | `POST` | `/api/code-risk` | 정적 코드 위험 분석 실행 |
