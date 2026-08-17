@@ -43,7 +43,7 @@ All Spring AI AutoConfiguration classes are explicitly listed under `spring.auto
 Because AutoConfiguration is disabled, `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP` are composed manually.
 
 ### Cache Store by Environment
-Services depend on `CacheStorePort`. The `local` profile uses `ImMemoryCacheStoreConnector` and disables Redis auto-configuration. Non-local profiles use `RedisCacheStoreConnector` backed by managed Redis. The in-memory connector is non-persistent and intentionally does not expire time-ordered data by TTL.
+Services depend on `CacheStorePort`. The `local` profile uses `InMemoryCacheStoreConnector` and disables Redis auto-configuration. Non-local profiles use `RedisCacheStoreConnector` backed by managed Redis. The in-memory connector is non-persistent and intentionally does not expire time-ordered data by TTL.
 
 ## Package Structure
 

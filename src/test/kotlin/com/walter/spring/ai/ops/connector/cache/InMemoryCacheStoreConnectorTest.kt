@@ -5,8 +5,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.time.Duration
 
-class ImMemoryCacheStoreConnectorTest {
-    private val connector = ImMemoryCacheStoreConnector()
+class InMemoryCacheStoreConnectorTest {
+    private val connector = InMemoryCacheStoreConnector()
 
     @Test
     @DisplayName("값과 Set 데이터를 메모리에 저장하고 조회한다")

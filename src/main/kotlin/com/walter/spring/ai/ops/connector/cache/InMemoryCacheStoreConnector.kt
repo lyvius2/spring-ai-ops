@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 @Profile("local")
 @Component
-class ImMemoryCacheStoreConnector : CacheStorePort {
+class InMemoryCacheStoreConnector : CacheStorePort {
     private val values = ConcurrentHashMap<String, String>()
     private val sets = ConcurrentHashMap<String, MutableSet<String>>()
     private val timeOrderedSets = ConcurrentHashMap<String, ConcurrentHashMap<String, Double>>()
