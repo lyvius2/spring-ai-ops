@@ -3,13 +3,13 @@ package com.walter.spring.ai.ops.config.base
 import feign.Client
 import feign.Request
 import feign.okhttp.OkHttpClient
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import okhttp3.ConnectionPool
 import org.springframework.context.annotation.Bean
-import org.springframework.data.redis.core.StringRedisTemplate
 import java.util.concurrent.TimeUnit
 
 abstract class DynamicConnectorConfig {
-    protected abstract val redisTemplate: StringRedisTemplate
+    protected abstract val cacheStorePort: CacheStorePort
     protected abstract val configuredUrl: String
     protected abstract val redisUrlKey: String
     protected abstract val connectTimeout: Long
@@ -18,7 +18,7 @@ abstract class DynamicConnectorConfig {
     abstract val placeholderUrl: String
 
     protected open fun resolveUrl(): String =
-        redisTemplate.opsForValue().get(redisUrlKey)?.takeIf { it.isNotBlank() }
+        cacheStorePort.get(redisUrlKey)?.takeIf { it.isNotBlank() }
             ?: configuredUrl
 
     protected val httpClient: OkHttpClient = OkHttpClient(SHARED_HTTP_CLIENT)

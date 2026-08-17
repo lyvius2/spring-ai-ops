@@ -18,6 +18,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import org.springframework.security.core.context.SecurityContextHolder
@@ -40,7 +41,7 @@ class AdminServiceTest {
 
     @BeforeEach
     fun setUp() {
-        adminService = AdminService(redisTemplate, objectMapper, passwordEncoder)
+        adminService = AdminService(RedisCacheStoreConnector(redisTemplate), objectMapper, passwordEncoder)
     }
 
     // ── initializeAdminIfAbsent ───────────────────────────────────────────────

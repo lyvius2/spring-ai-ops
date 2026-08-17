@@ -85,7 +85,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 | **Real-Time Dashboard** | WebSocket STOMP push to browser on analysis completion |
 | **Dynamic LLM Configuration** | Switch between OpenAI, Anthropic, DeepSeek, EXAONE (via FriendliAI), and Amazon Bedrock at runtime via the UI — no restart required. Each provider's API key is stored independently and can be updated separately. Amazon Bedrock credentials are managed via `application.yml` or environment variables and are never stored in Redis |
 | **Multi-Application** | Register multiple application names; analysis history is scoped per application |
-| **Zero-RDB Design** | Redis is the only data store; embedded Redis starts automatically in local dev |
+| **Zero-RDB Design** | Managed Redis is used outside local development; the local profile uses non-persistent in-memory storage |
 | **Virtual Thread Executor** | Webhook handlers return immediately; analysis runs on Java 21 virtual threads. LLM API calls are rate-limited via a dedicated Semaphore (default: 20 concurrent) |
 | **Admin Authentication** | Spring Security role-based access control — the `admin` super-account is auto-created on first startup with a one-time password printed to the console; only `admin` can create or delete other administrator accounts; App registration, update, deletion, and Code Risk Analysis require authentication |
 
@@ -486,7 +486,7 @@ POST /webhook/grafana[/{application}]
 | AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI-compatible), EXAONE (`LGAI-EXAONE/K-EXAONE-236B-A23B` via FriendliAI, OpenAI-compatible), Amazon Bedrock (`us.amazon.nova-pro-v1:0` default, any Bedrock-supported model) |
 | Observability | Loki (log queries), Prometheus (metric queries, optional) |
 | Persistence | Redis (primary store, no RDBMS) |
-| Dev Redis | Embedded Redis (auto-start, no install needed) |
+| Local storage | In-memory (non-persistent, no Redis installation needed) |
 | HTTP Client | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
 | Real-Time | Spring WebSocket (STOMP over SockJS) |
 | Templating | Mustache |
@@ -677,7 +677,7 @@ crypto:
 # Build
 ./gradlew build
 
-# Run (embedded Redis starts automatically)
+# Run (the local profile uses in-memory storage)
 ./gradlew bootRun
 
 # Run tests
@@ -846,7 +846,7 @@ com.walter.spring.ai.ops
 │   ├── AuthenticationInterceptor.kt        # Enforces login on PROTECTED_ROUTES
 │   ├── CsrfTokenInterceptor.kt             # Validates X-CSRF-Token on /api/code-risk/**
 │   ├── CsrfTokenProvider.kt                # Generates startup-time CSRF token
-│   ├── EmbeddedRedisConfig.kt              # Auto-start embedded Redis (local profile)
+│   ├── CacheStoreConfig.kt                 # Select in-memory or managed Redis storage by profile
 │   ├── GithubConnectorConfig.kt            # Feign client configuration for GitHub API
 │   ├── GitlabConnectorConfig.kt            # Feign client configuration for GitLab API
 │   ├── GlobalExceptionHandler.kt           # Maps custom exceptions (e.g. InvalidPullRequestException) → JSON error

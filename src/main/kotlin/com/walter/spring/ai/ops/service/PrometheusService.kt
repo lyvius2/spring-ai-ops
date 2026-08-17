@@ -2,20 +2,20 @@ package com.walter.spring.ai.ops.service
 
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_PROMETHEUS_URL
 import com.walter.spring.ai.ops.connector.PrometheusConnector
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryResult
 import com.walter.spring.ai.ops.controller.dto.PrometheusApplicationMetricsResponse
 import com.walter.spring.ai.ops.util.MetricHandler
 import com.walter.spring.ai.ops.util.extension.verifyHttpConnection
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import java.net.URI
 import java.time.Instant
 
 @Service
 class PrometheusService(
-    private val redisTemplate: StringRedisTemplate,
+    private val cacheStorePort: CacheStorePort,
     private val prometheusConnector: PrometheusConnector,
     private val metricHandler: MetricHandler,
     @Value("\${prometheus.url:}") private val prometheusUrlFromConfig: String,
@@ -27,7 +27,7 @@ class PrometheusService(
     fun isConfigured(): Boolean = getPrometheusUrl().isNotBlank()
 
     fun getPrometheusUrl(): String =
-        redisTemplate.opsForValue().get(REDIS_KEY_PROMETHEUS_URL)?.takeIf { it.isNotBlank() }
+        cacheStorePort.get(REDIS_KEY_PROMETHEUS_URL)?.takeIf { it.isNotBlank() }
             ?: prometheusUrlFromConfig
 
     fun setPrometheusUrl(prometheusUrl: String) {
@@ -35,7 +35,7 @@ class PrometheusService(
         if (prometheusUrl.isNotBlank()) {
             URI(prometheusUrl).verifyHttpConnection()
         }
-        redisTemplate.opsForValue().set(REDIS_KEY_PROMETHEUS_URL, prometheusUrl)
+        cacheStorePort.set(REDIS_KEY_PROMETHEUS_URL, prometheusUrl)
     }
 
     fun executeMetricQuery(inquiry: PrometheusQueryInquiry): PrometheusQueryResult {

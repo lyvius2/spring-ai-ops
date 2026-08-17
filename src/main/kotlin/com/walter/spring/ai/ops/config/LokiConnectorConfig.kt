@@ -2,11 +2,11 @@ package com.walter.spring.ai.ops.config
 
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LOKI_URL
 import com.walter.spring.ai.ops.config.base.DynamicConnectorConfig
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 
 class LokiConnectorConfig(
-    override val redisTemplate: StringRedisTemplate,
+    override val cacheStorePort: CacheStorePort,
     @Value("\${loki.url:}") override val configuredUrl: String,
     @Value("\${feign.loki.connect-timeout:5000}") override val connectTimeout: Long,
     @Value("\${feign.loki.read-timeout:30000}") override val readTimeout: Long,

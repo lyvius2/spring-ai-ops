@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build
 ./gradlew build
 
-# Run (embedded Redis starts automatically)
+# Run (the local profile uses in-memory storage)
 ./gradlew bootRun
 
 # Run all tests
@@ -42,8 +42,8 @@ All Spring AI AutoConfiguration classes are explicitly listed under `spring.auto
 ### ChatModel Construction
 Because AutoConfiguration is disabled, `ToolCallingManager.builder().build()`, `RetryUtils.DEFAULT_RETRY_TEMPLATE`, and `ObservationRegistry.NOOP` are composed manually.
 
-### Embedded Redis for Local Development
-`EmbeddedRedisConfig` starts a Redis server in `@PostConstruct` and shuts it down in `@PreDestroy`. The port follows `spring.data.redis.port` in `application.yml`.
+### Cache Store by Environment
+Services depend on `CacheStorePort`. The `local` profile uses `ImMemoryCacheStoreConnector` and disables Redis auto-configuration. Non-local profiles use `RedisCacheStoreConnector` backed by managed Redis. The in-memory connector is non-persistent and intentionally does not expire time-ordered data by TTL.
 
 ## Package Structure
 
@@ -84,7 +84,7 @@ src/main/kotlin/com/walter/spring/ai/ops/
 │   ├── AuthenticationInterceptor   # Enforces login on PROTECTED_ROUTES
 │   ├── CsrfTokenInterceptor        # Validates X-CSRF-Token for /api/code-risk/**
 │   ├── CsrfTokenProvider           # Generates per-startup CSRF token
-│   ├── EmbeddedRedisConfig         # Embedded Redis lifecycle (local profile)
+│   ├── CacheStoreConfig            # Profile-specific cache store and Redis auto-configuration
 │   ├── GlobalExceptionHandler      # Maps exceptions → JSON error responses
 │   ├── MapperConfig                # Primary ObjectMapper bean
 │   ├── PasswordChangeRequiredInterceptor # Blocks /api/** if password change pending
@@ -95,7 +95,8 @@ src/main/kotlin/com/walter/spring/ai/ops/
 │   ├── WebMvcConfig                # Interceptor registry
 │   ├── WebSocketConfig             # STOMP WebSocket endpoint
 │   └── *ConnectorConfig            # Per-connector Feign configs (Loki, Prometheus, GitHub, GitLab)
-├── connector/                      # Feign HTTP clients for external APIs
+├── connector/                      # External connectors and cache store port
+│   ├── cache/                      # CacheStorePort and environment-specific implementations
 │   ├── GithubConnector             # GitHub REST API
 │   ├── GitlabConnector             # GitLab REST API
 │   ├── LokiConnector               # Loki query_range API
@@ -129,14 +130,12 @@ src/main/kotlin/com/walter/spring/ai/ops/
 │   └── RepositoryService           # JGit clone/sync + code risk record persistence
 └── util/                           # Stateless helpers
     ├── extension/                  # Kotlin extension functions
-    │   ├── RedisExtensions         # zSetPushWithTtl, zSetRangeAllDesc, getArrayList
     │   ├── PathExtensions          # resolveSourceFile
     │   ├── StringExtensions        # extractSourceSnippet
     │   └── ...
     ├── CodeAnalysisResultHandler   # JSON parse/sanitize for LLM JSON output
     ├── CryptoProvider              # AES-256-GCM encrypt/decrypt
     ├── MetricHandler               # Prometheus result → metric DTO conversion
-    ├── RedisLockManager            # Distributed Redis lock (acquire/release/withLock)
     └── StackTraceParser            # Extracts stack frames from raw log text
 ```
 
@@ -205,7 +204,7 @@ All external HTTP calls go through OpenFeign interfaces in `connector/`. Each co
 
 ## Redis Storage Patterns
 
-All Redis key names are constants in `RedisKeyConstants`. Never hardcode key strings inline.
+All cache key names are constants in `RedisKeyConstants`. Never hardcode key strings inline. Services must access cached state through `CacheStorePort`; Redis-specific APIs belong only in `RedisCacheStoreConnector`.
 
 | Pattern | Keys | Access method |
 |---|---|---|
@@ -249,7 +248,7 @@ Prometheus metric labels and Loki stream labels must be identical (`job`, `insta
 ```yaml
 server.port: 7079                    # App port (management: 7081)
 spring.data.redis.port: 6379
-spring.profiles.active: local        # 'local' starts embedded Redis
+spring.profiles.active: local        # 'local' uses non-persistent in-memory storage
 
 crypto.secret-key: <required>        # AES-256-GCM key; startup fails if blank
 

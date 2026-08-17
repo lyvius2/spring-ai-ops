@@ -3,9 +3,11 @@ package com.walter.spring.ai.ops.service
 import com.sun.net.httpserver.HttpServer
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LOKI_URL
 import com.walter.spring.ai.ops.connector.LokiConnector
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -13,6 +15,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.net.InetSocketAddress
@@ -31,6 +34,12 @@ class LokiServiceTest {
     private lateinit var lokiConnector: LokiConnector
 
     private var httpServer: HttpServer? = null
+    private lateinit var cacheStorePort: CacheStorePort
+
+    @BeforeEach
+    fun setUp() {
+        cacheStorePort = RedisCacheStoreConnector(redisTemplate)
+    }
 
     @AfterEach
     fun tearDown() {
@@ -45,7 +54,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
-        val lokiService = LokiService(redisTemplate, lokiConnector, "http://loki:3100")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "http://loki:3100")
 
         // when
         val result = lokiService.isConfigured()
@@ -60,7 +69,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn("http://loki:3100")
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when
         val result = lokiService.isConfigured()
@@ -75,7 +84,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when
         val result = lokiService.isConfigured()
@@ -92,7 +101,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
-        val lokiService = LokiService(redisTemplate, lokiConnector, "http://loki:3100")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "http://loki:3100")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -107,7 +116,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn("http://redis-loki:3100")
-        val lokiService = LokiService(redisTemplate, lokiConnector, "http://config-loki:3100")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "http://config-loki:3100")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -122,7 +131,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn("http://redis-loki:3100")
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -137,7 +146,7 @@ class LokiServiceTest {
         // given
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
         `when`(valueOperations.get(REDIS_KEY_LOKI_URL)).thenReturn(null)
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when
         val result = lokiService.getLokiUrl()
@@ -161,7 +170,7 @@ class LokiServiceTest {
         }
         val port = httpServer!!.address.port
         `when`(redisTemplate.opsForValue()).thenReturn(valueOperations)
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when
         lokiService.setLokiUrl("http://localhost:$port")
@@ -175,7 +184,7 @@ class LokiServiceTest {
     fun setLokiUrl_throwsRuntimeException_whenConnectionFails() {
         // given
         val closedPort = ServerSocket(0).use { it.localPort }
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when & then
         assertThatThrownBy { lokiService.setLokiUrl("http://localhost:$closedPort") }
@@ -188,7 +197,7 @@ class LokiServiceTest {
     fun setLokiUrl_doesNotSaveToRedis_whenConnectionFails() {
         // given
         val closedPort = ServerSocket(0).use { it.localPort }
-        val lokiService = LokiService(redisTemplate, lokiConnector, "")
+        val lokiService = LokiService(cacheStorePort, lokiConnector, "")
 
         // when
         runCatching { lokiService.setLokiUrl("http://localhost:$closedPort") }
@@ -197,4 +206,3 @@ class LokiServiceTest {
         org.mockito.Mockito.verifyNoInteractions(redisTemplate)
     }
 }
-

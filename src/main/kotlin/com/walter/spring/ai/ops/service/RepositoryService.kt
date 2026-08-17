@@ -2,21 +2,19 @@ package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_CODE_RISK_PREFIX
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOSITORY_LOCK_PREFIX
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOSITORY_STATUS_PREFIX
 import com.walter.spring.ai.ops.config.RepositoryProperties
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.record.CodeRiskIssue
 import com.walter.spring.ai.ops.record.CodeRiskRecord
 import com.walter.spring.ai.ops.service.dto.CodeChunk
 import com.walter.spring.ai.ops.service.dto.RepositoryStatus
-import com.walter.spring.ai.ops.util.RedisLockManager
-import com.walter.spring.ai.ops.util.extension.zSetPushWithTtl
-import com.walter.spring.ai.ops.util.extension.zSetRangeAllDesc
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,12 +25,14 @@ import kotlin.io.path.invariantSeparatorsPathString
 
 @Service
 class RepositoryService(
-    private val redisTemplate: StringRedisTemplate,
+    private val cacheStorePort: CacheStorePort,
     private val objectMapper: ObjectMapper,
     private val repositoryProperties: RepositoryProperties,
-    private val redisLockManager: RedisLockManager,
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
+    @Value("\${repository.lock.ttl-ms:30000}") private val lockTtlMs: Long = 30_000,
+    @Value("\${repository.lock.wait-timeout-ms:15000}") private val lockWaitTimeoutMs: Long = 15_000,
+    @Value("\${repository.lock.retry-interval-ms:1000}") private val lockRetryIntervalMs: Long = 1_000,
 ) {
     private val log = LoggerFactory.getLogger(RepositoryService::class.java)
 
@@ -126,7 +126,7 @@ class RepositoryService(
         saveRepositoryStatus(RepositoryStatus.running(appName, repositoryPath))
 
         return runCatching {
-            redisLockManager.withLock(redisLockManager.repositoryLockKey(appName)) {
+            withRepositoryLock(appName) {
                 preparePersistentRepositoryUnderLock(repositoryPath, gitUrl, branch, accessToken)
             }
         }.onSuccess {
@@ -138,9 +138,9 @@ class RepositoryService(
 
     fun deletePersistentRepository(appName: String, gitUrl: String): Boolean {
         val repositoryPath = repositoryProperties.resolvePersistentRepositoryPath(appName, gitUrl) ?: return false
-        redisLockManager.withLock(redisLockManager.repositoryLockKey(appName)) {
+        withRepositoryLock(appName) {
             deletePersistentRepositoryDirectory(repositoryPath)
-            redisTemplate.delete("$REDIS_KEY_REPOSITORY_STATUS_PREFIX$appName")
+            cacheStorePort.delete("$REDIS_KEY_REPOSITORY_STATUS_PREFIX$appName")
         }
         return true
     }
@@ -232,31 +232,31 @@ class RepositoryService(
     fun saveAnalyzedResult(appName: String, gitUrl: String, branch: String, result: String, issues: List<CodeRiskIssue> = emptyList(), requestedBy: String? = null): CodeRiskRecord {
         val key = "$REDIS_KEY_CODE_RISK_PREFIX$appName"
         val record = CodeRiskRecord(LocalDateTime.now(), appName, gitUrl, branch, requestedBy, true, result, issues.ifEmpty { null })
-        redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
+        cacheStorePort.addToTimeOrderedSet(key, objectMapper.writeValueAsString(record), retentionHours)
         return record
     }
 
     fun getCodeRiskRecords(application: String): List<CodeRiskRecord> {
         val key = "$REDIS_KEY_CODE_RISK_PREFIX$application"
-        return redisTemplate.zSetRangeAllDesc(key)
+        return cacheStorePort.getTimeOrderedSetDescending(key)
             .mapNotNull { runCatching { objectMapper.readValue(it, CodeRiskRecord::class.java) }.getOrNull() }
             .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }
 
     fun hasCodeRiskRecords(application: String): Boolean {
         val key = "$REDIS_KEY_CODE_RISK_PREFIX$application"
-        return (redisTemplate.opsForZSet().zCard(key) ?: 0L) > 0L
+        return cacheStorePort.getTimeOrderedSetSize(key) > 0L
     }
 
     fun saveRepositoryStatus(status: RepositoryStatus): RepositoryStatus {
         val key = "$REDIS_KEY_REPOSITORY_STATUS_PREFIX${status.applicationName}"
-        redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(status))
+        cacheStorePort.set(key, objectMapper.writeValueAsString(status))
         return status
     }
 
     fun getRepositoryStatus(applicationName: String): RepositoryStatus? {
         val key = "$REDIS_KEY_REPOSITORY_STATUS_PREFIX$applicationName"
-        val value = redisTemplate.opsForValue().get(key) ?: return null
+        val value = cacheStorePort.get(key) ?: return null
         return runCatching {
             objectMapper.readValue(value, RepositoryStatus::class.java)
         }.getOrElse { e ->
@@ -264,4 +264,13 @@ class RepositoryService(
             null
         }
     }
+
+    private fun <T> withRepositoryLock(applicationName: String, block: () -> T): T =
+        cacheStorePort.withLock(
+            key = "$REDIS_KEY_REPOSITORY_LOCK_PREFIX$applicationName",
+            ttl = java.time.Duration.ofMillis(lockTtlMs),
+            waitTimeout = java.time.Duration.ofMillis(lockWaitTimeoutMs),
+            retryInterval = java.time.Duration.ofMillis(lockRetryIntervalMs),
+            block = block,
+        )
 }

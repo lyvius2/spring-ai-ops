@@ -2,19 +2,17 @@ package com.walter.spring.ai.ops.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_FIRING_PREFIX
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.connector.dto.LokiQueryInquiry
 import com.walter.spring.ai.ops.connector.dto.PrometheusQueryInquiry
 import com.walter.spring.ai.ops.controller.dto.GrafanaAlertingRequest
 import com.walter.spring.ai.ops.record.AnalyzeFiringRecord
-import com.walter.spring.ai.ops.util.extension.zSetPushWithTtl
-import com.walter.spring.ai.ops.util.extension.zSetRangeAllDesc
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
 @Service
 class GrafanaService(
-    private val redisTemplate: StringRedisTemplate,
+    private val cacheStorePort: CacheStorePort,
     private val objectMapper: ObjectMapper,
     @Value("\${analysis.data-retention-hours:120}") private val retentionHours: Long,
     @Value("\${analysis.maximum-view-count:5}") private val maximumViewCount: Long,
@@ -70,12 +68,12 @@ class GrafanaService(
 
     fun saveAnalyzeFiringRecord(record: AnalyzeFiringRecord) {
         val key = "${REDIS_KEY_FIRING_PREFIX}${record.application}"
-        redisTemplate.zSetPushWithTtl(key, objectMapper.writeValueAsString(record), retentionHours)
+        cacheStorePort.addToTimeOrderedSet(key, objectMapper.writeValueAsString(record), retentionHours)
     }
 
     fun getAnalyzeFiringRecords(application: String): List<AnalyzeFiringRecord> {
         val key = "${REDIS_KEY_FIRING_PREFIX}${application}"
-        return redisTemplate.zSetRangeAllDesc(key)
+        return cacheStorePort.getTimeOrderedSetDescending(key)
             .mapNotNull { runCatching { objectMapper.readValue(it, AnalyzeFiringRecord::class.java) }.getOrNull() }
             .let { if (maximumViewCount > 0) it.take(maximumViewCount.toInt()) else it }
     }

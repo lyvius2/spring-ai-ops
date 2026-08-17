@@ -29,6 +29,7 @@ import org.springframework.ai.chat.model.ChatResponse
 import org.springframework.ai.chat.model.Generation
 import org.springframework.ai.chat.prompt.Prompt
 import org.springframework.context.ApplicationEventPublisher
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.util.concurrent.Semaphore
@@ -66,7 +67,7 @@ class AiModelServiceTest {
         bedrockAccessKey: String = "",
         bedrockSecretKey: String = "",
     ) = AiModelService(
-        redisTemplate, cryptoProvider, objectMapper, Semaphore(10), eventPublisher,
+        RedisCacheStoreConnector(redisTemplate), cryptoProvider, objectMapper, Semaphore(10), eventPublisher,
         "gpt-4o-mini", openAiApiKey,
         "claude-sonnet-4-6", anthropicApiKey, 4096,
         "deepseek-v4-pro", deepseekApiKey, "https://api.deepseek.com",

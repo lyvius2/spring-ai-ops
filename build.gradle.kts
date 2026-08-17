@@ -21,6 +21,8 @@ repositories {
     mavenCentral()
 }
 
+val mockitoAgent = configurations.create("mockitoAgent")
+
 extra["springAiVersion"] = "1.1.0"
 extra["springCloudVersion"] = "2024.0.1"
 
@@ -49,7 +51,6 @@ dependencies {
     implementation("org.springframework.ai:spring-ai-starter-model-openai")
     implementation("org.springframework.ai:spring-ai-starter-model-anthropic")
     implementation("org.springframework.ai:spring-ai-starter-model-bedrock-converse")
-    implementation("com.github.codemonstur:embedded-redis:1.4.3")
     implementation("org.webjars:sockjs-client:1.5.1")
     implementation("org.webjars:stomp-websocket:2.3.4")
     implementation("org.webjars:highlightjs:11.10.0")
@@ -60,11 +61,15 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    mockitoAgent("org.mockito:mockito-core") {
+        isTransitive = false
+    }
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-javaagent:${mockitoAgent.asPath}")
 }
 
 tasks.withType<KotlinCompile> {

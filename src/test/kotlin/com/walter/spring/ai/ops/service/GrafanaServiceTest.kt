@@ -16,6 +16,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ZSetOperations
 import java.time.Instant
@@ -37,7 +38,7 @@ class GrafanaServiceTest {
 
     @BeforeEach
     fun setUp() {
-        grafanaService = GrafanaService(redisTemplate, objectMapper, retentionHours = 120L, maximumViewCount = 5L)
+        grafanaService = GrafanaService(RedisCacheStoreConnector(redisTemplate), objectMapper, retentionHours = 120L, maximumViewCount = 5L)
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

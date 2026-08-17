@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
 import com.walter.spring.ai.ops.connector.GithubConnector
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
 import com.walter.spring.ai.ops.connector.dto.GitCompareResult
 import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
@@ -15,12 +16,11 @@ import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.CryptoProvider
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 
 @Service
 class GithubService(
-    redisTemplate: StringRedisTemplate,
+    cacheStorePort: CacheStorePort,
     objectMapper: ObjectMapper,
     cryptoProvider: CryptoProvider,
     private val githubConnector: GithubConnector,
@@ -28,7 +28,7 @@ class GithubService(
     @Value("\${analysis.maximum-view-count:5}") maximumViewCount: Long,
     @Value("\${github.access-token:}") override val configuredToken: String,
     @Value("\${github.url:https://api.github.com}") override val configuredUrl: String,
-) : GitRemoteService(redisTemplate, objectMapper, cryptoProvider, retentionHours, maximumViewCount) {
+) : GitRemoteService(cacheStorePort, objectMapper, cryptoProvider, retentionHours, maximumViewCount) {
     private val log = LoggerFactory.getLogger(GithubService::class.java)
 
     override val redisTokenKey: String = REDIS_KEY_GITHUB_TOKEN

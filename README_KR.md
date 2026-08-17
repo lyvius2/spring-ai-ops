@@ -61,7 +61,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 
 모든 분석 결과는 STOMP WebSocket을 통해 실시간으로 브라우저에 전달됩니다.
 
-관계형 데이터베이스는 사용하지 않으며, Redis를 유일한 저장소로 사용합니다. 로컬 개발 환경에서는 Embedded Redis가 자동으로 기동되므로 별도 설치가 필요 없습니다.
+관계형 데이터베이스는 사용하지 않습니다. 로컬 프로파일은 비영속 인메모리 저장소를 사용하고, 그 외 환경은 Managed Redis를 사용합니다.
 
 > **데모 사이트**: [https://ai-ops.duckdns.org](https://ai-ops.duckdns.org)
 
@@ -81,7 +81,7 @@ AI 기반 운영 자동화 도구로, **Grafana Alerting**, **GitHub**, **GitLab
 | **실시간 대시보드** | 분석 완료 시 WebSocket STOMP으로 브라우저에 즉시 전달 |
 | **동적 LLM 전환** | 재시작 없이 UI에서 OpenAI / Anthropic / DeepSeek / EXAONE(FriendliAI) / Amazon Bedrock 전환. 각 제공자의 API 키는 독립적으로 저장·관리되며 개별 업데이트 가능. Amazon Bedrock 자격증명은 `application.yml` 또는 환경변수로 관리되며 Redis에는 저장되지 않음 |
 | **다중 애플리케이션** | 여러 애플리케이션 등록 가능, 분석 히스토리가 애플리케이션별로 분리 |
-| **RDB 미사용** | Redis만 사용, 로컬 개발 시 Embedded Redis 자동 기동 |
+| **RDB 미사용** | 로컬은 비영속 인메모리 저장소, 그 외 환경은 Managed Redis 사용 |
 | **Virtual Thread** | 웹훅 핸들러는 즉시 응답, 분석은 Java 21 가상 스레드에서 비동기 처리. LLM API 호출은 별도 Semaphore로 동시 호출 수 제한 (기본: 20) |
 | **관리자 인증** | Spring Security 기반 접근 제어 — 처음 기동 시 관리자 계정이 없으면 `admin` 슈퍼 계정이 자동 생성되고 초기 비밀번호가 콘솔 로그에 한 번 출력됩니다. `admin` 계정만이 다른 관리자 계정을 생성·삭제할 수 있으며, 앱 등록·수정·삭제 및 Code Risk Analysis 실행에는 관리자 로그인이 필요합니다 |
 
@@ -477,7 +477,7 @@ POST /webhook/grafana[/{application}]
 | AI | Spring AI 1.1.0 — OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-6`), DeepSeek (`deepseek-v4-pro`, OpenAI 호환 API), EXAONE (`LGAI-EXAONE/K-EXAONE-236B-A23B`, FriendliAI 서버리스 API, OpenAI 호환), Amazon Bedrock (`us.amazon.nova-pro-v1:0` 기본, Bedrock 지원 모델 전체 사용 가능) |
 | 관측성 | Loki (로그 조회), Prometheus (메트릭 조회, 선택) |
 | 저장소 | Redis (유일한 데이터 저장소, RDB 미사용) |
-| 개발용 Redis | Embedded Redis (자동 기동, 별도 설치 불필요) |
+| 로컬 저장소 | 인메모리 방식 (비영속, Redis 설치 불필요) |
 | HTTP 클라이언트 | Spring Cloud OpenFeign + Resilience4j Circuit Breaker |
 | 실시간 통신 | Spring WebSocket (STOMP over SockJS) |
 | 템플릿 | Mustache |
@@ -646,7 +646,7 @@ crypto:
 # 빌드
 ./gradlew build
 
-# 실행 (Embedded Redis 자동 기동)
+# 실행 (로컬 프로파일은 인메모리 저장소 사용)
 ./gradlew bootRun
 
 # 전체 테스트

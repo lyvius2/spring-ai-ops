@@ -38,6 +38,7 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 
@@ -402,5 +403,5 @@ class GitlabServiceTest {
     )
 
     private fun buildService(configuredToken: String = "") =
-        GitlabService(redisTemplate, objectMapper, cryptoProvider, gitlabConnector, 120L, 5L, configuredToken, "https://gitlab.com/api/v4")
+        GitlabService(RedisCacheStoreConnector(redisTemplate), objectMapper, cryptoProvider, gitlabConnector, 120L, 5L, configuredToken, "https://gitlab.com/api/v4")
 }

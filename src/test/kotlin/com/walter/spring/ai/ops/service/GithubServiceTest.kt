@@ -33,6 +33,7 @@ import org.mockito.Mockito.mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.time.LocalDateTime
@@ -56,7 +57,7 @@ class GithubServiceTest {
     private fun buildService(
         configuredToken: String = "",
         githubUrlFromConfig: String = "https://api.github.com",
-    ) = GithubService(redisTemplate, objectMapper, cryptoProvider, githubConnector, 120L, 5L, configuredToken, githubUrlFromConfig)
+    ) = GithubService(RedisCacheStoreConnector(redisTemplate), objectMapper, cryptoProvider, githubConnector, 120L, 5L, configuredToken, githubUrlFromConfig)
 
     // ── getGithubToken ────────────────────────────────────────────────────────
 

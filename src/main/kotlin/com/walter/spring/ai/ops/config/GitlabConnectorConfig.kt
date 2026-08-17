@@ -3,15 +3,15 @@ package com.walter.spring.ai.ops.config
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_URL
 import com.walter.spring.ai.ops.config.base.DynamicConnectorConfig
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.util.CryptoProvider
 import feign.RequestInterceptor
 import feign.RequestTemplate
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
-import org.springframework.data.redis.core.StringRedisTemplate
 
 class GitlabConnectorConfig(
-    override val redisTemplate: StringRedisTemplate,
+    override val cacheStorePort: CacheStorePort,
     private val cryptoProvider: CryptoProvider,
     @Value("\${gitlab.url:https://gitlab.com/api/v4}") override val configuredUrl: String,
     @Value("\${gitlab.access-token:}") private val configuredToken: String,
@@ -29,7 +29,7 @@ class GitlabConnectorConfig(
 
     @Bean
     fun gitlabAuthInterceptor(): RequestInterceptor = RequestInterceptor { template ->
-        val token = redisTemplate.opsForValue().get(REDIS_KEY_GITLAB_TOKEN)
+        val token = cacheStorePort.get(REDIS_KEY_GITLAB_TOKEN)
             ?.takeIf { it.isNotBlank() }
             ?.let { runCatching { cryptoProvider.decrypt(it) }.getOrNull() }
             ?.takeIf { it.isNotBlank() }

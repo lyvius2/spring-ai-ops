@@ -5,10 +5,10 @@ import com.walter.spring.ai.ops.code.LlmProvider
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_LLM_APIS
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_USAGE_LLM
 import com.walter.spring.ai.ops.controller.dto.LlmStatusResponse
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.event.RateLimitHitEvent
 import com.walter.spring.ai.ops.service.dto.LlmConfig
 import com.walter.spring.ai.ops.util.CryptoProvider
-import com.walter.spring.ai.ops.util.extension.getArrayList
 import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.ai.anthropic.AnthropicChatModel
@@ -36,14 +36,13 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import java.util.concurrent.Semaphore
 
 @Service
 class AiModelService(
-    private val redisTemplate: StringRedisTemplate,
+    private val cacheStorePort: CacheStorePort,
     private val cryptoProvider: CryptoProvider,
     private val objectMapper: ObjectMapper,
     @Qualifier("llmRateLimiter") private val llmRateLimiter: Semaphore,
@@ -73,7 +72,7 @@ class AiModelService(
 
     @EventListener(ApplicationStartedEvent::class)
     fun initialize() {
-        val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+        val llmConfigs = getLlmConfigs()
         var llmConfigsUpdated = false
         for (provider in LlmProvider.entries) {
             val matchedLlmConfig: LlmConfig? = llmConfigs.firstOrNull { it.provider == provider }
@@ -92,7 +91,7 @@ class AiModelService(
         }
 
         if (llmConfigsUpdated) {
-            redisTemplate.opsForValue().set(REDIS_KEY_LLM_APIS, objectMapper.writeValueAsString(llmConfigs))
+            cacheStorePort.set(REDIS_KEY_LLM_APIS, objectMapper.writeValueAsString(llmConfigs))
         }
 
         val ymlKeyCount = listOf(openAiApiKey, anthropicApiKey, deepseekApiKey).count { it.isNotBlank() }
@@ -101,13 +100,13 @@ class AiModelService(
         } else {
             null
         }
-        val savedUsageLlm = redisTemplate.opsForValue().get(REDIS_KEY_USAGE_LLM)?.takeIf { it.isNotBlank() }
+        val savedUsageLlm = cacheStorePort.get(REDIS_KEY_USAGE_LLM)?.takeIf { it.isNotBlank() }
         val usageLlm: String = savedUsageLlm ?: fallbackUsage ?: ""
         if (usageLlm.isBlank()) {
             return
         }
         if (savedUsageLlm == null) {
-            redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, usageLlm)
+            cacheStorePort.set(REDIS_KEY_USAGE_LLM, usageLlm)
         }
 
         val matchedLlmConfig: LlmConfig? = llmConfigs.firstOrNull { it.provider.key == usageLlm }
@@ -169,11 +168,11 @@ class AiModelService(
             if (bedrockChatModel == null) {
                 bedrockChatModel = buildBedrockChatModel()
             }
-            redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
+            cacheStorePort.set(REDIS_KEY_USAGE_LLM, provider.key)
             chatModel = bedrockChatModel
             return
         }
-        val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+        val llmConfigs = getLlmConfigs()
         val existingConfig = llmConfigs.firstOrNull { it.provider == provider }
         val effectiveApiKey = apiKey.ifBlank {
             existingConfig?.apiKey
@@ -188,8 +187,8 @@ class AiModelService(
         } else {
             llmConfigs.add(LlmConfig(provider, encryptedKey))
         }
-        redisTemplate.opsForValue().set(REDIS_KEY_LLM_APIS, objectMapper.writeValueAsString(llmConfigs))
-        redisTemplate.opsForValue().set(REDIS_KEY_USAGE_LLM, provider.key)
+        cacheStorePort.set(REDIS_KEY_LLM_APIS, objectMapper.writeValueAsString(llmConfigs))
+        cacheStorePort.set(REDIS_KEY_USAGE_LLM, provider.key)
 
         chatModel = buildChatModel(provider, effectiveApiKey)
     }
@@ -206,15 +205,26 @@ class AiModelService(
     }
 
     fun getCurrentLlm(): String? {
-        return redisTemplate.opsForValue().get(REDIS_KEY_USAGE_LLM)
+        return cacheStorePort.get(REDIS_KEY_USAGE_LLM)
     }
 
     fun hasApiKey(provider: LlmProvider): Boolean {
         if (provider == LlmProvider.BEDROCK) {
             return bedrockRegion.isNotBlank()
         }
-        val llmConfigs = redisTemplate.getArrayList(REDIS_KEY_LLM_APIS, LlmConfig::class.java)
+        val llmConfigs = getLlmConfigs()
         return llmConfigs.any { it.provider == provider && !it.apiKey.isNullOrBlank() }
+    }
+
+    private fun getLlmConfigs(): ArrayList<LlmConfig> {
+        val value = cacheStorePort.get(REDIS_KEY_LLM_APIS) ?: return arrayListOf()
+        return runCatching {
+            val collectionType = objectMapper.typeFactory.constructCollectionType(ArrayList::class.java, LlmConfig::class.java)
+            objectMapper.readValue<ArrayList<LlmConfig>>(value, collectionType)
+        }.getOrElse { e ->
+            log.warn("Failed to read LLM configurations from cache. cause: {}", e.message)
+            arrayListOf()
+        }
     }
 
     private fun callWithRateLimitRetry(model: ChatModel, prompt: Prompt, maxRetries: Int = 3): String {

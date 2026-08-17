@@ -7,7 +7,6 @@ import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOS
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_REPOSITORY_STATUS_PREFIX
 import com.walter.spring.ai.ops.config.RepositoryProperties
 import com.walter.spring.ai.ops.service.dto.RepositoryStatus
-import com.walter.spring.ai.ops.util.RedisLockManager
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.eclipse.jgit.api.Git
@@ -24,6 +23,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.redis.core.script.RedisScript
+import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import org.springframework.data.redis.core.ZSetOperations
@@ -54,19 +54,15 @@ class RepositoryServiceTest {
 
     @BeforeEach
     fun setUp() {
-        val lockManager = RedisLockManager(
-            redisTemplate = redisTemplate,
-            defaultLockTtlMs = 1_000,
-            defaultWaitTimeoutMs = 0,
-            defaultRetryIntervalMs = 1,
-        )
         service = RepositoryService(
-            redisTemplate = redisTemplate,
+            cacheStorePort = RedisCacheStoreConnector(redisTemplate),
             objectMapper = ObjectMapper().findAndRegisterModules(),
             repositoryProperties = RepositoryProperties(),
-            redisLockManager = lockManager,
             retentionHours = 120L,
             maximumViewCount = 5L,
+            lockTtlMs = 1_000L,
+            lockWaitTimeoutMs = 0L,
+            lockRetryIntervalMs = 1L,
         )
 
         // Create a local bare repository with one commit on 'main' and one on 'feature'
@@ -87,19 +83,15 @@ class RepositoryServiceTest {
     }
 
     private fun createPersistentRepositoryService(storageRoot: Path): RepositoryService {
-        val lockManager = RedisLockManager(
-            redisTemplate = redisTemplate,
-            defaultLockTtlMs = 1_000,
-            defaultWaitTimeoutMs = 0,
-            defaultRetryIntervalMs = 1,
-        )
         return RepositoryService(
-            redisTemplate = redisTemplate,
+            cacheStorePort = RedisCacheStoreConnector(redisTemplate),
             objectMapper = ObjectMapper().findAndRegisterModules(),
             repositoryProperties = RepositoryProperties(stored = true, localPath = storageRoot.toString()),
-            redisLockManager = lockManager,
             retentionHours = 120L,
             maximumViewCount = 5L,
+            lockTtlMs = 1_000L,
+            lockWaitTimeoutMs = 0L,
+            lockRetryIntervalMs = 1L,
         )
     }
 
@@ -295,7 +287,7 @@ class RepositoryServiceTest {
         }
         val status = captureLastRepositoryStatus("test-app", expectedWriteCount = 2)
         assertThat(status.cloneStatus).isEqualTo(RepositoryCloneStatus.FAILED)
-        assertThat(status.lastError).contains("Failed to acquire Redis lock")
+        assertThat(status.lastError).contains("Failed to acquire cache lock")
     }
 
     // ── preparePersistentRepository ───────────────────────────────────────────
@@ -662,19 +654,15 @@ class RepositoryServiceTest {
     fun givenRecordsInRedis_whenGetCodeRiskRecords_thenReturnsList() {
         // given
         val objectMapper = ObjectMapper().findAndRegisterModules()
-        val lockManager = RedisLockManager(
-            redisTemplate = redisTemplate,
-            defaultLockTtlMs = 1_000,
-            defaultWaitTimeoutMs = 0,
-            defaultRetryIntervalMs = 1,
-        )
         val innerService = RepositoryService(
-            redisTemplate = redisTemplate,
+            cacheStorePort = RedisCacheStoreConnector(redisTemplate),
             objectMapper = objectMapper,
             repositoryProperties = RepositoryProperties(),
-            redisLockManager = lockManager,
             retentionHours = 120L,
             maximumViewCount = 5L,
+            lockTtlMs = 1_000L,
+            lockWaitTimeoutMs = 0L,
+            lockRetryIntervalMs = 1L,
         )
         val json = """{"analyzedAt":"2026-04-20T10:00:00","application":"my-app","githubUrl":"https://github.com/owner/repo.git","branch":"main","analyzedResult":"ok"}"""
         `when`(redisTemplate.opsForZSet()).thenReturn(zSetOps)

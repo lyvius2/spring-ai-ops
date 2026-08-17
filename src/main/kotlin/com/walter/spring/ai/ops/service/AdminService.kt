@@ -4,13 +4,13 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_ADMINISTRATORS
 import com.walter.spring.ai.ops.config.annotation.AdminOnly
+import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.controller.dto.AdminInfo
 import com.walter.spring.ai.ops.record.Administrator
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.event.EventListener
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
@@ -22,7 +22,7 @@ import java.time.Instant
 
 @Service
 class AdminService(
-    private val redisTemplate: StringRedisTemplate,
+    private val cacheStorePort: CacheStorePort,
     private val objectMapper: ObjectMapper,
     private val passwordEncoder: PasswordEncoder,
 ) {
@@ -136,7 +136,7 @@ class AdminService(
     }
 
     fun getAdmins(): List<Administrator> {
-        val value = redisTemplate.opsForValue().get(REDIS_KEY_ADMINISTRATORS) ?: return emptyList()
+        val value = cacheStorePort.get(REDIS_KEY_ADMINISTRATORS) ?: return emptyList()
         return runCatching {
             objectMapper.readValue(value, object : TypeReference<List<Administrator>>() {})
         }.getOrElse {
@@ -148,7 +148,7 @@ class AdminService(
         getAdmins().find { it.username() == username }
 
     private fun saveAdmins(admins: List<Administrator>) {
-        redisTemplate.opsForValue().set(REDIS_KEY_ADMINISTRATORS, objectMapper.writeValueAsString(admins))
+        cacheStorePort.set(REDIS_KEY_ADMINISTRATORS, objectMapper.writeValueAsString(admins))
     }
 
     private fun generateRandomPassword(): String {
