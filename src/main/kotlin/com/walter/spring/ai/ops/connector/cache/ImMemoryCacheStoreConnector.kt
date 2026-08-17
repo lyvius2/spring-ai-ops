@@ -1,11 +1,15 @@
 package com.walter.spring.ai.ops.connector.cache
 
+import org.springframework.context.annotation.Profile
+import org.springframework.stereotype.Component
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
+@Profile("local")
+@Component
 class ImMemoryCacheStoreConnector : CacheStorePort {
     private val values = ConcurrentHashMap<String, String>()
     private val sets = ConcurrentHashMap<String, MutableSet<String>>()

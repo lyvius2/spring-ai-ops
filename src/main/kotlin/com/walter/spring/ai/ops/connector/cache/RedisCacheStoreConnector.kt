@@ -1,12 +1,16 @@
 package com.walter.spring.ai.ops.connector.cache
 
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Profile
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
+import org.springframework.stereotype.Component
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
+@Profile("!local")
+@Component
 class RedisCacheStoreConnector(
     private val redisTemplate: StringRedisTemplate,
 ) : CacheStorePort {
