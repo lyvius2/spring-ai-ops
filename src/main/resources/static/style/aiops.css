@@ -140,19 +140,63 @@ body {
     background-color: #fafafa;
 }
 
-/* ── Status badges ── */
-.badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 3px;
-    font-size: 0.75rem;
+/* ── System-status chips ── */
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 160px;
+    box-sizing: border-box;
+    padding: 4px 14px 4px 6px;
+    border-radius: 4px;
+    font-size: 0.78rem;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     text-transform: uppercase;
+    line-height: 1.4;
+    vertical-align: middle;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
-.badge-up   { background: #6db33f; color: #fff; }
-.badge-down { background: #aaa;    color: #fff; }
+.status-chip + .status-chip { margin-left: 6px; }
+
+.status-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.status-chip-up {
+    color: #4d8a2b;
+    border: 1px solid #4d8a2b;
+}
+
+.status-chip-up:hover { background: #f6faf1; }
+
+.status-chip-down {
+    color: #808080;
+    border: 1px solid #808080;
+    justify-content: center;
+    padding: 6px 14px;
+}
+
+.status-chip-down:hover { background: #f7f7f7; }
+
+.status-chip-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.status-chip-label {
+    white-space: nowrap;
+    flex: 1;
+    text-align: center;
+    padding-right: 4px;
+}
 
 /* ── Reconfigure button ── */
 .btn-secondary {
@@ -229,15 +273,6 @@ body {
     filter: grayscale(10%);
 }
 
-/* logo displayed next to badge in the config panel */
-.provider-logo-badge {
-    opacity: 1;
-    filter: none;
-    width: 18px;
-    height: 18px;
-    margin-right: 6px;
-    vertical-align: middle;
-}
 
 .radio-option input[type="radio"]:checked + label {
     border-color: #6db33f;
