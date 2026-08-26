@@ -701,20 +701,25 @@ function renderObservabilityStatus() {
 
     const badges = [];
     if (_statusLokiUrl) {
-        badges.push(`<img src="/images/loki.svg" class="provider-logo provider-logo-badge" alt="Loki" onerror="this.style.display='none'">
-                     <span class="badge badge-up">LOKI</span>`);
+        badges.push(`<span class="status-chip status-chip-up">
+                        <img src="/images/loki.svg" class="status-chip-icon" alt="Loki" onerror="this.style.display='none'">
+                        <span class="status-chip-label">LOKI</span>
+                     </span>`);
     }
     if (_statusPrometheusUrl) {
-        badges.push(`<img src="/images/prometheus.svg" class="provider-logo provider-logo-badge" alt="Prometheus" onerror="this.style.display='none'">
-                     <span class="badge badge-up">PROMETHEUS</span>`);
+        badges.push(`<span class="status-chip status-chip-up">
+                        <img src="/images/prometheus.svg" class="status-chip-icon" alt="Prometheus" onerror="this.style.display='none'">
+                        <span class="status-chip-label">PROMETHEUS</span>
+                     </span>`);
     }
 
     if (badges.length === 0) {
         cell.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between;">
                 <div>
-                    <span style="color:#aaa;">&mdash;</span>
-                    <span class="badge badge-down">NOT CONFIGURED</span>
+                    <span class="status-chip status-chip-down">
+                        <span class="status-chip-label">NOT CONFIGURED</span>
+                    </span>
                 </div>
                 <button class="btn-secondary" style="margin-top:0;" onclick="openObservabilityModalForReconfigure()">Configure</button>
             </div>
@@ -3826,8 +3831,10 @@ function renderGitRemoteStatus(statusData) {
     const badges = providers.map(p => {
         const lp    = escHtml(p.toLowerCase());
         const pEsc  = escHtml(p);
-        return `<img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${pEsc}" onerror="this.style.display='none'">
-                <span class="badge badge-up">${pEsc}</span>`;
+        return `<span class="status-chip status-chip-up">
+                    <img src="/images/${lp}.svg" class="status-chip-icon" alt="${pEsc}" onerror="this.style.display='none'">
+                    <span class="status-chip-label">${pEsc}</span>
+                </span>`;
     }).join(' ');
 
     cell.innerHTML = `
@@ -3859,8 +3866,10 @@ function renderLlmStatus(provider) {
     cell.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between;">
             <div>
-                <img src="/images/${lp}.svg" class="provider-logo provider-logo-badge" alt="${lp}" onerror="this.style.display='none'">
-                <span class="badge badge-up">${lpUpper}</span>
+                <span class="status-chip status-chip-up">
+                    <img src="/images/${lp}.svg" class="status-chip-icon" alt="${lp}" onerror="this.style.display='none'">
+                    <span class="status-chip-label">${lpUpper}</span>
+                </span>
                 <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
             </div>
             <button class="btn-secondary" style="margin-top:0;" onclick="openLlmModal(true)">Reconfigure</button>
