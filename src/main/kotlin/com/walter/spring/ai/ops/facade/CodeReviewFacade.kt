@@ -15,6 +15,7 @@ import com.walter.spring.ai.ops.service.AiModelService
 import com.walter.spring.ai.ops.service.ApplicationService
 import com.walter.spring.ai.ops.service.GitRemoteService
 import com.walter.spring.ai.ops.service.MessageService
+import com.walter.spring.ai.ops.service.dto.GitRepositoryCoordinates
 import com.walter.spring.ai.ops.util.GitRemoteResolver
 import com.walter.spring.ai.ops.util.InlineReviewParser
 import com.walter.spring.ai.ops.util.extension.toISO8601
@@ -38,15 +39,13 @@ class CodeReviewFacade(
     private val log = LoggerFactory.getLogger(CodeReviewFacade::class.java)
 
     fun getBranches(application: String): List<String> {
-        val gitUrl = applicationService.getGitRepoByAppName(application)
-        val coordinates = gitRemoteResolver.parseCoordinates(gitUrl)
-        return gitRemoteResolver.detectProviderServiceByUrl(gitUrl).getBranches(coordinates.owner, coordinates.repo)
+        val context = resolveGit(application)
+        return context.service.getBranches(context.coordinates.owner, context.coordinates.repo)
     }
 
     fun getCommitHistory(application: String, branch: String): List<GitCommitHistoryEntry> {
-        val gitUrl = applicationService.getGitRepoByAppName(application)
-        val coordinates = gitRemoteResolver.parseCoordinates(gitUrl)
-        return gitRemoteResolver.detectProviderServiceByUrl(gitUrl).getCommitHistory(coordinates.owner, coordinates.repo, branch)
+        val context = resolveGit(application)
+        return context.service.getCommitHistory(context.coordinates.owner, context.coordinates.repo, branch)
     }
 
     fun validateManualReview(application: String, request: ManualCodeReviewRequest) {
@@ -60,8 +59,7 @@ class CodeReviewFacade(
         require(selectedIndexes.zipWithNext().all { (left, right) -> right == left + 1 }) {
             "Selected commits must be consecutive."
         }
-        val selected = selectedIndexes.map { history[it] }
-        val dates = selected.map { OffsetDateTime.parse(it.committedAt).toInstant() }
+        val dates = selectedIndexes.map { history[it].instant() }
         require(Duration.between(dates.min(), dates.max()).abs() <= Duration.ofDays(7)) {
             "The selected commits must be within seven days of each other."
         }
@@ -69,30 +67,74 @@ class CodeReviewFacade(
 
     fun analyzeManualReview(application: String, request: ManualCodeReviewRequest) {
         runCatching {
-            validateManualReview(application, request)
-            val gitUrl = applicationService.getGitRepoByAppName(application)
-            val coordinates = gitRemoteResolver.parseCoordinates(gitUrl)
-            val gitService = gitRemoteResolver.detectProviderServiceByUrl(gitUrl)
-            val history = gitService.getCommitHistory(coordinates.owner, coordinates.repo, request.branch)
-            val selected = request.commitShas.map { sha -> history.first { it.sha == sha } }
-            val oldest = selected.minBy { OffsetDateTime.parse(it.committedAt).toInstant() }
-            val newest = selected.maxBy { OffsetDateTime.parse(it.committedAt).toInstant() }
-            val inquiry = GitDifferInquiry(coordinates.owner, coordinates.repo, oldest.sha, newest.sha, request.commitShas)
-            val compareResult = gitService.executeInquiryDiffer(inquiry)
+            val context = resolveGit(application)
+            val selection = selectCommits(context, request)
+            val inquiry = GitDifferInquiry(context.coordinates.owner, context.coordinates.repo, selection.oldest.sha, selection.newest.sha, request.commitShas)
+            val compareResult = context.service.executeInquiryDiffer(inquiry)
             require(!compareResult.hasError()) { compareResult.errorMessage }
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
-            val summaries = selected.sortedBy { OffsetDateTime.parse(it.committedAt).toInstant() }
-                .map { CommitSummary(it.sha, it.title, it.url, it.committedAt) }
-            val compareUrl = if (selected.size == 1) newest.url else "$gitUrl/compare/${oldest.sha}...${newest.sha}"
-            val record = CodeReviewRecord(
-                OffsetDateTime.parse(newest.committedAt).toLocalDateTime(), application, compareUrl,
-                newest.title, compareResult.changedFiles(), reviewResult, LocalDateTime.now(), summaries, request.branch,
-            )
-            gitService.saveCodeReviewRecord(record)
-            messageService.pushCodeReview(record)
-            eventPublisher.publishEvent(CodeReviewCompletedEvent(record, application))
+            val record = createManualReviewRecord(application, request.branch, context.gitUrl, selection, compareResult, reviewResult)
+            publishReview(context.service, record, application)
         }.onFailure { log.error("Failed to analyze manually selected commits: application={}, error={}", application, it.message, it) }
     }
+
+    private data class GitContext(
+        val gitUrl: String,
+        val coordinates: GitRepositoryCoordinates,
+        val service: GitRemoteService,
+    )
+
+    private data class CommitSelection(val ordered: List<GitCommitHistoryEntry>) {
+        val oldest: GitCommitHistoryEntry get() = ordered.first()
+        val newest: GitCommitHistoryEntry get() = ordered.last()
+        fun compareUrl(gitUrl: String): String =
+            if (ordered.size == 1) newest.url else "$gitUrl/compare/${oldest.sha}...${newest.sha}"
+    }
+
+    private fun resolveGit(application: String): GitContext {
+        val gitUrl = applicationService.getGitRepoByAppName(application)
+        val coordinates = gitRemoteResolver.parseCoordinates(gitUrl)
+        val service = gitRemoteResolver.detectProviderServiceByUrl(gitUrl)
+        return GitContext(gitUrl, coordinates, service)
+    }
+
+    private fun selectCommits(context: GitContext, request: ManualCodeReviewRequest): CommitSelection {
+        val history = context.service.getCommitHistory(context.coordinates.owner, context.coordinates.repo, request.branch)
+        val ordered = request.commitShas
+            .map { sha -> history.first { it.sha == sha } }
+            .sortedBy { it.instant() }
+        return CommitSelection(ordered)
+    }
+
+    private fun createManualReviewRecord(
+        application: String,
+        branch: String,
+        gitUrl: String,
+        selection: CommitSelection,
+        compareResult: GitCompareResult,
+        reviewResult: String,
+    ): CodeReviewRecord {
+        val summaries = selection.ordered.map { CommitSummary(it.sha, it.title, it.url, it.committedAt) }
+        return CodeReviewRecord(
+            OffsetDateTime.parse(selection.newest.committedAt).toLocalDateTime(),
+            application,
+            selection.compareUrl(gitUrl),
+            selection.newest.title,
+            compareResult.changedFiles(),
+            reviewResult,
+            LocalDateTime.now(),
+            summaries,
+            branch,
+        )
+    }
+
+    private fun publishReview(gitService: GitRemoteService, record: CodeReviewRecord, application: String) {
+        gitService.saveCodeReviewRecord(record)
+        messageService.pushCodeReview(record)
+        eventPublisher.publishEvent(CodeReviewCompletedEvent(record, application))
+    }
+
+    private fun GitCommitHistoryEntry.instant() = OffsetDateTime.parse(committedAt).toInstant()
 
     fun analyzeCodeDiffer(request: GithubPushRequest, application: String?) {
         if (request.commits.isEmpty()) {
@@ -121,9 +163,7 @@ class CodeReviewFacade(
             val compareResult = gitService.executeInquiryDiffer(inquiry)
             val reviewResult = aiModelService.executeAnalyzeCodeDiffer(compareResult.createCodeReviewPrompt())
             val record = createCodeReviewRecord(request, targetApplication, compareResult, reviewResult)
-            gitService.saveCodeReviewRecord(record)
-            messageService.pushCodeReview(record)
-            eventPublisher.publishEvent(CodeReviewCompletedEvent(record, targetApplication))
+            publishReview(gitService, record, targetApplication)
         }.onFailure { log.error("Failed to analyze code review record : {}", it.message, it) }
     }
 

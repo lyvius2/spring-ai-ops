@@ -6,6 +6,7 @@ plugins {
     kotlin("plugin.spring") version "2.2.0"
     id("org.springframework.boot") version "3.4.4"
     id("io.spring.dependency-management") version "1.1.7"
+    kotlin("kapt") version "2.2.0"
 }
 
 group = "com.walter.spring.ai.ops"
@@ -58,6 +59,7 @@ dependencies {
     implementation(kotlin("stdlib"))
 
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+    kapt("org.springframework.boot:spring-boot-configuration-processor")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
@@ -65,6 +67,7 @@ dependencies {
         isTransitive = false
     }
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(kotlin("test"))
 }
 
 tasks.withType<Test> {
