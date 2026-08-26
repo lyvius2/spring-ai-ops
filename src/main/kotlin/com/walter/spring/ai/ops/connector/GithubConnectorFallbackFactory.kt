@@ -5,6 +5,8 @@ import com.walter.spring.ai.ops.connector.dto.GithubCompareResult
 import com.walter.spring.ai.ops.connector.dto.GithubIssueCommentResponse
 import com.walter.spring.ai.ops.connector.dto.GithubReviewRequest
 import com.walter.spring.ai.ops.connector.dto.GithubReviewResponse
+import com.walter.spring.ai.ops.connector.dto.GitBranch
+import com.walter.spring.ai.ops.connector.dto.GithubApiCommit
 import org.slf4j.LoggerFactory
 import org.springframework.cloud.openfeign.FallbackFactory
 import org.springframework.stereotype.Component
@@ -15,6 +17,16 @@ class GithubConnectorFallbackFactory : FallbackFactory<GithubConnector> {
 
     override fun create(cause: Throwable): GithubConnector {
         return object : GithubConnector {
+            override fun getBranches(owner: String, repo: String, perPage: Int): List<GitBranch> {
+                log.error("GitHub getBranches failed: owner={}, repo={}, error={}", owner, repo, cause.message, cause)
+                return emptyList()
+            }
+
+            override fun getCommits(owner: String, repo: String, sha: String, perPage: Int): List<GithubApiCommit> {
+                log.error("GitHub getCommits failed: owner={}, repo={}, branch={}, error={}", owner, repo, sha, cause.message, cause)
+                return emptyList()
+            }
+
             override fun compare(owner: String, repo: String, basehead: String): GithubCompareResult {
                 log.error("GitHub compare failed: owner={}, repo={}, basehead={}, error={}", owner, repo, basehead, cause.message, cause)
                 return GithubCompareResult(errorMessage = cause.message ?: "Failed to connect to GitHub API.")

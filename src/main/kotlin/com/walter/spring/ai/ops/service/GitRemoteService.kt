@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.connector.dto.GitDifferInquiry
 import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
 import com.walter.spring.ai.ops.record.CodeReviewRecord
 import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
+import com.walter.spring.ai.ops.controller.dto.GitCommitHistoryEntry
 import com.walter.spring.ai.ops.util.CryptoProvider
 
 abstract class GitRemoteService(
@@ -74,6 +75,10 @@ abstract class GitRemoteService(
     }
 
     abstract fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult
+
+    abstract fun getBranches(owner: String, repo: String): List<String>
+
+    abstract fun getCommitHistory(owner: String, repo: String, branch: String): List<GitCommitHistoryEntry>
 
     abstract fun postPullRequestComment(inquiry: GitDifferInquiry, number: Int, body: String)
 

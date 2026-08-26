@@ -10,6 +10,7 @@ import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDetail
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
+import com.walter.spring.ai.ops.connector.dto.GitBranch
 import org.springframework.cloud.openfeign.FeignClient
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -19,6 +20,12 @@ import org.springframework.web.bind.annotation.RequestParam
 
 @FeignClient(name = "gitlabConnector", url = PLACEHOLDER_URL, configuration = [GitlabConnectorConfig::class], fallbackFactory = GitlabConnectorFallbackFactory::class)
 interface GitlabConnector {
+    @GetMapping("/projects/{projectPath}/repository/branches")
+    fun getBranches(@PathVariable projectPath: String, @RequestParam("per_page") perPage: Int = 100): List<GitBranch>
+
+    @GetMapping("/projects/{projectPath}/repository/commits")
+    fun getCommits(@PathVariable projectPath: String, @RequestParam("ref_name") refName: String, @RequestParam("per_page") perPage: Int = 30): List<GitlabApiCommit>
+
     @GetMapping("/projects/{projectPath}/repository/compare")
     fun compare(@PathVariable projectPath: String, @RequestParam from: String, @RequestParam to: String): GitlabCompareResult
 

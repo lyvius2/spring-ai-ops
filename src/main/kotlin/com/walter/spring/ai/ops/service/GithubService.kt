@@ -3,6 +3,8 @@ package com.walter.spring.ai.ops.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITHUB_URL
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_BRANCHES_PREFIX
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_HISTORY_PREFIX
 import com.walter.spring.ai.ops.connector.GithubConnector
 import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
@@ -13,10 +15,13 @@ import com.walter.spring.ai.ops.connector.dto.GithubFile
 import com.walter.spring.ai.ops.connector.dto.GithubReviewComment
 import com.walter.spring.ai.ops.connector.dto.GithubReviewRequest
 import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
+import com.walter.spring.ai.ops.controller.dto.GitCommitHistoryEntry
+import com.fasterxml.jackson.core.type.TypeReference
 import com.walter.spring.ai.ops.util.CryptoProvider
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.time.Duration
 
 @Service
 class GithubService(
@@ -33,6 +38,37 @@ class GithubService(
 
     override val redisTokenKey: String = REDIS_KEY_GITHUB_TOKEN
     override val redisUrlKey: String = REDIS_KEY_GITHUB_URL
+
+    override fun getBranches(owner: String, repo: String): List<String> {
+        val key = "${REDIS_KEY_COMMIT_BRANCHES_PREFIX}github:$owner/$repo"
+        cacheStorePort.get(key)?.let { cached ->
+            return objectMapper.readValue(cached, object : TypeReference<List<String>>() {})
+        }
+        val branches = githubConnector.getBranches(owner, repo).map { it.name }.filter { it.isNotBlank() }
+        cacheStorePort.set(key, objectMapper.writeValueAsString(branches), Duration.ofMinutes(5))
+        return branches
+    }
+
+    override fun getCommitHistory(owner: String, repo: String, branch: String): List<GitCommitHistoryEntry> {
+        require(branch.isNotBlank()) { "Branch is required." }
+        val key = "${REDIS_KEY_COMMIT_HISTORY_PREFIX}github:$owner/$repo:$branch"
+        cacheStorePort.get(key)?.let { cached ->
+            return objectMapper.readValue(cached, object : TypeReference<List<GitCommitHistoryEntry>>() {})
+        }
+        val history = githubConnector.getCommits(owner, repo, branch).map { commit ->
+            val detail = githubConnector.getCommit(owner, repo, commit.sha)
+            GitCommitHistoryEntry(
+                sha = commit.sha,
+                title = commit.commit.message.lineSequence().firstOrNull().orEmpty(),
+                author = commit.commit.author.name,
+                committedAt = commit.commit.committer.date.ifBlank { commit.commit.author.date },
+                url = commit.htmlUrl,
+                changedFiles = detail.changedFiles(),
+            )
+        }
+        cacheStorePort.set(key, objectMapper.writeValueAsString(history), Duration.ofMinutes(5))
+        return history
+    }
 
     override fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult {
         return if (inquiry.base == EMPTY_SHA || inquiry.commitShas.size > 1) {

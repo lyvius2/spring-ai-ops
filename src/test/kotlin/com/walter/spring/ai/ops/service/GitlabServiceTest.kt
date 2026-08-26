@@ -41,10 +41,45 @@ import org.mockito.quality.Strictness
 import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
+import com.walter.spring.ai.ops.connector.cache.InMemoryCacheStoreConnector
+import com.walter.spring.ai.ops.connector.dto.GitBranch
 
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class GitlabServiceTest {
+
+    @Test
+    @DisplayName("GitLab 브랜치 목록을 조회하고 캐시된 결과를 재사용한다")
+    fun givenRepository_whenGetBranchesTwice_thenUsesCachedBranches() {
+        // given
+        val service = buildHistoryService()
+        given(gitlabConnector.getBranches("group%2Frepo", 100)).willReturn(listOf(GitBranch("main")))
+
+        // when
+        val first = service.getBranches("group", "repo")
+        val second = service.getBranches("group", "repo")
+
+        // then
+        assertThat(first).containsExactly("main")
+        assertThat(second).isEqualTo(first)
+        verify(gitlabConnector).getBranches("group%2Frepo", 100)
+    }
+
+    @Test
+    @DisplayName("GitLab 커밋 이력에 변경 파일을 포함한다")
+    fun givenBranch_whenGetCommitHistory_thenReturnsCommitDetails() {
+        // given
+        val service = buildHistoryService()
+        given(gitlabConnector.getCommits("group%2Frepo", "main", 30)).willReturn(listOf(GitlabApiCommit(id = "abc", title = "Fix", authorName = "Walter", committedDate = "2026-08-26T00:00:00Z")))
+        given(gitlabConnector.getCommitDiff("group%2Frepo", "abc")).willReturn(listOf(GitlabFile(newPath = "App.kt", diff = "+fix")))
+
+        // when
+        val result = service.getCommitHistory("group", "repo", "main")
+
+        // then
+        assertThat(result).hasSize(1)
+        assertThat(result.first().changedFiles).hasSize(1)
+    }
 
     companion object {
         private val DEFAULT_DISCUSSION_REQ = GitlabDiscussionRequest(
@@ -401,6 +436,8 @@ class GitlabServiceTest {
         ),
         source = GitRemoteProvider.GITLAB,
     )
+
+    private fun buildHistoryService() = GitlabService(InMemoryCacheStoreConnector(), ObjectMapper(), cryptoProvider, gitlabConnector, 120L, 5L, "token", "https://gitlab.com/api/v4")
 
     private fun buildService(configuredToken: String = "") =
         GitlabService(RedisCacheStoreConnector(redisTemplate), objectMapper, cryptoProvider, gitlabConnector, 120L, 5L, configuredToken, "https://gitlab.com/api/v4")

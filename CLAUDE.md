@@ -171,6 +171,9 @@ Server port: **7079** (management: **7081**). Swagger UI: `/swagger-ui.html`.
 | GET | `/api/code-risk/{app}/list` | - | Get code risk analysis records |
 | GET | `/api/firing/{app}/list` | - | Get Grafana firing analysis records |
 | GET | `/api/commit/{app}/list` | - | Get code review records |
+| GET | `/api/commit/{app}/branches` | - | List repository branches (5-minute cache) |
+| GET | `/api/commit/{app}/history` | - | List the latest commits for a branch (5-minute cache) |
+| POST | `/api/commit/{app}/review` | Login | Trigger an async review for consecutive selected commits |
 | POST | `/webhook/grafana[/{app}]` | - | Receive Grafana Alerting webhook |
 | POST | `/webhook/git[/{app}]` | - | Receive GitHub/GitLab push webhook |
 

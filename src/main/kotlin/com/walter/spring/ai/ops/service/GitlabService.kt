@@ -3,6 +3,8 @@ package com.walter.spring.ai.ops.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_TOKEN
 import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_GITLAB_URL
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_BRANCHES_PREFIX
+import com.walter.spring.ai.ops.code.RedisKeyConstants.Companion.REDIS_KEY_COMMIT_HISTORY_PREFIX
 import com.walter.spring.ai.ops.connector.GitlabConnector
 import com.walter.spring.ai.ops.connector.cache.CacheStorePort
 import com.walter.spring.ai.ops.connector.dto.GitCommentRequest
@@ -14,6 +16,8 @@ import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionRequest
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDiffRefs
 import com.walter.spring.ai.ops.controller.dto.GithubPullRequestRequest
+import com.walter.spring.ai.ops.controller.dto.GitCommitHistoryEntry
+import com.fasterxml.jackson.core.type.TypeReference
 import com.walter.spring.ai.ops.service.dto.LlmInlineComment
 import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.service.dto.ParsedFileDiff
@@ -21,6 +25,7 @@ import com.walter.spring.ai.ops.util.CryptoProvider
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.time.Duration
 
 @Service
 class GitlabService(
@@ -37,6 +42,40 @@ class GitlabService(
 
     override val redisTokenKey: String = REDIS_KEY_GITLAB_TOKEN
     override val redisUrlKey: String = REDIS_KEY_GITLAB_URL
+
+    override fun getBranches(owner: String, repo: String): List<String> {
+        val projectPath = "$owner/$repo"
+        val encodedPath = projectPath.replace("/", "%2F")
+        val key = "${REDIS_KEY_COMMIT_BRANCHES_PREFIX}gitlab:$projectPath"
+        cacheStorePort.get(key)?.let { cached ->
+            return objectMapper.readValue(cached, object : TypeReference<List<String>>() {})
+        }
+        val branches = gitlabConnector.getBranches(encodedPath).map { it.name }.filter { it.isNotBlank() }
+        cacheStorePort.set(key, objectMapper.writeValueAsString(branches), Duration.ofMinutes(5))
+        return branches
+    }
+
+    override fun getCommitHistory(owner: String, repo: String, branch: String): List<GitCommitHistoryEntry> {
+        require(branch.isNotBlank()) { "Branch is required." }
+        val projectPath = "$owner/$repo"
+        val encodedPath = projectPath.replace("/", "%2F")
+        val key = "${REDIS_KEY_COMMIT_HISTORY_PREFIX}gitlab:$projectPath:$branch"
+        cacheStorePort.get(key)?.let { cached ->
+            return objectMapper.readValue(cached, object : TypeReference<List<GitCommitHistoryEntry>>() {})
+        }
+        val history = gitlabConnector.getCommits(encodedPath, branch).map { commit ->
+            GitCommitHistoryEntry(
+                sha = commit.id,
+                title = commit.title.ifBlank { commit.message.lineSequence().firstOrNull().orEmpty() },
+                author = commit.authorName,
+                committedAt = commit.committedDate.ifBlank { commit.authoredDate },
+                url = commit.webUrl,
+                changedFiles = GitlabCompareResult(diffs = gitlabConnector.getCommitDiff(encodedPath, commit.id)).changedFiles(),
+            )
+        }
+        cacheStorePort.set(key, objectMapper.writeValueAsString(history), Duration.ofMinutes(5))
+        return history
+    }
 
     override fun executeInquiryDiffer(inquiry: GitDifferInquiry): GitCompareResult {
         // GitLab API requires '/' in project path to be encoded as '%2F' in path segments

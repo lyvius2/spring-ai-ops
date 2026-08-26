@@ -6,5 +6,5 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 data class GithubApiCommitDetail(
     val message: String = "",
     val author: GithubApiCommitAuthor = GithubApiCommitAuthor(),
+    val committer: GithubApiCommitAuthor = GithubApiCommitAuthor(),
 )
-

@@ -1281,6 +1281,48 @@ body {
     flex-shrink: 0;
 }
 
+.commit-history-controls {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+}
+
+.commit-branch-select,
+.btn-commit-history {
+    height: 30px;
+    border: 1px solid #d5d5d5;
+    border-radius: 3px;
+    background: #fff;
+    color: #444;
+    font-size: 0.8rem;
+}
+.commit-branch-select { min-width: 170px; padding: 0 8px; }
+.btn-commit-history { padding: 0 12px; cursor: pointer; font-weight: 600; }
+.btn-commit-history:hover { border-color: #6db33f; color: #4f8f2d; }
+
+.commit-history-modal-box { width: min(1180px, calc(100vw - 40px)); }
+.commit-history-modal-body { overflow: hidden; display: flex; flex-direction: column; }
+.manual-commit-list { overflow-y: auto; max-height: calc(100vh - 210px); border: 1px solid #e4e4e4; }
+.manual-commit-row { border-bottom: 1px solid #ededed; }
+.manual-commit-summary { display: grid; grid-template-columns: 24px 18px 74px minmax(180px, 1fr) 110px 130px 155px; gap: 8px; align-items: center; padding: 11px 12px; cursor: pointer; }
+.manual-commit-summary:hover { background: #f7f9f5; }
+.manual-commit-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.manual-file-count, .manual-author, .manual-date { color: #666; font-size: 0.78rem; }
+.manual-expand { color: #888; font-size: 0.7rem; }
+.manual-commit-files { max-height: 0; overflow: hidden; background: #fafafa; transition: max-height 0.3s ease; padding: 0 50px; }
+.manual-commit-files.expanded { max-height: 1600px; padding-top: 8px; padding-bottom: 8px; }
+.manual-file-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.8rem; }
+.manual-commit-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+
+@media (max-width: 900px) {
+    .tab-bar { flex-wrap: wrap; }
+    .commit-history-controls { width: 100%; padding: 8px 0; }
+    .manual-commit-summary { grid-template-columns: 24px 18px 70px minmax(140px, 1fr); }
+    .manual-file-count, .manual-author, .manual-date { grid-column: 4; }
+}
+
 .tab-btn {
     padding: 10px 18px;
     border: none;

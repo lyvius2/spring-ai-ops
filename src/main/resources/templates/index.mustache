@@ -563,6 +563,24 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
     </div>
 </div>
 
+<!-- ══ Modal: Select Commits for Code Review ══ -->
+<div id="commit-history-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box commit-history-modal-box">
+        <div class="modal-header">
+            Commit List
+            <button class="modal-close-btn" onclick="closeCommitHistoryModal()">&#10005;</button>
+        </div>
+        <div class="modal-body commit-history-modal-body">
+            <p class="modal-desc">Select consecutive commits within a seven-day period. Click a row to view changed files.</p>
+            <div id="manual-commit-list" class="manual-commit-list"></div>
+            <div class="manual-commit-actions">
+                <div id="manual-commit-error" class="alert alert-error" style="display:none;margin:0;"></div>
+                <button id="manual-review-btn" class="btn-primary" onclick="submitManualCodeReview()" disabled>Run Code Review</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="/js/aiops.js"></script>
 </body>
 </html>

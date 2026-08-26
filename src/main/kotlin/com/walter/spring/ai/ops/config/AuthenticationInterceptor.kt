@@ -38,6 +38,7 @@ class AuthenticationInterceptor : HandlerInterceptor {
             Route("PUT", "/api/apps/", exact = false),
             Route("DELETE", "/api/apps/", exact = false),
             Route("POST", "/api/code-risk"),
+            Route("POST", "/api/commit/", exact = false),
             Route("POST", "/api/auth/admin"),
             Route("GET", "/api/auth/admins"),
             Route("DELETE", "/api/auth/admins"),

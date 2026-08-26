@@ -37,6 +37,11 @@ import com.walter.spring.ai.ops.connector.cache.RedisCacheStoreConnector
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.time.LocalDateTime
+import com.walter.spring.ai.ops.connector.cache.InMemoryCacheStoreConnector
+import com.walter.spring.ai.ops.connector.dto.GitBranch
+import com.walter.spring.ai.ops.connector.dto.GithubApiCommit
+import com.walter.spring.ai.ops.connector.dto.GithubApiCommitDetail
+import com.walter.spring.ai.ops.connector.dto.GithubApiCommitAuthor
 
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -58,6 +63,43 @@ class GithubServiceTest {
         configuredToken: String = "",
         githubUrlFromConfig: String = "https://api.github.com",
     ) = GithubService(RedisCacheStoreConnector(redisTemplate), objectMapper, cryptoProvider, githubConnector, 120L, 5L, configuredToken, githubUrlFromConfig)
+
+    private fun buildHistoryService() = GithubService(InMemoryCacheStoreConnector(), ObjectMapper(), cryptoProvider, githubConnector, 120L, 5L, "token", "https://api.github.com")
+
+    @Test
+    @DisplayName("브랜치 목록을 조회하고 캐시된 결과를 재사용한다")
+    fun givenRepository_whenGetBranchesTwice_thenUsesCachedBranches() {
+        // given
+        val service = buildHistoryService()
+        given(githubConnector.getBranches("acme", "repo", 100)).willReturn(listOf(GitBranch("main"), GitBranch("develop")))
+
+        // when
+        val first = service.getBranches("acme", "repo")
+        val second = service.getBranches("acme", "repo")
+
+        // then
+        assertThat(first).containsExactly("main", "develop")
+        assertThat(second).isEqualTo(first)
+        verify(githubConnector).getBranches("acme", "repo", 100)
+    }
+
+    @Test
+    @DisplayName("커밋 이력에 작성자와 변경 파일을 포함한다")
+    fun givenBranch_whenGetCommitHistory_thenReturnsCommitDetails() {
+        // given
+        val service = buildHistoryService()
+        val commit = GithubApiCommit("abcdef123", "https://github.com/acme/repo/commit/abcdef123", GithubApiCommitDetail("Fix issue", GithubApiCommitAuthor("Walter", "2026-08-26T00:00:00Z")))
+        given(githubConnector.getCommits("acme", "repo", "main", 30)).willReturn(listOf(commit))
+        given(githubConnector.getCommit("acme", "repo", "abcdef123")).willReturn(GithubCompareResult(files = listOf(GithubFile(filename = "App.kt", status = "modified"))))
+
+        // when
+        val result = service.getCommitHistory("acme", "repo", "main")
+
+        // then
+        assertThat(result).hasSize(1)
+        assertThat(result.first().author).isEqualTo("Walter")
+        assertThat(result.first().changedFiles).hasSize(1)
+    }
 
     // ── getGithubToken ────────────────────────────────────────────────────────
 

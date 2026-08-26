@@ -26,6 +26,20 @@ class InMemoryCacheStoreConnectorTest {
     }
 
     @Test
+    @DisplayName("TTL이 지정된 값은 만료 후 조회되지 않는다")
+    fun givenValueWithTtl_whenTtlExpires_thenReturnsNull() {
+        // given
+        connector.set("temporary", "value", Duration.ofMillis(10))
+
+        // when
+        Thread.sleep(30)
+        val result = connector.get("temporary")
+
+        // then
+        assertThat(result).isNull()
+    }
+
+    @Test
     @DisplayName("시간순 데이터는 TTL과 무관하게 최신순으로 조회한다")
     fun givenTimeOrderedValues_whenRead_thenReturnsDescendingWithoutTtlExpiration() {
         // given

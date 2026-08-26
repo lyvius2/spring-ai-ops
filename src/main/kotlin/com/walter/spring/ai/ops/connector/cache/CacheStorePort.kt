@@ -7,6 +7,8 @@ interface CacheStorePort {
 
     fun set(key: String, value: String)
 
+    fun set(key: String, value: String, ttl: Duration)
+
     fun delete(key: String): Boolean
 
     fun getDataSet(key: String): Set<String>

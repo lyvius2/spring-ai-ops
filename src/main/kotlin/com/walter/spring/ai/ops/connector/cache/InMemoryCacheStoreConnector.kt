@@ -12,18 +12,35 @@ import java.util.concurrent.locks.ReentrantLock
 @Component
 class InMemoryCacheStoreConnector : CacheStorePort {
     private val values = ConcurrentHashMap<String, String>()
+    private val valueExpirations = ConcurrentHashMap<String, Instant>()
     private val sets = ConcurrentHashMap<String, MutableSet<String>>()
     private val timeOrderedSets = ConcurrentHashMap<String, ConcurrentHashMap<String, Double>>()
     private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
-    override fun get(key: String): String? = values[key]
+    override fun get(key: String): String? {
+        val expiration = valueExpirations[key]
+        if (expiration != null && !expiration.isAfter(Instant.now())) {
+            values.remove(key)
+            valueExpirations.remove(key)
+            return null
+        }
+        return values[key]
+    }
 
     override fun set(key: String, value: String) {
         values[key] = value
+        valueExpirations.remove(key)
+    }
+
+    override fun set(key: String, value: String, ttl: Duration) {
+        require(!ttl.isNegative && !ttl.isZero) { "Cache TTL must be greater than zero." }
+        values[key] = value
+        valueExpirations[key] = Instant.now().plus(ttl)
     }
 
     override fun delete(key: String): Boolean {
         val valueRemoved = values.remove(key) != null
+        valueExpirations.remove(key)
         val setRemoved = sets.remove(key) != null
         val timeOrderedSetRemoved = timeOrderedSets.remove(key) != null
         return valueRemoved || setRemoved || timeOrderedSetRemoved

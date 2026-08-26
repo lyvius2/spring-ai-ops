@@ -8,6 +8,7 @@ import com.walter.spring.ai.ops.connector.dto.GitlabDiscussionResponse
 import com.walter.spring.ai.ops.connector.dto.GitlabFile
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestDetail
 import com.walter.spring.ai.ops.connector.dto.GitlabMergeRequestNoteResponse
+import com.walter.spring.ai.ops.connector.dto.GitBranch
 import org.slf4j.LoggerFactory
 import org.springframework.cloud.openfeign.FallbackFactory
 import org.springframework.stereotype.Component
@@ -18,6 +19,16 @@ class GitlabConnectorFallbackFactory : FallbackFactory<GitlabConnector> {
 
     override fun create(cause: Throwable): GitlabConnector {
         return object : GitlabConnector {
+            override fun getBranches(projectPath: String, perPage: Int): List<GitBranch> {
+                log.error("GitLab getBranches failed: projectPath={}, error={}", projectPath, cause.message, cause)
+                return emptyList()
+            }
+
+            override fun getCommits(projectPath: String, refName: String, perPage: Int): List<GitlabApiCommit> {
+                log.error("GitLab getCommits failed: projectPath={}, branch={}, error={}", projectPath, refName, cause.message, cause)
+                return emptyList()
+            }
+
             override fun compare(projectPath: String, from: String, to: String): GitlabCompareResult {
                 log.error("GitLab compare failed: projectPath={}, from={}, to={}, error={}", projectPath, from, to, cause.message, cause)
                 return GitlabCompareResult(errorMessage = cause.message ?: "Failed to connect to GitLab API.")

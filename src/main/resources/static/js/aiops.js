@@ -6,6 +6,8 @@ let _savedLlmProviders = [];  // provider keys that have a stored API key (loade
 
 // Registered application names — populated by loadApps(), used for Prometheus metrics query
 let _appNames = [];
+let manualCommitHistory = [];
+let manualCommitSelection = new Set();
 
 // CSRF token embedded by the server at page load time
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -2584,6 +2586,118 @@ async function loadAndRenderCodeReview(appName) {
     appSelectedCommitIdx[appName] = appSelectedCommitIdx[appName] ?? 0;
     content.innerHTML = buildCodeReviewHtml(appName);
     applyHighlighting(content);
+    await loadCommitBranches(appName);
+}
+
+async function loadCommitBranches(appName) {
+    const select = document.getElementById('commit-branch-select');
+    if (!select || !appName) return;
+    try {
+        const res = await fetch(`/api/commit/${encodeURIComponent(appName)}/branches`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load branches.');
+        const branches = data.branches || [];
+        select.innerHTML = branches.length
+            ? branches.map(branch => `<option value="${escHtml(branch)}">${escHtml(branch)}</option>`).join('')
+            : '<option value="">No branches available</option>';
+    } catch (e) {
+        select.innerHTML = '<option value="">Failed to load branches</option>';
+        showAnalysisNotification(e.message || 'Failed to load branches.');
+    }
+}
+
+async function openCommitHistoryModal() {
+    const branch = document.getElementById('commit-branch-select')?.value;
+    if (!selectedApp || !branch) {
+        showAnalysisNotification('Select a branch first.');
+        return;
+    }
+    manualCommitHistory = [];
+    manualCommitSelection = new Set();
+    document.getElementById('commit-history-modal').style.display = 'flex';
+    document.getElementById('manual-commit-list').innerHTML = '<div class="list-placeholder">Loading commits...</div>';
+    updateManualReviewButton();
+    try {
+        const res = await fetch(`/api/commit/${encodeURIComponent(selectedApp)}/history?branch=${encodeURIComponent(branch)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load commit history.');
+        manualCommitHistory = data.commits || [];
+        renderManualCommitHistory();
+    } catch (e) {
+        document.getElementById('manual-commit-list').innerHTML = `<div class="alert alert-error" style="display:block;">${escHtml(e.message || 'Failed to load commit history.')}</div>`;
+    }
+}
+
+function closeCommitHistoryModal() {
+    document.getElementById('commit-history-modal').style.display = 'none';
+}
+
+function renderManualCommitHistory() {
+    const container = document.getElementById('manual-commit-list');
+    if (!manualCommitHistory.length) {
+        container.innerHTML = '<div class="list-placeholder">No commits found on this branch.</div>';
+        return;
+    }
+    container.innerHTML = manualCommitHistory.map((commit, idx) => {
+        const checked = manualCommitSelection.has(commit.sha) ? 'checked' : '';
+        const files = commit.changedFiles || [];
+        const fileRows = files.map(file => `<div class="manual-file-row"><span class="file-badge file-badge-${fileStatusClass(file.status)}">${fileStatusLabel(file.status)}</span><span>${escHtml(file.filename)}</span></div>`).join('');
+        return `<div class="manual-commit-row" data-commit-index="${idx}">
+            <div class="manual-commit-summary">
+                <input type="checkbox" class="manual-commit-check" data-sha="${escHtml(commit.sha)}" ${checked} aria-label="Select commit ${escHtml(commit.sha.substring(0, 7))}">
+                <span class="manual-expand">▶</span>
+                <span class="commit-sha">${escHtml(commit.sha.substring(0, 7))}</span>
+                <span class="manual-commit-title">${escHtml(commit.title || '—')}</span>
+                <span class="manual-file-count">${files.length} files changed</span>
+                <span class="manual-author">${escHtml(commit.author || '—')}</span>
+                <span class="manual-date">${formatOccupiedAt(commit.committedAt)}</span>
+            </div>
+            <div class="manual-commit-files">${fileRows || '<span class="diff-meta">No changed files.</span>'}</div>
+        </div>`;
+    }).join('');
+}
+
+function validateManualCommitSelection() {
+    const indexes = manualCommitHistory.map((commit, idx) => manualCommitSelection.has(commit.sha) ? idx : -1).filter(idx => idx >= 0);
+    if (!indexes.length) return 'Select at least one commit.';
+    if (!indexes.every((idx, pos) => pos === 0 || idx === indexes[pos - 1] + 1)) return 'Selected commits must be consecutive.';
+    const dates = indexes.map(idx => new Date(manualCommitHistory[idx].committedAt).getTime());
+    if (Math.max(...dates) - Math.min(...dates) > 7 * 24 * 60 * 60 * 1000) return 'The selected commits must be within seven days of each other.';
+    return '';
+}
+
+function updateManualReviewButton() {
+    const button = document.getElementById('manual-review-btn');
+    const error = document.getElementById('manual-commit-error');
+    if (!button || !error) return;
+    const message = validateManualCommitSelection();
+    button.disabled = !!message;
+    error.textContent = manualCommitSelection.size ? message : '';
+    error.style.display = message && manualCommitSelection.size ? 'block' : 'none';
+}
+
+async function submitManualCodeReview() {
+    const error = validateManualCommitSelection();
+    if (error) { showAnalysisNotification(error); return; }
+    if (!_loggedIn) { closeCommitHistoryModal(); openLoginModal(false); return; }
+    const button = document.getElementById('manual-review-btn');
+    button.disabled = true;
+    button.textContent = 'Starting...';
+    try {
+        const branch = document.getElementById('commit-branch-select').value;
+        const commitShas = manualCommitHistory.filter(commit => manualCommitSelection.has(commit.sha)).map(commit => commit.sha);
+        const res = await fetch(`/api/commit/${encodeURIComponent(selectedApp)}/review`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch, commitShas }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to start Code Review.');
+        closeCommitHistoryModal();
+        showAnalysisNotification(data.message || 'Code Review has started. Please check the result on this screen in a few minutes.');
+    } catch (e) {
+        showAnalysisNotification(e.message || 'Failed to start Code Review.');
+        button.disabled = false;
+        button.textContent = 'Run Code Review';
+    }
 }
 
 function showNotification(appName) {
@@ -2695,6 +2809,10 @@ function buildAppDetailHtml(appName) {
             <button class="tab-btn" data-tab="coderisk" id="tab-btn-coderisk" style="${hasRisk ? '' : 'display:none;'}">Code Risk</button>
             <button class="tab-btn active" data-tab="codereview">Code Review</button>
             <button class="tab-btn"        data-tab="exception">Incident Intelligence</button>
+            <div class="commit-history-controls">
+                <select id="commit-branch-select" class="commit-branch-select" aria-label="Branch"><option value="">Loading branches...</option></select>
+                <button id="commit-history-btn" class="btn-commit-history" onclick="openCommitHistoryModal()">View Commit List</button>
+            </div>
         </div>
         <div class="tab-content" id="tab-pane-codereview">
             <div id="codereview-content">
@@ -2755,6 +2873,23 @@ function renderAppDetailFromLocal(appName) {
 }
 
 document.addEventListener('click', async function (e) {
+    const manualCheck = e.target.closest('.manual-commit-check[data-sha]');
+    if (manualCheck) {
+        if (manualCheck.checked) manualCommitSelection.add(manualCheck.dataset.sha);
+        else manualCommitSelection.delete(manualCheck.dataset.sha);
+        updateManualReviewButton();
+        return;
+    }
+
+    const manualRow = e.target.closest('.manual-commit-row[data-commit-index]');
+    if (manualRow) {
+        const files = manualRow.querySelector('.manual-commit-files');
+        const arrow = manualRow.querySelector('.manual-expand');
+        const expanded = files.classList.toggle('expanded');
+        arrow.textContent = expanded ? '▼' : '▶';
+        return;
+    }
+
     const sourceSuggestionLink = e.target.closest('.source-suggestion-link[data-suggestion-idx]');
     if (sourceSuggestionLink) {
         openSourceSuggestionModal(parseInt(sourceSuggestionLink.dataset.suggestionIdx, 10));
@@ -2953,6 +3088,8 @@ function switchToTab(tabName, updateUrl = true) {
         const pane = document.getElementById('tab-pane-' + t);
         if (pane) pane.style.display = (t === tabName ? 'block' : 'none');
     });
+    const commitControls = document.querySelector('.commit-history-controls');
+    if (commitControls) commitControls.style.display = tabName === 'codereview' ? 'flex' : 'none';
     if (updateUrl && selectedApp) {
         let score = null;
         if (tabName === 'exception') {

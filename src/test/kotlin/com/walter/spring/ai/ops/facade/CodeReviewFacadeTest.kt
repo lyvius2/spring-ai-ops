@@ -23,6 +23,10 @@ import com.walter.spring.ai.ops.service.dto.LlmInlineReviewResult
 import com.walter.spring.ai.ops.util.GitRemoteResolver
 import com.walter.spring.ai.ops.util.InlineReviewParser
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import com.walter.spring.ai.ops.controller.dto.GitCommitHistoryEntry
+import com.walter.spring.ai.ops.controller.dto.ManualCodeReviewRequest
+import com.walter.spring.ai.ops.service.dto.GitRepositoryCoordinates
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -52,6 +56,52 @@ class CodeReviewFacadeTest {
     @Mock private lateinit var inlineReviewParser: InlineReviewParser
 
     private lateinit var codeReviewFacade: CodeReviewFacade
+
+    private fun stubManualHistory(history: List<GitCommitHistoryEntry>) {
+        `when`(applicationService.getGitRepoByAppName("my-app")).thenReturn("https://github.com/acme/repo.git")
+        `when`(gitRemoteResolver.parseCoordinates("https://github.com/acme/repo.git")).thenReturn(GitRepositoryCoordinates("acme", "repo"))
+        `when`(gitRemoteResolver.detectProviderServiceByUrl("https://github.com/acme/repo.git")).thenReturn(githubService)
+        `when`(githubService.getCommitHistory("acme", "repo", "main")).thenReturn(history)
+    }
+
+    private fun historyEntry(sha: String, committedAt: String) = GitCommitHistoryEntry(sha, sha, "Walter", committedAt, "https://github.com/acme/repo/commit/$sha", emptyList())
+
+    @Test
+    @DisplayName("연속된 커밋이고 기간이 7일 이내이면 수동 리뷰 요청을 허용한다")
+    fun givenConsecutiveCommitsWithinSevenDays_whenValidateManualReview_thenSucceeds() {
+        // given
+        stubManualHistory(listOf(historyEntry("c3", "2026-08-08T00:00:00Z"), historyEntry("c2", "2026-08-05T00:00:00Z"), historyEntry("c1", "2026-08-01T00:00:00Z")))
+
+        // when
+        codeReviewFacade.validateManualReview("my-app", ManualCodeReviewRequest("main", listOf("c3", "c2", "c1")))
+
+        // then
+        verify(githubService).getCommitHistory("acme", "repo", "main")
+    }
+
+    @Test
+    @DisplayName("선택한 커밋이 연속되지 않으면 수동 리뷰 요청을 거부한다")
+    fun givenNonConsecutiveCommits_whenValidateManualReview_thenThrowsException() {
+        // given
+        stubManualHistory(listOf(historyEntry("c3", "2026-08-03T00:00:00Z"), historyEntry("c2", "2026-08-02T00:00:00Z"), historyEntry("c1", "2026-08-01T00:00:00Z")))
+
+        // when / then
+        assertThatThrownBy { codeReviewFacade.validateManualReview("my-app", ManualCodeReviewRequest("main", listOf("c3", "c1"))) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("Selected commits must be consecutive.")
+    }
+
+    @Test
+    @DisplayName("선택한 커밋의 시간 차이가 7일을 넘으면 수동 리뷰 요청을 거부한다")
+    fun givenCommitsBeyondSevenDays_whenValidateManualReview_thenThrowsException() {
+        // given
+        stubManualHistory(listOf(historyEntry("c2", "2026-08-09T00:00:01Z"), historyEntry("c1", "2026-08-02T00:00:00Z")))
+
+        // when / then
+        assertThatThrownBy { codeReviewFacade.validateManualReview("my-app", ManualCodeReviewRequest("main", listOf("c2", "c1"))) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("The selected commits must be within seven days of each other.")
+    }
 
     @BeforeEach
     fun setUp() {

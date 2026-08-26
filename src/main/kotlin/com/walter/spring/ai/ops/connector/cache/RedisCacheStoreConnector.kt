@@ -35,6 +35,10 @@ class RedisCacheStoreConnector(
         redisTemplate.opsForValue().set(key, value)
     }
 
+    override fun set(key: String, value: String, ttl: Duration) {
+        redisTemplate.opsForValue().set(key, value, ttl)
+    }
+
     override fun delete(key: String): Boolean = redisTemplate.delete(key)
 
     override fun getDataSet(key: String): Set<String> = redisTemplate.opsForSet().members(key) ?: emptySet()

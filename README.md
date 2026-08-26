@@ -78,6 +78,7 @@ No relational database is used. Redis serves as the sole persistence layer — s
 |---|---|
 | **Static Code Risk Analysis** | Clone a Git repository and run an AI-powered full-codebase review — security vulnerabilities, code quality issues, and actionable recommendations. Supports single-call and map-reduce strategies based on codebase size |
 | **Automated Code Review** | GitHub / GitLab commit diff → code quality, potential bugs, security considerations. Optionally sends the result to a Slack channel via Incoming Webhook |
+| **Manual Commit Review** | Browse cached GitHub/GitLab branch history from the Code Review tab, inspect each commit's changed files, and asynchronously review one or more consecutive commits within a seven-day window |
 | **Pull Request / Merge Request Review** | Dedicated webhook (`/webhook/git/{application}/pull-request`) reviews PR/MR events. On `opened` / `reopened` / `ready_for_review` posts a summary comment; on `synchronize` (new commits pushed) posts **inline line-anchored comments** — GitHub uses the Reviews API (single review with N comments), GitLab uses the Discussions API (one per comment) with an accompanying summary note. Draft PRs are skipped; inline comments outside the current diff hunks are filtered out, and if the inline flow fails or returns nothing, the facade falls back to a single summary comment |
 | **Slack Code Review Notification** | When a code review completes, the result (converted from Markdown to Slack mrkdwn) is posted to a per-application Slack Incoming Webhook channel. Toggle and webhook path are configurable per application in the UI |
 | **LLM-Powered Error Analysis** | Grafana alert context + Loki logs + Prometheus metric series (optional) + stack-trace-related source snippets → root cause, affected components, source file references, and recommended actions |
@@ -856,6 +857,9 @@ Administrator accounts are managed from the **Account Management** panel in the 
 | `DELETE` | `/api/apps/{name}` | Remove an application |
 | `GET` | `/api/firing/{application}/list` | Get alert analysis records for an application |
 | `GET` | `/api/commit/{application}/list` | Get code review records for an application |
+| `GET` | `/api/commit/{application}/branches` | Get repository branches (cached for 5 minutes) |
+| `GET` | `/api/commit/{application}/history?branch={branch}` | Get the latest 30 commits and changed files for a branch (cached for 5 minutes) |
+| `POST` | `/api/commit/{application}/review` | Start an asynchronous review of consecutive selected commits (login required) |
 | `POST` | `/api/code-risk` | Run static code risk analysis for an application |
 | `GET` | `/api/code-risk/{application}/list` | Get static analysis records for an application |
 | `POST` | `/webhook/grafana[/{application}]` | Grafana Alerting webhook receiver |
