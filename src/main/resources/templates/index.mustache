@@ -386,12 +386,16 @@ const IS_LOGGED_IN = {{#data.loggedIn}}true{{/data.loggedIn}}{{^data.loggedIn}}f
                         <div style="display:flex; align-items:center; justify-content:space-between;">
                             <div>
                                 {{#data.configured}}
-                                    <img src="/images/{{data.currentLlm}}.svg" class="provider-logo provider-logo-badge" alt="{{data.currentLlm}}">
-                                    <span class="badge badge-up">{{data.currentLlm}}</span>
+                                    <span class="status-chip status-chip-up">
+                                        <img src="/images/{{data.currentLlm}}.svg" class="status-chip-icon" alt="{{data.currentLlm}}">
+                                        <span class="status-chip-label">{{data.currentLlm}}</span>
+                                    </span>
                                     <span style="color:#3c763d; font-weight:600; margin-left:8px;">&#10003; Connected</span>
                                 {{/data.configured}}
                                 {{^data.configured}}
-                                    <span style="color:#aaa;">—</span> <span class="badge badge-down">NOT CONFIGURED</span>
+                                    <span class="status-chip status-chip-down">
+                                        <span class="status-chip-label">NOT CONFIGURED</span>
+                                    </span>
                                 {{/data.configured}}
                             </div>
                             {{#data.configured}}
