@@ -701,9 +701,11 @@ Open `http://localhost:7079` in your browser. On first launch you will be prompt
 
 ### Running with Docker
 
-The repository ships a `Dockerfile` and `docker/entrypoint.sh` that build a **single self-contained image** with Amazon Corretto 21 (Amazon Linux 2023 base) and an embedded Redis (`redis6`). Redis is bound to `127.0.0.1:6379` inside the container and is **not exposed** — the Spring Boot app connects to it over localhost.
+The default `Dockerfile` builds a GraalVM 21 native executable using Spring AOT. The final image uses `gcr.io/distroless/base-nossl-debian12:nonroot`, with glibc, CA certificates and timezone data, but no JVM, shell, package manager, Redis, Gradle or test runner. `-H:+StaticExecutableWithDynamicLibC` statically links libraries other than glibc. This is a minimal compatible runtime for both AMD64 and ARM64; `scratch` cannot run this glibc-linked executable.
 
-The image sets `SPRING_PROFILES_ACTIVE=docker` by default, so the `!local` profile activates `RedisCacheStoreConnector` and uses the embedded Redis instead of the in-memory cache store.
+Only `src/main` is copied into the builder. `nativeCompile -PcontainerBuild -x test` excludes JVM tests; GraalVM native test support is disabled. At runtime the entrypoint directly executes `/app/spring-ai-ops`, so no test code is run. The previous Temurin JVM build remains available with `docker build -f Dockerfile.jvm -t spring-ai-ops:jvm .`.
+
+The image sets `SPRING_PROFILES_ACTIVE=docker` by default, so the `!local` profile activates `RedisCacheStoreConnector` and connects to an external Redis server.
 
 **Build**
 
@@ -717,12 +719,13 @@ docker build -t spring-ai-ops:local .
 docker run --rm \
   -p 7079:7079 -p 7081:7081 \
   -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  -e SPRING_DATA_REDIS_HOST='redis.example.com' \
   spring-ai-ops:local
 ```
 
 - `7079` — application HTTP port
 - `7081` — management (actuator/prometheus) port
-- Redis (`6379`) is intentionally not exposed
+- Configure an external Redis with `SPRING_DATA_REDIS_HOST` and `SPRING_DATA_REDIS_PORT`.
 
 **Passing additional configuration**
 
@@ -732,17 +735,103 @@ Any `application.yml` setting can be overridden via environment variables:
 docker run --rm \
   -p 7079:7079 -p 7081:7081 \
   -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  -e SPRING_DATA_REDIS_HOST='redis.example.com' \
   -e AI_OPEN_AI_API_KEY='sk-...' \
   -e LOKI_URL='http://loki.example.com:3100' \
   -e PROMETHEUS_URL='http://prometheus.example.com:9090' \
   -e GITHUB_ACCESS_TOKEN='ghp_...' \
-  -e JAVA_OPTS='-Xms512m -Xmx1g' \
   spring-ai-ops:local
 ```
 
 - `CRYPTO_SECRET_KEY` is **required** — the container exits at startup if it is blank.
-- `JAVA_OPTS` is forwarded to the JVM.
-- The embedded Redis is stateless (`--save "" --appendonly no`); analysis records and settings are lost when the container is removed. Use an external Redis if persistence matters.
+- Native runtime options are passed as arguments, e.g. `docker run --env-file .env -p 7079:7079 spring-ai-ops:local -Xmx1g`. With Compose, add `command: ["-Xmx1g"]` under `app`. `JAVA_OPTS` only applies to `Dockerfile.jvm`.
+- Spring AOT fixes bean selection to the `docker` profile at build time. Keep `SPRING_PROFILES_ACTIVE=docker`; configure external Redis and credentials at runtime.
+- The container runs as UID/GID `65532`. Existing bind mounts or repository volumes must be writable by that user.
+- Set `SPRING_DATA_REDIS_PASSWORD` (and `SPRING_DATA_REDIS_USERNAME` if needed) for authentication and `SPRING_DATA_REDIS_SSL_ENABLED=true` for TLS. Configure persistence on the external Redis server. See `.env.example` for environment variables; copy it to `.env` and pass `--env-file .env` to `docker run`.
+
+### Build and publish a native image to Docker Hub
+
+The upload repository is `lyvius2/spring-ai-ops`. Authenticate with an account that has push access:
+
+```bash
+docker login
+# Defaults to linux/amd64. Set the version to publish.
+./docker/publish-native.sh 0.0.1-native
+# ARM64 deployment:
+./docker/publish-native.sh 0.0.1-native-arm64 linux/arm64
+```
+
+The script builds and pushes `docker.io/lyvius2/spring-ai-ops:VERSION`. It does not run tests or application containers, and does not automatically tag `latest`. Login credentials and runtime `.env` secrets are not passed into the build. A failed build or push causes a nonzero exit.
+
+For both architectures, use a Buildx builder with multi-platform support:
+
+```bash
+docker buildx create --name spring-ai-ops-native --driver docker-container --use
+docker buildx inspect --bootstrap
+./docker/publish-native.sh 0.0.1-native linux/amd64,linux/arm64
+```
+
+Native compilation is resource intensive; allocate sufficient memory to Docker (use at least 12 GB, preferably 16 GB). The builder limits the native compiler heap to 8 GB and its worker threads to two, and limits the Gradle heap to 512 MB. Override the compiler heap with `NATIVE_IMAGE_HEAP=10g ./docker/publish-native.sh VERSION`, or `docker build --build-arg NATIVE_IMAGE_HEAP=10g .`, when your builder has enough additional RAM. Build on the target architecture where possible. AMD64 emulation on Apple Silicon can be much slower. This script publishes to Docker Hub only when you execute it.
+
+To deploy, set `APP_IMAGE=lyvius2/spring-ai-ops:0.0.1-native` in `.env` and follow the Compose pull/start commands below. Building successfully does not verify live Redis, LLM, Git provider or Slack integrations; verify those against your deployment services.
+
+References: [GraalVM Gradle plugin](https://graalvm.github.io/native-build-tools/0.10.6/gradle-plugin.html), [Distroless runtime contents](https://github.com/GoogleContainerTools/distroless/blob/main/base/README.md), [OpenFeign AOT requirements](https://docs.spring.io/spring-cloud-openfeign/reference/spring-cloud-openfeign.html).
+
+### Running with Docker Compose
+
+The included [`compose.yaml`](compose.yaml) runs the application and connects to an **external Redis**. Prepare a reachable Redis server before starting the application. Docker Compose v2 (`docker compose`) is required.
+
+**Configure the environment**
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` before starting:
+
+- `CRYPTO_SECRET_KEY`: replace the example with a long random secret; keep the same value across restarts so stored credentials remain readable.
+- `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT`: set the external Redis address and port.
+- `SPRING_DATA_REDIS_PASSWORD`: set if Redis requires authentication. Add `SPRING_DATA_REDIS_USERNAME` if your Redis uses ACL users, and set `SPRING_DATA_REDIS_SSL_ENABLED=true` for TLS.
+- `APP_BASE_URL`: set the externally accessible application URL.
+- Set the API keys and integration URLs you use, following `.env.example`.
+
+`localhost` inside the container refers to the application container. Use an address reachable from the container for Redis, Loki, and Prometheus. With Docker Desktop, `host.docker.internal` can address services running on the host. Keep `.env` private; it is excluded from Git and Docker builds. In Compose `.env` files, single-quote values containing literal `$` characters to prevent interpolation.
+
+**Build and start locally**
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f app
+```
+
+The Dockerfile builds with `nativeCompile -PcontainerBuild -x test`, so tests are not executed. Open `http://localhost:7079`. The management port is bound to host loopback at `127.0.0.1:7081`.
+
+**Deploy an image from Docker Hub**
+
+Set `APP_IMAGE` in `.env` to your published image, for example:
+
+```dotenv
+APP_IMAGE=lyvius2/spring-ai-ops:0.0.1-native
+```
+
+Copy `compose.yaml` and your configured `.env` to the deployment server, then run:
+
+```bash
+# Run docker login first if the Docker Hub repository is private.
+docker compose pull app
+docker compose up -d --no-build app
+```
+
+To deploy a new version, update `APP_IMAGE` in `.env` and repeat these two commands. `--no-build` uses the pulled image, so source files and a JDK are not needed on the deployment server.
+
+**Stop and manage data**
+
+```bash
+docker compose down
+```
+
+The `repository-data` volume preserves repository files at `/app/data/repository` when repository storage is enabled (`REPOSITORY_STORED=true`). `docker compose down` keeps this volume; `docker compose down -v` deletes it. Application settings and analysis data are stored in external Redis, whose persistence must be configured separately.
 
 ### Setting Up Grafana
 

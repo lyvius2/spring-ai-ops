@@ -1,29 +1,27 @@
 # syntax=docker/dockerfile:1
 
-FROM amazoncorretto:21-al2023 AS build
-RUN dnf install -y findutils && dnf clean all
+FROM ghcr.io/graalvm/native-image-community:21-ol9 AS build
+RUN microdnf install -y findutils && microdnf clean all
 WORKDIR /workspace
-COPY gradlew ./
+COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle ./gradle
-COPY settings.gradle.kts build.gradle.kts ./
+RUN chmod +x gradlew
+COPY src/main ./src/main
+ARG NATIVE_IMAGE_HEAP=8g
+# No test sources; JVM tests excluded and native test support disabled in Gradle.
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx512m \
+    -Pkotlin.compiler.execution.strategy=in-process -PnativeImageHeap=${NATIVE_IMAGE_HEAP} \
+    nativeCompile -PcontainerBuild -x test
+RUN mkdir -p /runtime/data/repository
 
-RUN ./gradlew --no-daemon dependencies --configuration runtimeClasspath
-
-COPY src ./src
-RUN ./gradlew --no-daemon clean bootJar
-
-FROM amazoncorretto:21-al2023
-RUN dnf install -y 'redis6-6.2.*' \
-    && dnf clean all || true
-
+# -H:+StaticExecutableWithDynamicLibC requires glibc only. Includes CA certificates and timezone data.
+FROM gcr.io/distroless/base-nossl-debian12:nonroot
 WORKDIR /app
-COPY --from=build /workspace/build/libs/*.jar app.jar
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# App HTTP (7079) and management (7081). Redis is NOT exposed — bound to 127.0.0.1 inside the container.
-EXPOSE 7079 7081
-
+COPY --from=build --chown=65532:65532 /runtime/ /app/
+COPY --from=build --chown=65532:65532 /workspace/build/native/nativeCompile/spring-ai-ops /app/spring-ai-ops
 ENV SPRING_PROFILES_ACTIVE=docker
-
-ENTRYPOINT ["/entrypoint.sh"]
+EXPOSE 7079 7081
+USER 65532:65532
+# Only the production binary: no JVM, shell, Gradle or test runner.
+ENTRYPOINT ["/app/spring-ai-ops"]

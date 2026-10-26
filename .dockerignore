@@ -6,6 +6,9 @@
 .vscode
 .kotlin
 .claude
+.codex
+.agents
+.aws
 build
 out
 bin
@@ -26,6 +29,6 @@ Thumbs.db
 !.env.example
 opencode.json
 sonar-scanner
-**/*Test.java
-**/*Spec.groovy
+src/test
+src/main/resources/application-local.yml
 docker-compose*.yml

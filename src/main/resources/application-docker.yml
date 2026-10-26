@@ -1,0 +1,8 @@
+spring:
+  cloud:
+    refresh:
+      enabled: false
+    openfeign:
+      lazy-attributes-resolution: false
+      client:
+        refresh-enabled: false

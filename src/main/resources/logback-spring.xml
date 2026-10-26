@@ -14,8 +14,8 @@
         </encoder>
     </appender>
 
-    <!-- default, dev, local profiles: console output only -->
-    <springProfile name="default | dev | local">
+    <!-- default, dev, local, docker profiles: console output only -->
+    <springProfile name="default | dev | local | docker">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>

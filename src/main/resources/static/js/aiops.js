@@ -2603,12 +2603,44 @@ async function loadCommitBranches(appName) {
         if (!res.ok) throw new Error(data.message || 'Failed to load branches.');
         const branches = data.branches || [];
         select.innerHTML = branches.length
-            ? branches.map(branch => `<option value="${escHtml(branch)}">${escHtml(branch)}</option>`).join('')
+            ? buildBranchOptions(branches)
             : '<option value="">No branches available</option>';
     } catch (e) {
         select.innerHTML = '<option value="">Failed to load branches</option>';
         showAnalysisNotification(e.message || 'Failed to load branches.');
     }
+}
+
+function buildBranchOptions(branches) {
+    const noPrefix = [];
+    const grouped = new Map();
+    for (const b of branches) {
+        const idx = b.indexOf('/');
+        if (idx < 0) {
+            noPrefix.push(b);
+        } else {
+            const prefix = b.substring(0, idx);
+            if (!grouped.has(prefix)) grouped.set(prefix, []);
+            grouped.get(prefix).push(b);
+        }
+    }
+    noPrefix.sort((a, b) => {
+        if (a === 'main') return -1;
+        if (b === 'main') return 1;
+        if (a === 'master') return -1;
+        if (b === 'master') return 1;
+        return b.localeCompare(a);
+    });
+    const sortedPrefixes = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
+    const parts = noPrefix.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`);
+    for (const prefix of sortedPrefixes) {
+        parts.push(`<optgroup label="${escHtml(prefix)}">`);
+        for (const b of grouped.get(prefix).sort((a, b) => b.localeCompare(a))) {
+            parts.push(`<option value="${escHtml(b)}">${escHtml(b)}</option>`);
+        }
+        parts.push('</optgroup>');
+    }
+    return parts.join('');
 }
 
 async function openCommitHistoryModal() {
@@ -2620,7 +2652,11 @@ async function openCommitHistoryModal() {
     manualCommitHistory = [];
     manualCommitSelection = new Set();
     document.getElementById('commit-history-modal').style.display = 'flex';
-    document.getElementById('manual-commit-list').innerHTML = '<div class="list-placeholder">Loading commits...</div>';
+    document.getElementById('manual-commit-list').innerHTML = `
+        <div class="loading-overlay">
+            <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
+            <span>Loading commits...</span>
+        </div>`;
     updateManualReviewButton();
     try {
         const res = await fetch(`/api/commit/${encodeURIComponent(selectedApp)}/history?branch=${encodeURIComponent(branch)}`);
@@ -2678,7 +2714,8 @@ function updateManualReviewButton() {
     const message = validateManualCommitSelection();
     button.disabled = !!message;
     error.textContent = manualCommitSelection.size ? message : '';
-    error.style.display = message && manualCommitSelection.size ? 'block' : 'none';
+    error.style.removeProperty('display');
+    error.classList.toggle('visible', !!(message && manualCommitSelection.size));
 }
 
 async function submitManualCodeReview() {

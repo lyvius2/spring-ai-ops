@@ -666,14 +666,53 @@ crypto:
 
 ### Docker 로 실행
 
-프로젝트 루트에 `Dockerfile`과 `docker/entrypoint.sh`가 포함되어 있어, Amazon Corretto 21 (Amazon Linux 2023 기반) 위에 Redis (`redis6`)까지 내장된 **단일 자체 완결형 이미지**를 빌드할 수 있습니다. Redis는 컨테이너 내부에서 `127.0.0.1:6379`에 바인딩되며 **외부로 노출되지 않습니다** — Spring Boot 앱이 localhost 로 접속합니다.
+기본 `Dockerfile`은 GraalVM 21과 Spring AOT로 네이티브 실행 파일을 빌드합니다. 실행 베이스는 `gcr.io/distroless/base-nossl-debian12:nonroot`이며 JVM, 셸, Redis, 빌드 도구, 테스트 러너가 없습니다. glibc를 제외한 라이브러리를 정적 링크합니다. 기존 JVM 빌드는 `Dockerfile.jvm`으로 사용할 수 있습니다.
 
-이미지 기본값으로 `SPRING_PROFILES_ACTIVE=docker`가 설정되어 있어 `!local` 프로파일이 활성화되고, 인메모리 캐시 대신 내장 Redis 기반의 `RedisCacheStoreConnector`가 사용됩니다.
+이미지 기본값으로 `SPRING_PROFILES_ACTIVE=docker`가 설정되어 있어 `!local` 프로파일이 활성화되고, 외부 Redis에 연결하는 `RedisCacheStoreConnector`가 사용됩니다.
 
 **빌드**
 
 ```bash
 docker build -t spring-ai-ops:local .
+```
+
+빌드 단계는 `./gradlew --no-daemon nativeCompile -PcontainerBuild -x test`를 사용합니다. 테스트를 실행하지 않으며, `src/test`와 `application-local.yml`은 빌드 컨텍스트에서 제외됩니다. 실행에 필요한 API 키와 비밀값은 컨테이너 시작 시 주입합니다.
+
+**네이티브 이미지 빌드 및 Docker Hub 업로드 스크립트**
+
+```bash
+docker login
+./docker/publish-native.sh 0.0.1-native linux/amd64
+# ARM64 서버는 마지막 인자를 linux/arm64로 지정합니다.
+```
+
+스크립트 실행 시 빌드 후 Docker Hub에 업로드합니다. 테스트는 빌드 및 실행 시 모두 실행하지 않습니다. 네이티브 컴파일에는 충분한 메모리가 필요하며, 상세한 Compose 배포 및 멀티 아키텍처 사용법은 [README.md](README.md#build-and-publish-a-native-image-to-docker-hub)를 참고하세요.
+
+**Docker Hub 업로드 및 환경변수 파일로 실행**
+
+업로드 저장소는 `lyvius2/spring-ai-ops`입니다. 해당 저장소에 push 권한이 있는 계정으로 로그인하세요.
+
+```bash
+docker login
+docker build -t lyvius2/spring-ai-ops:0.0.1-native .
+docker push lyvius2/spring-ai-ops:0.0.1-native
+
+cp .env.example .env
+# .env의 CRYPTO_SECRET_KEY, SPRING_DATA_REDIS_HOST와 사용할 서비스의 API 키, APP_BASE_URL 등을 수정합니다.
+docker run -d --name spring-ai-ops --restart unless-stopped \
+  --env-file .env \
+  -p 7079:7079 \
+  -p 127.0.0.1:7081:7081 \
+  lyvius2/spring-ai-ops:0.0.1-native
+```
+
+배포 서버에서는 설정한 `.env`와 함께 `docker pull lyvius2/spring-ai-ops:0.0.1-native`을 실행하고 위의 `docker run` 명령으로 시작합니다. `.env`는 Git과 이미지에 포함되지 않습니다. 컨테이너 안의 `localhost`는 컨테이너 자신이므로 Redis/Loki/Prometheus에는 컨테이너에서 접근 가능한 주소를 설정하세요.
+
+Apple Silicon에서 AMD64 서버용 이미지를 만들 경우, 빌드/업로드 명령 대신 다음을 사용합니다.
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -t lyvius2/spring-ai-ops:0.0.1-native --push .
 ```
 
 **실행**
@@ -682,12 +721,13 @@ docker build -t spring-ai-ops:local .
 docker run --rm \
   -p 7079:7079 -p 7081:7081 \
   -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  -e SPRING_DATA_REDIS_HOST='redis.example.com' \
   spring-ai-ops:local
 ```
 
 - `7079` — 애플리케이션 HTTP 포트
 - `7081` — management (actuator/prometheus) 포트
-- Redis (`6379`) 는 의도적으로 노출하지 않습니다
+- Redis는 별도로 준비하고 `SPRING_DATA_REDIS_HOST`와 `SPRING_DATA_REDIS_PORT`로 연결합니다.
 
 **추가 설정 전달**
 
@@ -697,17 +737,19 @@ docker run --rm \
 docker run --rm \
   -p 7079:7079 -p 7081:7081 \
   -e CRYPTO_SECRET_KEY='your-strong-secret-passphrase' \
+  -e SPRING_DATA_REDIS_HOST='redis.example.com' \
   -e AI_OPEN_AI_API_KEY='sk-...' \
   -e LOKI_URL='http://loki.example.com:3100' \
   -e PROMETHEUS_URL='http://prometheus.example.com:9090' \
   -e GITHUB_ACCESS_TOKEN='ghp_...' \
-  -e JAVA_OPTS='-Xms512m -Xmx1g' \
   spring-ai-ops:local
 ```
 
 - `CRYPTO_SECRET_KEY`는 **필수**입니다. 값이 비어 있으면 컨테이너가 기동 중 종료됩니다.
-- `JAVA_OPTS`는 JVM 에 그대로 전달됩니다.
-- 내장 Redis 는 영속성이 꺼져 있으므로(`--save "" --appendonly no`), 컨테이너를 제거하면 분석 기록과 설정이 사라집니다. 영속성이 필요하면 외부 Redis 를 사용하세요.
+- 네이티브 이미지의 메모리 옵션은 이미지명 뒤에 `-Xmx1g`처럼 인자로 전달합니다. `JAVA_OPTS`는 `Dockerfile.jvm`에서만 사용합니다.
+- AOT 빌드 시 `docker` 프로파일로 빈 구성이 결정되므로 실행 시에도 해당 프로파일을 유지하세요.
+- 컨테이너는 UID/GID `65532`로 실행합니다. 기존 저장소 볼륨 사용 시 해당 사용자에게 쓰기 권한이 필요합니다.
+- Redis 인증은 `SPRING_DATA_REDIS_PASSWORD`(필요 시 `SPRING_DATA_REDIS_USERNAME`), TLS는 `SPRING_DATA_REDIS_SSL_ENABLED=true`로 설정합니다. 데이터 영속성은 외부 Redis에서 설정하세요.
 
 ### Grafana 설정
 

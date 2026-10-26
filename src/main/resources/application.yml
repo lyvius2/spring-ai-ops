@@ -72,10 +72,10 @@ resilience4j:
 
 ai:
   open-ai:
-    model: gpt-4o-mini                  # Set OpenAI Model: Default is gpt-4o-mini
+    model: gpt-6-luna                    # Set OpenAI Model: Default is gpt-6-luna
     api-key: ${AI_OPEN_AI_API_KEY:}      # Set your OpenAI API key for authentication
   anthropic:
-    model: claude-sonnet-4-6            # Set Anthropic Model: Default is claude-sonnet-4-6
+    model: claude-sonnet-5              # Set Anthropic Model: Default is claude-sonnet-5
     api-key: ${AI_ANTHROPIC_API_KEY:}   # Set your Anthropic API key for authentication
     max-tokens: 8192                    # Max output tokens for Anthropic model : Default is 8192
   deepseek:

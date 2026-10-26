@@ -7,6 +7,7 @@ plugins {
     id("org.springframework.boot") version "3.4.4"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("kapt") version "2.2.0"
+    id("org.graalvm.buildtools.native") version "0.10.6"
 }
 
 group = "com.walter.spring.ai.ops"
@@ -71,6 +72,7 @@ dependencies {
 }
 
 tasks.withType<Test> {
+    onlyIf { !providers.gradleProperty("containerBuild").isPresent }
     useJUnitPlatform()
     jvmArgs("-javaagent:${mockitoAgent.asPath}")
 }
@@ -83,4 +85,28 @@ tasks.withType<KotlinCompile> {
 val compileKotlin: KotlinCompile by tasks
 compileKotlin.compilerOptions {
     freeCompilerArgs.set(listOf("-Xannotation-default-target=param-property"))
+}
+
+graalvmNative {
+    testSupport.set(false)
+    binaries {
+        named("main") {
+            imageName.set("spring-ai-ops")
+            fallback.set(false)
+            // Bound builder memory and concurrency for Docker Desktop/CI runners.
+            buildArgs.addAll(
+                "-J-Xmx${providers.gradleProperty("nativeImageHeap").getOrElse("8g")}",
+                "-H:NumberOfThreads=2",
+            )
+            buildArgs.addAll("-H:+UnlockExperimentalVMOptions", "-H:+StaticExecutableWithDynamicLibC", "-march=compatibility")
+        }
+    }
+    metadataRepository {
+        enabled.set(true)
+    }
+}
+
+tasks.named<org.springframework.boot.gradle.tasks.aot.ProcessAot>("processAot") {
+    // Bean selection is fixed at build time; use external Redis, not local memory.
+    args("--spring.profiles.active=docker")
 }
