@@ -25,6 +25,10 @@ class SecurityConfig {
             .logout { it.disable() }
             .httpBasic { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) }
+            .headers { headers ->
+                headers.frameOptions { it.disable() }
+                headers.contentSecurityPolicy { it.policyDirectives("frame-ancestors 'self' https://furaiki-lifelog.com https://*.furaiki-lifelog.com") }
+            }
         return http.build()
     }
 }
