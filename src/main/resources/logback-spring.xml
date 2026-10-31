@@ -57,16 +57,18 @@
             </rollingPolicy>
         </appender>
 
-        <!-- Loki Appender -->
+        <!-- Loki Appender.
+             The appender is fully asynchronous: append() only enqueues the event and returns,
+             so a dead Loki never blocks request threads. The settings below keep the failure
+             cheap: no retries, a bounded off-heap send queue (events are dropped when it is
+             full), and no draining on shutdown so the application stops promptly. -->
         <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
-            <!-- Suppress internal error logs when Loki is unavailable -->
+            <!-- Suppress internal INFO/TRACE status messages; failures are still reported once per batch -->
             <verbose>false</verbose>
             <http>
-                <url>http://localhost:3100/loki/api/v1/push</url>
+                <url>http://host.docker.internal:3100/loki/api/v1/push</url>
                 <connectionTimeoutMs>5000</connectionTimeoutMs>
                 <requestTimeoutMs>5000</requestTimeoutMs>
-                <!-- Do not retry when Loki is dead -->
-                <retryMaxAttempts>0</retryMaxAttempts>
             </http>
             <format>
                 <label>
@@ -77,8 +79,14 @@
                 </message>
                 <sortByTime>true</sortByTime>
             </format>
-            <!-- Async processing to prevent Loki failures from affecting the application -->
-            <sendQueueMaxBytes>41943040</sendQueueMaxBytes>  <!-- 40MB -->
+            <!-- Do not retry a failed batch (default is 2 retries with exponential backoff) -->
+            <maxRetries>0</maxRetries>
+            <!-- Drop batches instead of retrying when Loki answers 429 -->
+            <dropRateLimitedBatches>true</dropRateLimitedBatches>
+            <!-- Do not wait for unsent batches on shutdown; with Loki down this would delay the stop -->
+            <drainOnStop>false</drainOnStop>
+            <!-- Bounded send queue (10MB); events are dropped once it is full -->
+            <sendQueueMaxBytes>10485760</sendQueueMaxBytes>
             <batchMaxItems>1000</batchMaxItems>
             <batchTimeoutMs>5000</batchTimeoutMs>
         </appender>
