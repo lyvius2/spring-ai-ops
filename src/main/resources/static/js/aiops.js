@@ -775,9 +775,10 @@ async function checkObservabilityAndProceed() {
         return;
     }
 
-    // Nothing configured and not skipped — open modal defaulting to LOKI
+    // Nothing configured and not skipped. Observability is optional, so a visitor who is
+    // not logged in is not forced to log in here; the setup modal is offered to admins only.
     if (!_loggedIn) {
-        openLoginModal(true);
+        await checkGitRemoteAndProceed();
         return;
     }
     openObservabilityModal(_observabilityStatusCache, false, 'LOKI');
@@ -3496,9 +3497,9 @@ async function checkGitRemoteAndProceed() {
             return;
         }
 
-        // Nothing configured → must setup
+        // Nothing configured → admins get the setup modal, visitors just see the dashboard
         if (!_loggedIn) {
-            openLoginModal(true);
+            showMainSection();
             return;
         }
         openGitRemoteModal(data, false);
@@ -3928,10 +3929,12 @@ async function init() {
         renderLlmStatus(_currentLlm);
     }
 
-    // Step 1: LLM not configured → branch by state
+    // Step 1: LLM not configured → branch by state.
+    // Visitors who are not logged in are never forced to log in: the dashboard stays
+    // readable and the setup modals are offered to logged-in admins only.
     if (!_llmConfigured) {
         if (!_loggedIn) {
-            openLoginModal(true);
+            await proceedAfterLlm();
             return;
         }
         if (LLM_SELECT_PROVIDER) {
